@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+minimumReleaseAgeExclude:
+  - '@assistant-ui/core@0.3.15'
+  - '@assistant-ui/react-ag-ui@0.0.56'
+  - assistant-stream@0.3.39
+  - '@assistant-ui/react@0.15.16'
+  - '@assistant-ui/tap@0.9.14'

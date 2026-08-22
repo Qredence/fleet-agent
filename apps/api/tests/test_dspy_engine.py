@@ -1,0 +1,237 @@
+import json
+
+import dspy
+from dspy.utils.exceptions import ContextWindowExceededError
+
+from app.agent.engine import AgentRunContext, AgentRunResult, DspyReActV2Engine
+from app.agent.signature import AgentSignature
+from tests.helpers.scripted_lm import ScriptedLM, submit_call
+
+CTX = AgentRunContext(thread_id="t-1", run_id="r-1")
+
+
+def make_engine(
+    steps: list,
+    tools: list | None = None,
+    max_iters: int = 4,
+) -> DspyReActV2Engine:
+    from app.agent.tools import search_docs
+
+    lm = ScriptedLM(steps)
+
+    def factory() -> dspy.ReActV2:
+        return dspy.ReActV2(
+            AgentSignature,
+            tools=tools if tools is not None else [search_docs],
+            max_iters=max_iters,
+        )
+
+    return DspyReActV2Engine(
+        agent_factory=factory,
+        lm=lm,  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(),
+    )
+
+
+async def run(
+    engine: DspyReActV2Engine, request: str = "How does state sync work?", history=None
+):
+    return await engine.run(user_request=request, history=history, context=CTX)
+
+
+async def test_tool_free_request_completes():
+    engine = make_engine([[submit_call(answer="It just works.")]])
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.answer == "It just works."
+    assert result.process_summary == "Looked things up."
+    assert result.termination_reason == "submit"
+    assert result.error_code is None
+    assert result.usage["total_tokens"] == 15
+
+
+async def test_one_tool_request_completes():
+    engine = make_engine(
+        [
+            [{"name": "search_docs", "args": {"query": "AG-UI"}}],
+            [submit_call(answer="Uses JSON Patch.")],
+        ]
+    )
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.answer == "Uses JSON Patch."
+    assert result.termination_reason == "submit"
+    # Two history turns: tool execution + submit.
+    assert len(result.history.messages) == 2
+
+
+async def test_multi_tool_request_completes():
+    from app.agent.tools import get_current_time, search_docs
+
+    engine = make_engine(
+        [
+            [
+                {"name": "search_docs", "args": {"query": "protocol"}},
+                {"name": "get_current_time", "args": {}},
+            ],
+            [submit_call(answer="Used both tools.")],
+        ],
+        tools=[search_docs, get_current_time],
+    )
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.answer == "Used both tools."
+    first_turn = result.history.messages[0]
+    results = first_turn["tool_calls"].tool_call_results.tool_call_results
+    assert len(results) == 2
+    assert all(not r.is_error for r in results)
+
+
+async def test_tool_exception_is_recoverable():
+    def exploding_tool() -> str:
+        """Always fails, for recovery testing."""
+        raise RuntimeError("search backend exploded with key abc123")
+
+    engine = make_engine(
+        [
+            [{"name": "exploding_tool", "args": {}}],
+            [submit_call(answer="Recovered gracefully.")],
+        ],
+        tools=[exploding_tool],
+    )
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.answer == "Recovered gracefully."
+    first_turn = result.history.messages[0]
+    (tool_result,) = first_turn["tool_calls"].tool_call_results.tool_call_results
+    assert tool_result.is_error is True
+    assert "search backend exploded" in tool_result.value
+
+
+async def test_missing_final_output_maps_to_public_error_code():
+    # max_iters=1: one tool turn; forced submit omits `answer` -> the submit
+    # tool raises, no final outputs -> termination_reason=max_iters.
+    engine = make_engine(
+        [
+            [{"name": "search_docs", "args": {"query": "x"}}],
+            [
+                {
+                    "name": "submit",
+                    "args": {
+                        "process_summary": "Tried.",
+                        "key_decisions": [],
+                        "caveats": [],
+                    },
+                }
+            ],
+        ],
+        max_iters=1,
+    )
+    result = await run(engine)
+
+    assert result.status == "failed"
+    assert result.answer is None
+    assert result.termination_reason == "max_iters"
+    assert result.error_code == "agent_no_output"
+
+
+async def test_unparseable_model_output_maps_to_agent_parse_error():
+    # Under JSONAdapter + native function calling, a tool-calls-free turn with
+    # unparseable content raises AdapterParseError -> break_reason=parse_error
+    # (empty_tool_calls is only reachable with non-native adapters).
+    engine = make_engine(
+        [
+            {"calls": [], "content": "definitely not structured output"},
+            {"calls": [], "content": "still not structured output"},
+        ]
+    )
+    result = await run(engine)
+
+    assert result.status == "failed"
+    assert result.termination_reason == "parse_error"
+    assert result.error_code == "agent_parse_error"
+
+
+async def test_context_window_maps_to_specific_error_code():
+    engine = make_engine(
+        [
+            ContextWindowExceededError(message="context_length_exceeded"),
+            ContextWindowExceededError(message="context_length_exceeded"),
+        ]
+    )
+    result = await run(engine)
+
+    assert result.status == "failed"
+    assert result.termination_reason == "context_window_exceeded"
+    assert result.error_code == "agent_context_limit"
+
+
+async def test_forced_submit_success_carries_diagnostic_caveat():
+    # max_iters=1: one normal tool turn, then the forced submit succeeds.
+    engine = make_engine(
+        [
+            [{"name": "search_docs", "args": {"query": "x"}}],
+            [submit_call(answer="Partial answer.")],
+        ],
+        max_iters=1,
+    )
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.termination_reason == "forced_submit"
+    assert any("summarized from partial progress" in c for c in result.caveats)
+
+
+async def test_continuation_history_across_two_turns():
+    engine = make_engine([[submit_call(answer="First answer.")]])
+    first = await run(engine)
+    assert first.history is not None
+    first_turns = len(first.history.messages)
+
+    engine2 = make_engine([[submit_call(answer="Second answer.")]])
+    second = await run(engine2, history=first.history)
+
+    assert second.status == "completed"
+    assert second.answer == "Second answer."
+    # History accumulates the new turn.
+    assert len(second.history.messages) == first_turns + 1
+
+
+def test_result_public_fields_never_contain_chain_of_thought():
+    result_fields = set(AgentRunResult.__dataclass_fields__)
+    assert "next_thought" not in result_fields
+    assert "nextThought" not in result_fields
+
+
+async def test_public_result_json_contains_no_raw_reasoning():
+    engine = make_engine([[submit_call()]])
+    result = await run(engine)
+    public_json = json.dumps(
+        {
+            "status": result.status,
+            "answer": result.answer,
+            "process_summary": result.process_summary,
+            "key_decisions": result.key_decisions,
+            "caveats": result.caveats,
+            "termination_reason": result.termination_reason,
+            "usage": result.usage,
+        }
+    )
+    assert "next_thought" not in public_json
+    assert "history" not in public_json
+
+
+async def test_usage_is_accumulated_across_model_calls():
+    engine = make_engine(
+        [
+            [{"name": "search_docs", "args": {"query": "x"}}],
+            [submit_call()],
+        ]
+    )
+    result = await run(engine)
+    assert result.usage["total_tokens"] == 30
+    assert result.usage["prompt_tokens"] == 20

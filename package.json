@@ -1,0 +1,18 @@
+{
+  "name": "fleet-agent",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "cd apps/api && uv run fastapi dev app/main.py",
+    "build": "pnpm --filter web build",
+    "test:web": "pnpm --filter web test",
+    "test:api": "cd apps/api && uv run pytest",
+    "lint": "pnpm --filter web lint"
+  }
+}

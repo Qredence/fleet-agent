@@ -1,0 +1,133 @@
+import { useEffect, useMemo, useRef } from 'react'
+
+import { DecisionCard } from '@/components/process-panel/decision-card'
+import { ProcessStepCard } from '@/components/process-panel/process-step-card'
+import {
+  RunMetricsLine,
+  TerminationNotice,
+} from '@/components/process-panel/run-metrics'
+import { StatusChip, formatDuration } from '@/components/process-panel/status-chip'
+import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
+import type { AgentWorkspaceState } from '@/contracts/generated'
+
+/**
+ * Activity tab: run summary, step timeline, tools, decisions, metrics,
+ * termination details — everything from the AG-UI agent state, never parsed
+ * out of conversation messages.
+ */
+export function ActivityTab({
+  state,
+  isRunning,
+}: {
+  state: AgentWorkspaceState
+  isRunning: boolean
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const activeStepRef = useRef<HTMLElement | null>(null)
+
+  // Scroll to the active step only when the user is already near the bottom;
+  // never yank the scroll position while they inspect an older step.
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    const active = activeStepRef.current
+    if (!scroller || !active) return
+    const distanceFromBottom =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    if (distanceFromBottom < 120) {
+      active.scrollIntoView({ block: 'nearest' })
+    }
+  }, [state.run.activeStepId, state.run.status, state.run.toolCallCount])
+
+  const toolNamesById = useMemo(
+    () => new Map(state.toolCalls.map((tool) => [tool.id, tool.name])),
+    [state.toolCalls],
+  )
+  const sourceTitlesById = useMemo(
+    () => new Map(state.sources.map((source) => [source.id, source.title])),
+    [state.sources],
+  )
+
+  return (
+    <div
+      ref={scrollerRef}
+      className="h-full space-y-3 overflow-y-auto p-4"
+      aria-label="Run activity"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <StatusChip status={state.run.status} />
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {isRunning && state.run.startedAt
+            ? 'in progress'
+            : formatDuration(state.metrics.durationMs)}
+        </span>
+      </div>
+
+      <TerminationNotice
+        terminationReason={state.run.terminationReason}
+        errorCode={state.run.errorCode}
+      />
+
+      {state.steps.length > 0 && (
+        <div className="space-y-1.5">
+          {state.steps.map((step) => (
+            <div
+              key={step.id}
+              ref={(node) => {
+                if (step.id === state.run.activeStepId)
+                  activeStepRef.current = node
+              }}
+            >
+              <ProcessStepCard
+                step={step}
+                toolNames={step.toolCallIds
+                  .map((id) => toolNamesById.get(id))
+                  .filter((name): name is string => Boolean(name))}
+                sourceTitles={step.sourceIds
+                  .map((id) => sourceTitlesById.get(id))
+                  .filter((title): title is string => Boolean(title))}
+                isActive={step.id === state.run.activeStepId}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {state.decisions.length > 0 && (
+        <section aria-label="Decisions" className="space-y-1.5">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            Decisions
+          </h3>
+          {state.decisions.map((decision) => (
+            <DecisionCard key={decision.id} decision={decision} />
+          ))}
+        </section>
+      )}
+
+      {state.toolCalls.length > 0 && (
+        <section aria-label="Tool calls" className="space-y-1.5">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            Tool calls
+          </h3>
+          {state.toolCalls.map((tool) => (
+            <ToolExecutionCard key={tool.id} tool={tool} />
+          ))}
+        </section>
+      )}
+
+      {state.run.status !== 'running' && state.run.status !== 'queued' && (
+        <RunMetricsLine metrics={state.metrics} />
+      )}
+
+      {state.caveats && state.caveats.length > 0 && (
+        <section aria-label="Caveats" className="space-y-1">
+          <h3 className="text-xs font-semibold text-muted-foreground">Caveats</h3>
+          <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+            {state.caveats.map((caveat) => (
+              <li key={caveat}>{caveat}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  )
+}

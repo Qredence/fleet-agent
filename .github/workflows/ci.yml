@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  api:
+    name: API (lint, typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: fleet
+          POSTGRES_PASSWORD: fleet
+          POSTGRES_DB: fleet_agent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fleet -d fleet_agent"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --all-groups
+      - name: Create test database
+        run: |
+          uv run python -c "
+          import anyio, asyncpg
+          async def main():
+              conn = await asyncpg.connect('postgresql://fleet:fleet@localhost:5432/postgres')
+              await conn.execute('CREATE DATABASE fleet_agent_test')
+              await conn.close()
+          anyio.run(main)
+          "
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: |
+          FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test \
+          uv run alembic upgrade head
+      - run: |
+          FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test \
+          uv run pytest
+
+  contracts:
+    name: Contracts (schema valid)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: |
+          uv run --with jsonschema python -c "
+          import json, jsonschema
+          schema = json.load(open('packages/contracts/agent-workspace-state.schema.json'))
+          jsonschema.Draft202012Validator.check_schema(schema)
+          print('schema OK')
+          "

@@ -1,0 +1,11 @@
+{
+  "name": "@fleet-agent/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared protocol contracts (JSON Schema) for the fleet-agent workspace. Single source of truth for generated TS/Python state models.",
+  "files": [
+    "agent-workspace-state.schema.json",
+    "fixtures"
+  ]
+}

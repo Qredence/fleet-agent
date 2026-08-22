@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fleet-agent.dev/contracts/agent-workspace-state.schema.json",
+  "title": "AgentWorkspaceState",
+  "description": "Public, user-safe agent process state synchronized to the browser via AG-UI STATE_SNAPSHOT / STATE_DELTA. Never contains raw model chain-of-thought or provider payloads.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "threadId",
+    "run",
+    "steps",
+    "decisions",
+    "toolCalls",
+    "sources",
+    "artifacts",
+    "metrics"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Contract version. Any breaking shape change increments it."
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "toolCallCount"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "RunStatus"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "activeStepId": {
+          "type": "string"
+        },
+        "terminationReason": {
+          "type": "string",
+          "description": "DSPy ReActV2 termination reason, e.g. submit, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded."
+        },
+        "errorCode": {
+          "type": "string",
+          "description": "Stable public error code. Never a raw exception string."
+        },
+        "toolCallCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "title": "Run"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "phase",
+          "title",
+          "status",
+          "toolCallIds",
+          "sourceIds",
+          "artifactIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "understanding",
+              "planning",
+              "research",
+              "analysis",
+              "critique",
+              "synthesis"
+            ],
+            "title": "StepPhase"
+          },
+          "title": {
+            "type": "string"
+          },
+          "publicSummary": {
+            "type": "string",
+            "description": "Explicitly written for the user. Never raw model chain-of-thought."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "StepStatus"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "toolCallIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifactIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "title": "ProcessStep"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "alternatives",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "selected": {
+            "type": "string"
+          },
+          "publicRationale": {
+            "type": "string",
+            "description": "User-safe rationale. Never raw model chain-of-thought."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "considering",
+              "accepted",
+              "rejected"
+            ],
+            "title": "DecisionStatus"
+          }
+        },
+        "title": "ProcessDecision"
+      }
+    },
+    "toolCalls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "ToolCallStatus"
+          },
+          "inputPreview": {
+            "type": "string",
+            "description": "Redacted, size-limited preview of tool arguments."
+          },
+          "outputPreview": {
+            "type": "string",
+            "description": "Redacted, size-limited preview of the tool result."
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Public error message. Never a stack trace."
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "title": "ToolExecution"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "sourceType"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "web",
+              "document",
+              "repository",
+              "database",
+              "other"
+            ],
+            "title": "SourceType"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "title": "AgentSource"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "mediaType",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "downloadUrl": {
+            "type": "string",
+            "description": "Controlled URL or artifact reference. Never a server filesystem path."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "generating",
+              "ready",
+              "failed"
+            ],
+            "title": "ArtifactStatus"
+          }
+        },
+        "title": "AgentArtifact"
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolCallCount"
+      ],
+      "properties": {
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toolCallCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "modelCallCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "title": "RunMetrics"
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "User-safe caveats produced at run completion (uncertainty, limitations, forced-submit diagnostics)."
+    }
+  }
+}

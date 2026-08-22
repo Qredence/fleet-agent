@@ -1,0 +1,64 @@
+[project]
+name = "api"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "ag-ui-protocol>=0.1.20",
+    "alembic>=1.19.1",
+    "asyncpg>=0.31.0",
+    "dspy==3.3.*",
+    "fastapi[standard]>=0.141.1",
+    "greenlet>=3.5.5",
+    "orjson>=3.12.0",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0.52",
+    "uvicorn>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "datamodel-code-generator>=0.74.0",
+    "httpx>=0.28.1",
+    "jsonpatch>=1.33",
+    "jsonschema>=4.26.0",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.4",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "TID252"]
+
+# app/contracts/*.py is generated from packages/contracts/*.schema.json.
+[tool.ruff.lint.per-file-ignores]
+"app/contracts/**" = ["E501"]
+# pathlib/polling in tests are infra details, not the road.
+"tests/**" = ["ASYNC240", "ASYNC110"]
+
+[tool.mypy]
+strict = true
+mypy_path = "."
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "ag_ui.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "dspy.*"
+ignore_missing_imports = true
+
+# Generated from packages/contracts/*.schema.json — not authored code.
+[[tool.mypy.overrides]]
+module = "app.contracts.*"
+ignore_errors = true
