@@ -8,12 +8,15 @@ and MUST NOT cross to the browser (enforced by tests).
 """
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 import dspy
 from dspy.utils.callback import BaseCallback
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -103,11 +106,13 @@ class DspyReActV2Engine:
         lm: dspy.LM,
         adapter: dspy.Adapter | None = None,
         callbacks: list[BaseCallback] | None = None,
+        cleanup: Callable[[], None] | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._lm = lm
         self._adapter = adapter
         self._callbacks = list(callbacks or [])
+        self._cleanup = cleanup
 
     async def run(
         self,
@@ -121,11 +126,18 @@ class DspyReActV2Engine:
         return _map_result(prediction)
 
     def _run_sync(self, user_request: str, history: Any | None) -> dspy.Prediction:
-        agent = self._agent_factory()
-        with dspy.context(
-            lm=self._lm,
-            adapter=self._adapter,
-            callbacks=self._callbacks,
-            track_usage=True,
-        ):
-            return agent(user_request=user_request, history=history)
+        try:
+            agent = self._agent_factory()
+            with dspy.context(
+                lm=self._lm,
+                adapter=self._adapter,
+                callbacks=self._callbacks,
+                track_usage=True,
+            ):
+                return agent(user_request=user_request, history=history)
+        finally:
+            if self._cleanup is not None:
+                try:
+                    self._cleanup()
+                except Exception:
+                    logger.exception("agent run resource cleanup failed")

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ActivityTab } from '@/components/process-panel/activity-tab'
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
+import { RunMetricsLine } from '@/components/process-panel/run-metrics'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
 import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
 import { useAutoOpenProcessPanel } from '@/components/process-panel/use-auto-open-process-panel'
@@ -156,6 +157,21 @@ beforeEach(() => {
 })
 
 afterEach(cleanup)
+
+describe('RunMetricsLine', () => {
+  it('does not crash when an older snapshot contains null token usage', () => {
+    const malformedMetrics = {
+      durationMs: 900,
+      toolCallCount: 0,
+      totalTokens: null,
+    } as unknown as AgentWorkspaceState['metrics']
+
+    render(<RunMetricsLine metrics={malformedMetrics} />)
+
+    expect(screen.getByLabelText('run metrics')).toHaveTextContent('0 tools')
+    expect(screen.getByLabelText('run metrics')).not.toHaveTextContent('tokens')
+  })
+})
 
 describe('ActivityTab', () => {
   it('renders running state with the active step highlighted', () => {

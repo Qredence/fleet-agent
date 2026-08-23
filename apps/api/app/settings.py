@@ -51,6 +51,13 @@ class Settings(BaseSettings):
         description="Hard bound on ReActV2 loop iterations per run.",
     )
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    llm_native_function_calling: bool = Field(
+        default=True,
+        description=(
+            "Use provider-native function calling. Disable for gateways that "
+            "support DSPy JSON tool calls but not native tool calls."
+        ),
+    )
 
     agent_mode: Literal["fixtures", "engine"] = Field(
         default="fixtures",
@@ -94,6 +101,21 @@ class Settings(BaseSettings):
         description=(
             "When set, /api/* requires the X-API-Key header to match. "
             "Unset = open local/dev mode (log an advisory at startup)."
+        ),
+    )
+
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Tavily API key. When set, the engine gains web_search and "
+            "fetch_page tools (Tavily REST). Never logged or returned."
+        ),
+    )
+    tavily_dns_fallback: bool = Field(
+        default=False,
+        description=(
+            "Use UDP public DNS only when the system resolver cannot resolve "
+            "api.tavily.com. Useful in restricted local runtimes."
         ),
     )
 

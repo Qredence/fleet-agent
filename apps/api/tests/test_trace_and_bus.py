@@ -123,6 +123,24 @@ def test_full_tool_run_stays_schema_valid_at_every_patch():
     assert state["metrics"]["toolCallCount"] == 1
 
 
+def test_partial_usage_omits_missing_optional_metrics():
+    reducer = TraceReducer(thread_id="t-1", run_id="r-1")
+    wire = WireConsumer(reducer)
+    wire.feed(reducer.begin())
+
+    result = AgentRunResult(
+        status="completed",
+        answer="Final answer.",
+        process_summary="Done.",
+        usage={"prompt_tokens": 10},
+    )
+    state = wire.feed(reducer.complete_run(result))
+
+    assert state["metrics"]["inputTokens"] == 10
+    assert "outputTokens" not in state["metrics"]
+    assert "totalTokens" not in state["metrics"]
+
+
 def test_failed_tool_marks_tool_not_run():
     reducer = TraceReducer(thread_id="t-1", run_id="r-1")
     wire = WireConsumer(reducer)

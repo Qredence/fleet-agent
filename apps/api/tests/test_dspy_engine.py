@@ -1,6 +1,10 @@
+import asyncio
 import json
+import threading
+from collections.abc import Callable
 
 import dspy
+import pytest
 from dspy.utils.exceptions import ContextWindowExceededError
 
 from app.agent.engine import AgentRunContext, AgentRunResult, DspyReActV2Engine
@@ -14,6 +18,7 @@ def make_engine(
     steps: list,
     tools: list | None = None,
     max_iters: int = 4,
+    cleanup: Callable[[], None] | None = None,
 ) -> DspyReActV2Engine:
     from app.agent.tools import search_docs
 
@@ -30,6 +35,7 @@ def make_engine(
         agent_factory=factory,
         lm=lm,  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(),
+        cleanup=cleanup,
     )
 
 
@@ -49,6 +55,87 @@ async def test_tool_free_request_completes():
     assert result.termination_reason == "submit"
     assert result.error_code is None
     assert result.usage["total_tokens"] == 15
+
+
+async def test_cleanup_runs_after_success_and_cannot_replace_result():
+    cleanup_calls = 0
+
+    def cleanup() -> None:
+        nonlocal cleanup_calls
+        cleanup_calls += 1
+        raise RuntimeError("cleanup failed")
+
+    engine = make_engine([[submit_call(answer="It just works.")]], cleanup=cleanup)
+    result = await run(engine)
+
+    assert result.status == "completed"
+    assert result.answer == "It just works."
+    assert cleanup_calls == 1
+
+
+async def test_cleanup_runs_when_agent_construction_raises():
+    cleanup_calls = 0
+
+    def cleanup() -> None:
+        nonlocal cleanup_calls
+        cleanup_calls += 1
+
+    def factory() -> dspy.ReActV2:
+        raise RuntimeError("agent construction failed")
+
+    engine = DspyReActV2Engine(
+        agent_factory=factory,
+        lm=ScriptedLM([]),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(),
+        cleanup=cleanup,
+    )
+
+    with pytest.raises(RuntimeError, match="agent construction failed"):
+        await run(engine)
+    assert cleanup_calls == 1
+
+
+async def test_cleanup_waits_for_worker_after_outer_cancellation():
+    started = threading.Event()
+    release = threading.Event()
+    cleaned = threading.Event()
+
+    class BlockingAgent:
+        def __call__(self, **kwargs: object) -> dspy.Prediction:
+            del kwargs
+            started.set()
+            release.wait(timeout=5)
+            return dspy.Prediction(
+                answer="Done.",
+                process_summary="Done.",
+                key_decisions=[],
+                caveats=[],
+                termination_reason="submit",
+            )
+
+    def factory() -> dspy.ReActV2:
+        return BlockingAgent()  # type: ignore[return-value]
+
+    def cleanup() -> None:
+        cleaned.set()
+
+    engine = DspyReActV2Engine(
+        agent_factory=factory,
+        lm=ScriptedLM([]),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(),
+        cleanup=cleanup,
+    )
+    task = asyncio.create_task(run(engine))
+
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not cleaned.is_set()
+    finally:
+        release.set()
+        assert await asyncio.to_thread(cleaned.wait, 2)
 
 
 async def test_one_tool_request_completes():

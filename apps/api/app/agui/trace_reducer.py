@@ -271,10 +271,15 @@ class TraceReducer:
             )
 
         metrics = self.state["metrics"]
-        if result.usage.get("prompt_tokens") is not None:
-            metrics["inputTokens"] = result.usage["prompt_tokens"]
-            metrics["outputTokens"] = result.usage.get("completion_tokens")
-            metrics["totalTokens"] = result.usage.get("total_tokens")
+        usage_metric_names = (
+            ("prompt_tokens", "inputTokens"),
+            ("completion_tokens", "outputTokens"),
+            ("total_tokens", "totalTokens"),
+        )
+        for usage_name, metric_name in usage_metric_names:
+            value = result.usage.get(usage_name)
+            if value is not None:
+                metrics[metric_name] = value
         metrics["durationMs"] = int((time.monotonic() - self._monotonic_start) * 1000)
         for key, value in metrics.items():
             if value is not None:
