@@ -10,11 +10,12 @@ Each wrapped call:
 """
 
 import functools
+import inspect
 import json
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, get_type_hints
 
 from app.agui.cancel_token import RunCancelToken
 from app.agui.event_bus import RunEventBus
@@ -63,6 +64,14 @@ def instrument_tool(
     bus: RunEventBus,
     cancel_token: RunCancelToken | None = None,
 ) -> Callable[..., Any]:
+    # DSPy's Tool schema inference reads the wrapper, not fn: functools.wraps
+    # copies __name__/__doc__ but NOT __annotations__, so wrapping a callable
+    # OBJECT (SearchDocsTool/WriteReportTool) would degrade every argument to
+    # Any — untyped JSON schema for the model and no Tool arg validation.
+    hints_target: Callable[..., Any] = (
+        fn if inspect.isfunction(fn) or inspect.ismethod(fn) else type(fn).__call__
+    )
+
     @functools.wraps(fn)
     def wrapper(**kwargs: Any) -> Any:
         if cancel_token:
@@ -108,4 +117,8 @@ def instrument_tool(
                 )
         return value
 
+    # Propagate the real type hints so dspy.Tool infers the true JSON schema
+    # ({"query": {"type": "string"}}, not Any) — for plain functions this is
+    # what functools.wraps already copies; callable objects need it explicitly.
+    wrapper.__annotations__ = dict(get_type_hints(hints_target))
     return wrapper

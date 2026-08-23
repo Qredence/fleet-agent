@@ -84,3 +84,47 @@ async def test_rename_validates_input(db_sessions):
             f"/api/threads/{thread['id']}", json={"title": " "}
         )
     assert response.status_code == 422
+
+
+async def test_project_rename_and_delete(db_sessions):
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        project = await post_project(client)
+        thread = (
+            await client.post(
+                f"/api/projects/{project['id']}/threads", json={"title": "Doomed"}
+            )
+        ).json()
+
+        renamed = await client.patch(
+            f"/api/projects/{project['id']}", json={"name": "Renamed project"}
+        )
+        assert renamed.status_code == 200
+        assert renamed.json()["name"] == "Renamed project"
+
+        empty = await client.patch(f"/api/projects/{project['id']}", json={"name": " "})
+        assert empty.status_code == 422
+
+        deleted = await client.delete(f"/api/projects/{project['id']}")
+        assert deleted.status_code == 204
+
+        listed = await client.get("/api/projects")
+        assert [p["id"] for p in listed.json()] == []
+        # Threads cascade with the project.
+        bootstrap = await client.get(f"/api/threads/{thread['id']}/bootstrap")
+        assert bootstrap.status_code == 404
+
+
+async def test_project_rename_delete_unknown_project_404(db_sessions):
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.patch("/api/projects/nope", json={"name": "x"})
+        deleted = await client.delete("/api/projects/nope")
+    assert response.status_code == 404
+    assert deleted.status_code == 404

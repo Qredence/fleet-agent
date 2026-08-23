@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.projects import LOCAL_OWNER, get_sessions
-from app.persistence.models import Project, Thread
+from app.api.projects import LOCAL_OWNER, get_sessions, require_project
+from app.persistence.models import Thread
 from app.persistence.repositories import (
     ArtifactsRepository,
     MessagesRepository,
@@ -56,15 +56,6 @@ def thread_to_out(thread: Thread) -> ThreadOut:
         createdAt=thread.created_at.isoformat(),
         updatedAt=thread.updated_at.isoformat(),
     )
-
-
-async def require_project(
-    project_id: str, sessions: async_sessionmaker[AsyncSession]
-) -> Project:
-    project = await ProjectsRepository(sessions).get(project_id)
-    if project is None or project.owner_id != LOCAL_OWNER:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    return project
 
 
 async def require_thread(

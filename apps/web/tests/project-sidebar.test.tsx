@@ -44,12 +44,21 @@ const threads: ThreadOut[] = [
   },
 ]
 
-function stubApi() {
+function stubApi(threadList: ThreadOut[] = threads, projectId = project.id) {
   const mock = vi.mocked(apiFetch)
   mock.mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === '/api/projects' && !init?.method) return [project]
-    if (path === '/api/projects/project_1/threads' && !init?.method) return threads
-    if (path === '/api/projects/project_1/threads' && init?.method === 'POST') {
+    if (path === '/api/projects' && init?.method === 'POST') {
+      const body = JSON.parse(init.body as string) as { name: string }
+      return { ...project, id: 'project_new', name: body.name }
+    }
+    if (path === '/api/projects/project_1' && init?.method === 'PATCH') {
+      const body = JSON.parse(init.body as string) as { name: string }
+      return { ...project, name: body.name }
+    }
+    if (path === '/api/projects/project_1' && init?.method === 'DELETE') return undefined
+    if (path === `/api/projects/${projectId}/threads` && !init?.method) return threadList
+    if (path === `/api/projects/${projectId}/threads` && init?.method === 'POST') {
       return { ...threads[0], id: 'thread_new', title: 'New conversation' }
     }
     if (path.startsWith('/api/threads/') && init?.method === 'DELETE') return undefined
@@ -172,5 +181,155 @@ describe('ProjectSidebar (live)', () => {
     await waitFor(() => {
       expect(locationProbe.current).toBe('/projects/project_1')
     })
+  })
+
+  it('toggles a project group via its collapsible trigger', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    // The group containing the active thread starts expanded.
+    expect(await screen.findByText('First thread')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Project: Workspace' }))
+    await waitFor(() => {
+      expect(screen.queryByText('First thread')).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Project: Workspace' }))
+    expect(await screen.findByText('First thread')).toBeInTheDocument()
+  })
+
+  it('caps long thread lists at five behind a Show more expander', async () => {
+    const user = userEvent.setup()
+    const many: ThreadOut[] = Array.from({ length: 7 }, (_, i) => ({
+      ...threads[0],
+      id: `thread_${i + 1}`,
+      title: `Thread ${i + 1}`,
+      updatedAt: `2026-01-01T00:00:0${i + 1}Z`,
+    }))
+    stubApi(many)
+    setup('/projects/project_1/threads/thread_1')
+
+    expect(await screen.findByText('Thread 5')).toBeInTheDocument()
+    expect(screen.queryByText('Thread 6')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(await screen.findByText('Thread 7')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Show less' }),
+    ).toBeInTheDocument()
+  })
+
+  it('creates a new thread straight from the project row hover action', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'New thread in: Workspace' }),
+    )
+
+    await waitFor(() => {
+      expect(vi.mocked(apiFetch)).toHaveBeenCalledWith(
+        '/api/projects/project_1/threads',
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    await waitFor(() => {
+      expect(locationProbe.current).toBe('/projects/project_1/threads/thread_new')
+    })
+  })
+
+  it('creates a project from the section "+" button via dialog', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    // Wait for the project list so the section-row button is mounted.
+    await screen.findByRole('button', { name: 'Project: Workspace' })
+    await user.click(screen.getByRole('button', { name: 'New project' }))
+    const input = await screen.findByLabelText('Project name')
+    await user.type(input, 'Fleet agent')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => {
+      expect(vi.mocked(apiFetch)).toHaveBeenCalledWith(
+        '/api/projects',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'Fleet agent' }),
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(locationProbe.current).toBe('/projects/project_new')
+    })
+  })
+
+  it('renames a project through the row dropdown', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Project actions: Workspace' }),
+    )
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+
+    const input = await screen.findByLabelText('Project name')
+    expect(input).toHaveValue('Workspace')
+    await user.clear(input)
+    await user.type(input, 'Renamed workspace')
+    await user.click(screen.getByRole('button', { name: 'Rename' }))
+
+    await waitFor(() => {
+      expect(vi.mocked(apiFetch)).toHaveBeenCalledWith(
+        '/api/projects/project_1',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ name: 'Renamed workspace' }),
+        }),
+      )
+    })
+  })
+
+  it('deletes a project after confirmation and leaves it', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Project actions: Workspace' }),
+    )
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+
+    // Destructive action needs explicit confirmation.
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(vi.mocked(apiFetch)).toHaveBeenCalledWith('/api/projects/project_1', {
+        method: 'DELETE',
+      })
+    })
+    await waitFor(() => {
+      expect(locationProbe.current).toBe('/')
+    })
+  })
+
+  it('shows the thread count badge on the project row', async () => {
+    setup('/projects/project_1/threads/thread_a')
+
+    // Badge renders once the project's threads have loaded.
+    await screen.findByText('First thread')
+    const badge = document.querySelector('[data-sidebar="menu-badge"]')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveTextContent('2')
+  })
+
+  it('marks the active thread sub-button with data-active', async () => {
+    setup('/projects/project_1/threads/thread_a')
+
+    const active = await screen.findByRole('button', { name: 'First thread' })
+    expect(active).toHaveAttribute('data-active')
+    expect(active).toHaveAttribute('aria-current', 'page')
+    expect(
+      screen.getByRole('button', { name: 'Second thread' }),
+    ).not.toHaveAttribute('data-active')
   })
 })
