@@ -55,7 +55,7 @@ pnpm --filter web lint && pnpm --filter web test && pnpm --filter web build
 cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest
 ```
 
-CI runs the same checks (`.github/workflows/ci.yml`).
+CI runs the same checks (`.circleci/config.yml`).
 
 ## Deployment
 

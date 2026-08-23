@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitForElementToBeRemoved } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
@@ -161,8 +161,10 @@ describe('AgentWorkspace — mobile', () => {
     await screen.findByRole('dialog', { name: /projects and threads/i })
 
     await user.keyboard('{Escape}')
-    await waitForElementToBeRemoved(() =>
-      screen.queryByRole('dialog', { name: /projects and threads/i }),
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: /projects and threads/i }),
+      ).not.toBeInTheDocument(),
     )
     expect(trigger).toHaveFocus()
   })
@@ -179,8 +181,10 @@ describe('AgentWorkspace — mobile', () => {
     await user.click(
       screen.getByRole('button', { name: /close process panel/i }),
     )
-    await waitForElementToBeRemoved(() =>
-      screen.queryByRole('dialog', { name: /^process$/i }),
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: /^process$/i }),
+      ).not.toBeInTheDocument(),
     )
   })
 })
