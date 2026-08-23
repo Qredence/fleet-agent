@@ -1,0 +1,171 @@
+version: 2.1
+
+executors:
+  node:
+    docker:
+      - image: cimg/node:24
+    working_directory: ~/fleet-agent
+
+  python:
+    docker:
+      - image: cimg/python:3.13
+    working_directory: ~/fleet-agent
+
+commands:
+  install-pnpm:
+    steps:
+      - run:
+          name: Install pnpm
+          command: |
+            sudo npm install --global pnpm@11.15.1
+            pnpm config set store-dir ~/.cache/pnpm
+            pnpm --version
+
+  install-uv:
+    steps:
+      - run:
+          name: Install uv
+          command: |
+            python -m pip install --user uv
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
+            source "$BASH_ENV"
+            uv --version
+
+jobs:
+  web:
+    executor: node
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
+            - v1-pnpm-
+      - install-pnpm
+      - run:
+          name: Install workspace dependencies
+          command: pnpm install --frozen-lockfile
+      - save_cache:
+          key: v1-pnpm-{{ checksum "pnpm-lock.yaml" }}
+          paths:
+            - ~/.cache/pnpm
+      - run:
+          name: Lint web
+          command: pnpm --filter web lint
+      - run:
+          name: Test web
+          command: pnpm --filter web test
+      - run:
+          name: Build web
+          command: pnpm --filter web build
+
+  api:
+    docker:
+      - image: cimg/python:3.13
+      - image: postgres:17-alpine
+        environment:
+          POSTGRES_USER: fleet
+          POSTGRES_PASSWORD: fleet
+          POSTGRES_DB: fleet_agent
+    working_directory: ~/fleet-agent
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-uv-{{ checksum "apps/api/uv.lock" }}
+            - v1-uv-
+      - install-uv
+      - run:
+          name: Install API dependencies
+          command: cd apps/api && uv sync --locked --all-groups
+      - save_cache:
+          key: v1-uv-{{ checksum "apps/api/uv.lock" }}
+          paths:
+            - ~/.cache/uv
+      - run:
+          name: Wait for and initialize test database
+          command: |
+            cd apps/api
+            uv run python -c '
+            import asyncio
+            import asyncpg
+
+            async def main():
+                for attempt in range(30):
+                    try:
+                        conn = await asyncpg.connect("postgresql://fleet:fleet@localhost:5432/postgres")
+                        try:
+                            exists = await conn.fetchval(
+                                "SELECT 1 FROM pg_database WHERE datname = $1",
+                                "fleet_agent_test",
+                            )
+                            if not exists:
+                                await conn.execute("CREATE DATABASE fleet_agent_test")
+                        finally:
+                            await conn.close()
+                        return
+                    except (OSError, asyncpg.PostgresError):
+                        if attempt == 29:
+                            raise
+                        await asyncio.sleep(2)
+
+            asyncio.run(main())
+            '
+      - run:
+          name: Ruff lint
+          command: cd apps/api && uv run ruff check .
+      - run:
+          name: Ruff format check
+          command: cd apps/api && uv run ruff format --check .
+      - run:
+          name: Mypy
+          command: cd apps/api && uv run mypy app
+      - run:
+          name: Run migrations
+          command: >-
+            cd apps/api &&
+            FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test
+            uv run alembic upgrade head
+      - run:
+          name: Test API
+          command: >-
+            cd apps/api &&
+            FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test
+            uv run pytest
+
+  contracts:
+    executor: python
+    steps:
+      - checkout
+      - install-uv
+      - run:
+          name: Validate workspace-state schema
+          command: |
+            uv run --with jsonschema python -c '
+            import json
+            import jsonschema
+
+            with open("packages/contracts/agent-workspace-state.schema.json") as schema_file:
+                schema = json.load(schema_file)
+            jsonschema.Draft202012Validator.check_schema(schema)
+            print("schema OK")
+            '
+
+  ci-success:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Confirm all CI jobs passed
+          command: echo "All CircleCI validation jobs passed."
+
+workflows:
+  ci:
+    jobs:
+      - web
+      - api
+      - contracts
+      - ci-success:
+          requires:
+            - web
+            - api
+            - contracts
