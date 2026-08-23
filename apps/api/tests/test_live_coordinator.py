@@ -81,6 +81,98 @@ def apply_state(events: list[dict]) -> dict:
     return state
 
 
+async def test_settlement_failure_after_answer_still_finishes_once():
+    """A persistence outage must not leave an accepted SSE stream open-ended."""
+
+    from types import SimpleNamespace
+
+    from ag_ui.core import RunAgentInput
+
+    class FailingPersistence:
+        async def get_run(self, run_id):
+            del run_id
+            return SimpleNamespace(continuation_message_id=None)
+
+        async def get_latest_state(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def mark_running(self, *, run_id, state_json):
+            del run_id, state_json
+
+        async def get_continuation_history(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def run_completed(self, **kwargs):
+            del kwargs
+            raise RuntimeError("database driver detail must stay server-side")
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input()),
+        engine_builder=scripted_builder([[submit_call(answer="Persist later")]]),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        persistence=FailingPersistence(),  # type: ignore[arg-type]
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    types = [event["type"] for event in events]
+
+    assert types.count("RUN_FINISHED") + types.count("RUN_ERROR") == 1
+    assert types[-1] == "RUN_FINISHED"
+    assert "database driver detail" not in json.dumps(events)
+    assert apply_state(events)["run"]["status"] == "completed"
+
+
+async def test_unexpected_failure_still_emits_terminal_when_settlement_fails():
+    from types import SimpleNamespace
+
+    from ag_ui.core import RunAgentInput
+
+    class FailingPersistence:
+        async def get_run(self, run_id):
+            del run_id
+            return SimpleNamespace(continuation_message_id=None)
+
+        async def get_latest_state(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def mark_running(self, *, run_id, state_json):
+            del run_id, state_json
+
+        async def get_continuation_history(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def run_failed(self, **kwargs):
+            del kwargs
+            raise RuntimeError("sensitive persistence detail")
+
+    def broken_builder(bus, *, thread_id):
+        del bus, thread_id
+        raise RuntimeError("provider stack trace")
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input()),
+        engine_builder=broken_builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        persistence=FailingPersistence(),  # type: ignore[arg-type]
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    types = [event["type"] for event in events]
+
+    assert types.count("RUN_FINISHED") + types.count("RUN_ERROR") == 1
+    assert types[-1] == "RUN_ERROR"
+    assert "sensitive persistence detail" not in json.dumps(events)
+    assert "provider stack trace" not in json.dumps(events)
+
+
 async def test_tool_activity_streams_before_final_answer():
     steps = [
         [{"name": "search_docs", "args": {"query": "state sync"}}],

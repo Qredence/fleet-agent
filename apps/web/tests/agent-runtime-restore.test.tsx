@@ -1,21 +1,19 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Deadlock regression (the eternal "Loading conversation" bug):
- * RestoreAgentState must resolve bootstraps via the RAW fetch, never via the
- * cache-backed getThreadBootstrap — the cache wrapper dedupes this queryFn
- * back to its own in-flight query and hangs forever.
+ * Restoration regression: the runtime must use the route-supplied bootstrap
+ * snapshot and its fallback adapter load must use the raw fetch.
  */
 
 const fetchBootstrapMock = vi.fn()
-const getThreadBootstrapMock = vi.fn()
+const persistThreadHeadMock = vi.fn()
 
 vi.mock('@/features/threads/threads-api', () => ({
   fetchBootstrap: (...args: unknown[]) => fetchBootstrapMock(...args),
-  getThreadBootstrap: (...args: unknown[]) => getThreadBootstrapMock(...args),
   invalidateThreadBootstrap: vi.fn(),
+  persistThreadHead: (...args: unknown[]) => persistThreadHeadMock(...args),
+  persistThreadMessage: vi.fn(),
   listThreads: vi.fn(async () => []),
   createThread: vi.fn(),
   renameThread: vi.fn(),
@@ -25,6 +23,7 @@ vi.mock('@/features/threads/threads-api', () => ({
 import { AgentRuntimeProvider } from '@/features/agent-runtime/agent-runtime-provider'
 
 const bootstrap = {
+  schemaVersion: 1,
   thread: {
     id: 't-1',
     projectId: 'p-1',
@@ -34,6 +33,7 @@ const bootstrap = {
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   },
+  messageRepository: { headId: null, messages: [] },
   messages: [],
   agentState: null,
   latestRun: null,
@@ -41,25 +41,33 @@ const bootstrap = {
 
 beforeEach(() => {
   fetchBootstrapMock.mockResolvedValue(bootstrap)
-  getThreadBootstrapMock.mockResolvedValue(bootstrap)
 })
 
 afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('RestoreAgentState deadlock guard', () => {
-  it('resolves bootstraps via the raw fetchBootstrap in RestoreAgentState', async () => {
+describe('thread restoration bootstrap', () => {
+  it('uses the supplied bootstrap without issuing a second bootstrap query', async () => {
     render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AgentRuntimeProvider threadId="t-1">
-          <p>child</p>
-        </AgentRuntimeProvider>
-      </QueryClientProvider>,
+      <AgentRuntimeProvider threadId="t-1" bootstrap={bootstrap}>
+        <p>child</p>
+      </AgentRuntimeProvider>,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(fetchBootstrapMock).not.toHaveBeenCalled()
+    expect(persistThreadHeadMock).not.toHaveBeenCalled()
+  })
+
+  it('resolves fallback adapter loads via raw fetchBootstrap', async () => {
+    render(
+      <AgentRuntimeProvider threadId="t-1">
+        <p>child</p>
+      </AgentRuntimeProvider>,
     )
     await waitFor(() => {
-      // RestoreAgentState's own query calls the RAW fetch (the deadlock
-      // pattern deadlocked the thread forever when this was cache-backed).
+      // The adapter fallback calls the RAW fetch (the deadlock pattern
+      // deadlocked the thread forever when this was cache-backed).
       expect(fetchBootstrapMock).toHaveBeenCalledWith('t-1')
     })
   })

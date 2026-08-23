@@ -253,6 +253,8 @@ const Composer: FC = () => {
                       rows={1}
                       autoFocus
                       enterKeyHint="send"
+                      name="message"
+                      id="message-input"
                       aria-label="Message input"
                     /><ComposerAction /></ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
@@ -494,6 +496,8 @@ const EditComposer: FC = () => {
         <ComposerPrimitive.Input
           className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
           autoFocus
+          name="edited-message"
+          id="edited-message-input"
         />
         <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
           <ComposerPrimitive.Cancel render={<Button variant="ghost" size="sm" className="h-8 rounded-full px-3.5" />}>Cancel
