@@ -25,8 +25,15 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
+from app.services.source_identity import canonical_source_key
 
 JsonPatchOp = dict[str, Any]
+
+
+def _normalize_uri(uri: str) -> str:
+    """Backward-compatible alias for the shared canonical URI helper."""
+
+    return canonical_source_key({"id": "", "uri": uri})
 
 
 def _utc_now() -> str:
@@ -40,9 +47,11 @@ class TraceReducer:
         thread_id: str,
         run_id: str,
         prior_state: dict[str, Any] | None = None,
+        run_scoped_decisions: bool = False,
     ) -> None:
         self.thread_id = thread_id
         self.run_id = run_id
+        self._run_scoped_decisions = run_scoped_decisions
         self._monotonic_start = time.monotonic()
         base: dict[str, Any] = {
             "schemaVersion": 1,
@@ -70,22 +79,36 @@ class TraceReducer:
             "artifacts": [],
             "metrics": {"toolCallCount": 0},
         }
-        # Continuation runs inherit the thread's cumulative evidence so a
-        # later turn never erases earlier sources/artifacts/decisions.
+        # Continuation runs inherit only branch-cumulative evidence. Run-local
+        # steps, tools, metrics, and caveats are intentionally fresh.
         if prior_state:
-            for key in ("sources", "artifacts", "decisions"):
-                base[key] = list(prior_state.get(key) or [])
-            base["caveats"] = list(prior_state.get("caveats") or [])
-            metrics = dict(base["metrics"])
-            prior_metrics = prior_state.get("metrics") or {}
-            for key in ("inputTokens", "outputTokens", "totalTokens", "modelCallCount"):
-                if prior_metrics.get(key) is not None:
-                    metrics[key] = prior_metrics[key]
-            base["metrics"] = {k: v for k, v in metrics.items() if v is not None}
+            base["sources"] = _unique_by_id(prior_state.get("sources") or [])
+            base["artifacts"] = _unique_by_id(prior_state.get("artifacts") or [])
+            base["decisions"] = [
+                decision
+                for decision in _unique_by_id(prior_state.get("decisions") or [])
+                if decision.get("status") in (None, "accepted")
+            ]
         self.state: dict[str, Any] = base
-        self._tool_index: dict[str, int] = {}
+        self._tool_index: dict[str, int] = {
+            str(tool.get("id")): index
+            for index, tool in enumerate(self.state["toolCalls"])
+            if tool.get("id")
+        }
         self._source_index: dict[str, int] = {}
-        self._artifact_index: dict[str, int] = {}
+        for index, source in enumerate(self.state["sources"]):
+            key = canonical_source_key(
+                {
+                    "id": source.get("id", ""),
+                    "uri": source.get("uri"),
+                }
+            )
+            self._source_index.setdefault(key, index)
+        self._artifact_index: dict[str, int] = {
+            str(artifact.get("id")): index
+            for index, artifact in enumerate(self.state["artifacts"])
+            if artifact.get("id")
+        }
         self._step_index: dict[str, int] = {
             s["id"]: i for i, s in enumerate(self.state["steps"])
         }
@@ -132,7 +155,9 @@ class TraceReducer:
         return self.apply_event(event)
 
     def _tool_settled(self, event: ToolCompleted | ToolFailed) -> list[JsonPatchOp]:
-        idx = self._tool_index[event.tool_call_id]
+        idx = self._tool_index.get(event.tool_call_id)
+        if idx is None:
+            return []
         tool = self.state["toolCalls"][idx]
         ops: list[JsonPatchOp] = []
         tool["status"] = "completed" if isinstance(event, ToolCompleted) else "failed"
@@ -156,6 +181,8 @@ class TraceReducer:
         return ops
 
     def _tool_started(self, event: ToolStarted) -> list[JsonPatchOp]:
+        if event.tool_call_id in self._tool_index:
+            return []
         ops: list[JsonPatchOp] = []
         if "step-research" not in self._step_index:
             ops += self._complete_step("step-understand")
@@ -255,7 +282,11 @@ class TraceReducer:
 
         for i, decision in enumerate(result.key_decisions):
             entry = {
-                "id": f"decision-{i}",
+                "id": (
+                    f"decision-{self.run_id}-{i}"
+                    if self._run_scoped_decisions
+                    else f"decision-{i}"
+                ),
                 "title": decision,
                 "alternatives": [],
                 "status": "accepted",
@@ -345,16 +376,20 @@ class TraceReducer:
 
     def _source_discovered(self, event: SourceDiscovered) -> list[JsonPatchOp]:
         # Deduplicate by canonical URI, else by document id.
-        key = (
-            _normalize_uri(event.source.uri)
-            if event.source.uri
-            else f"id:{event.source.id}"
-        )
+        key = canonical_source_key(event.source)
         if key in self._source_index:
             return []
         self._source_index[key] = len(self.state["sources"])
+        source_id = event.source.id
+        # The public state is thread-scoped. Preserve the tool id whenever it
+        # is unambiguous, but disambiguate two distinct canonical documents
+        # that happen to reuse an id in one thread.
+        if any(source.get("id") == source_id for source in self.state["sources"]):
+            from app.services.source_identity import disambiguated_source_id
+
+            source_id = disambiguated_source_id(source_id, key)
         entry = {
-            "id": event.source.id,
+            "id": source_id,
             "title": event.source.title,
             "sourceType": event.source.source_type,
             "uri": event.source.uri,
@@ -366,13 +401,16 @@ class TraceReducer:
         if "step-research" in self._step_index:
             idx = self._step_index["step-research"]
             ids = self.state["steps"][idx]["sourceIds"]
-            ids.append(event.source.id)
+            if source_id not in ids:
+                ids.append(source_id)
             ops.append(
                 {"op": "replace", "path": f"/steps/{idx}/sourceIds", "value": list(ids)}
             )
         return ops
 
     def _artifact_started(self, event: ArtifactStarted) -> list[JsonPatchOp]:
+        if event.artifact.id in self._artifact_index:
+            return []
         self._artifact_index[event.artifact.id] = len(self.state["artifacts"])
         entry = {
             "id": event.artifact.id,
@@ -384,7 +422,9 @@ class TraceReducer:
         return [{"op": "add", "path": "/artifacts/-", "value": entry}]
 
     def _artifact_ready(self, event: ArtifactReady) -> list[JsonPatchOp]:
-        idx = self._artifact_index[event.artifact.id]
+        idx = self._artifact_index.get(event.artifact.id)
+        if idx is None:
+            return []
         artifact = self.state["artifacts"][idx]
         artifact["status"] = "ready"
         artifact["sizeBytes"] = event.artifact.size_bytes
@@ -393,7 +433,8 @@ class TraceReducer:
         if "step-research" in self._step_index:
             step_idx = self._step_index["step-research"]
             ids = self.state["steps"][step_idx]["artifactIds"]
-            ids.append(event.artifact.id)
+            if event.artifact.id not in ids:
+                ids.append(event.artifact.id)
             step_ops.append(
                 {
                     "op": "replace",
@@ -426,12 +467,16 @@ class TraceReducer:
         ]
 
 
-def _normalize_uri(uri: str) -> str:
-    """Canonical URI for dedup (scheme/host lower, no fragment, no trailing /)."""
-    from urllib.parse import urlsplit, urlunsplit
+def _unique_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Copy inherited public entities without replaying duplicate identities."""
 
-    parts = urlsplit(uri.strip())
-    scheme = (parts.scheme or "https").lower()
-    netloc = parts.netloc.lower()
-    path = parts.path.rstrip("/")
-    return urlunsplit((scheme, netloc, path, parts.query, ""))
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        identity = str(item.get("id") or "")
+        if identity and identity in seen:
+            continue
+        if identity:
+            seen.add(identity)
+        result.append(dict(item))
+    return result

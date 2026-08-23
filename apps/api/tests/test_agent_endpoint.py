@@ -3,7 +3,9 @@ import json
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.api.agent import _reservation_http_error
 from app.main import create_app
+from app.services.run_persistence import ReservationErrorCode, RunReservationError
 
 THREAD_ID = "thread-abc"
 RUN_ID = "run-xyz"
@@ -36,6 +38,14 @@ async def post_agent(app, text: str = "Hello") -> tuple[int, dict, str]:
             headers={"Accept": "text/event-stream"},
         )
         return response.status_code, dict(response.headers), response.text
+
+
+def test_reservation_conflicts_use_fixed_public_details() -> None:
+    for code in ReservationErrorCode:
+        error = _reservation_http_error(RunReservationError(code))
+        assert "driver" not in str(error.detail).lower()
+        assert "password" not in str(error.detail).lower()
+        assert str(code.value) not in str(error.detail)
 
 
 def parse_sse(body: str) -> list[dict]:

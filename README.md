@@ -57,6 +57,18 @@ cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run myp
 
 CI runs the same checks (`.circleci/config.yml`).
 
+## Persistence and restoration
+
+Engine mode stores runs and assistant-ui messages in a branch-aware repository.
+`GET /api/threads/{thread_id}/bootstrap` returns one `schemaVersion`-tagged,
+safe snapshot containing the selected branch head, retained message entries,
+matching process state, and the latest applicable run. Assistant-ui writes its
+safe presentation history through idempotent `PUT` requests to
+`/api/threads/{thread_id}/messages/{message_id}` and
+`/api/threads/{thread_id}/history/head`; DSPy history and internal reasoning
+never cross the API boundary. Apply the latest Alembic migration before
+starting engine workers.
+
 ## Deployment
 
 - Migrations: `cd apps/api && uv run alembic upgrade head` before starting workers.
@@ -92,5 +104,6 @@ CI runs the same checks (`.circleci/config.yml`).
 7. **PR 7 — Persistence and threads** ✅ (Postgres + Alembic, projects/threads/messages/runs, DSPy history, restoration)
 8. **PR 8 — Sources and artifacts** ✅ (SourceResult + dedup, artifact lifecycle + storage, inline CUSTOM renderer, retention)
 9. **PR 9 — Hardening** ✅ (cancellation semantics, error taxonomy, concurrency limits, correlation IDs, metrics, load harness)
+10. **PR 10 — Branch-aware persistence and restoration hardening** ✅ (transactional lifecycle, branch-keyed state/history, safe bootstrap, assistant-ui history writes)
 
 Slice gate: no DSPy until a mocked AG-UI run drives both panes (end of PR 4).

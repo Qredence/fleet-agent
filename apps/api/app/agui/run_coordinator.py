@@ -49,11 +49,14 @@ class RunCoordinator:
 
         try:
             for timed in events:
+                if terminal_sent:
+                    return
                 if await is_disconnected():
                     return
                 await self._wait_until(timed.at_ms, started)
                 event = _bind_run_ids(timed.event, input_data)
-                terminal_sent = event.type in _TERMINAL_EVENTS
+                if event.type in _TERMINAL_EVENTS:
+                    terminal_sent = True
                 yield encoder.encode(event)
             if not terminal_sent:
                 yield encoder.encode(
@@ -64,9 +67,12 @@ class RunCoordinator:
         except asyncio.CancelledError:
             raise
         except Exception:
+            if terminal_sent:
+                return
             logger.exception(
                 "mock run failed", extra={"thread_id": input_data.thread_id}
             )
+            terminal_sent = True
             yield encoder.encode(
                 RunErrorEvent(
                     message="The agent run failed.",
@@ -89,6 +95,15 @@ def _bind_run_ids(event: BaseEvent, input_data: RunAgentInput) -> BaseEvent:
         updates["thread_id"] = input_data.thread_id
     if hasattr(event, "run_id"):
         updates["run_id"] = input_data.run_id
+
+    # Fixtures intentionally use stable IDs so they are easy to inspect. The
+    # browser-owned message repository, however, requires message IDs to be
+    # unique within a thread. Scope every fixture message identity to this
+    # run while keeping tool-call IDs stable for the fixture trace.
+    for field in ("message_id", "parent_message_id"):
+        value = getattr(event, field, None)
+        if isinstance(value, str) and value:
+            updates[field] = f"{value}-{input_data.run_id}"
 
     if isinstance(event, StateSnapshotEvent):
         snapshot = dict(event.snapshot)

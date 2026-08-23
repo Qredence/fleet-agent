@@ -1,25 +1,14 @@
-"""LiveDSPyCoordinator: streams a REAL engine run as AG-UI SSE.
-
-Flow (plan phase 7):
-
-    RUN_STARTED → STATE_SNAPSHOT → understanding delta
-    while the engine runs: drain RunEventBus → TOOL_CALL_* + STATE_DELTA
-    on result: synthesis deltas + TEXT_MESSAGE_* → final STATE_DELTA → RUN_FINISHED
-    on engine exception: failed delta → RUN_ERROR (safe code, never a stack trace)
-    on client disconnect: stop quietly (ReActV2 thread may finish in background)
-
-Invariants match the mock coordinator: terminal event exactly once, Accept
-header drives encoding, internal errors never leak implementation details.
-"""
+"""Live DSPy coordinator with durable, exactly-once terminal settlement."""
 
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any, Protocol
+from contextlib import suppress
+from datetime import UTC, datetime
+from typing import Protocol
 
 from ag_ui.core import (
     BaseEvent,
-    EventType,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
@@ -42,6 +31,8 @@ from app.contracts.domain import (
     ArtifactReady,
     ArtifactStarted,
     SourceDiscovered,
+    ToolCompleted,
+    ToolFailed,
 )
 from app.contracts.error_codes import public_error
 from app.services.metrics import MetricsRegistry
@@ -49,8 +40,7 @@ from app.services.run_input import last_user_text
 from app.services.run_persistence import RunPersistence
 
 logger = logging.getLogger(__name__)
-
-_TERMINAL_EVENTS = {EventType.RUN_FINISHED, EventType.RUN_ERROR}
+_CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
 
 
 class EngineBuilder(Protocol):
@@ -74,50 +64,138 @@ class LiveDSPyCoordinator:
         run_id = input_data.run_id
         loop = asyncio.get_running_loop()
         bus = RunEventBus(loop)
+        run = await persistence.get_run(run_id) if persistence else None
+        if persistence and run is None:
+            run = await persistence.reserve_run(input_data=input_data)
+        continuation_head = run.continuation_message_id if run else None
         prior_state = (
-            await persistence.get_latest_state(thread_id) if persistence else None
+            await persistence.get_latest_state(thread_id, continuation_head)
+            if persistence
+            else None
         )
         reducer = TraceReducer(
-            thread_id=thread_id, run_id=run_id, prior_state=prior_state
+            thread_id=thread_id,
+            run_id=run_id,
+            prior_state=prior_state,
+            run_scoped_decisions=persistence is not None,
         )
         tools_message_id = f"msg-tools-{run_id}"
-        started_monotonic = asyncio.get_running_loop().time()
+        started_monotonic = loop.time()
         if metrics:
             metrics.incr("agent_runs_total")
 
         def emit(event: BaseEvent) -> str:
             return encoder.encode(event)
 
-        async def mark_run_cancelled() -> None:
-            """Client is gone: settle the run record + panel snapshot as
-            cancelled. Late engine events are discarded by the bus close, and
-            the loop's awaited result below is never consumed."""
-            reducer.state["run"]["status"] = "cancelled"
-            reducer.state["run"]["errorCode"] = "run_cancelled"
-            if persistence:
-                await persistence.run_cancelled(
-                    thread_id=thread_id, run_id=run_id, state_json=reducer.state
+        terminal_settled = False
+        terminal_emitted = False
+        settlement_lock = asyncio.Lock()
+        metrics_recorded = False
+        engine_task: asyncio.Task[AgentRunResult] | None = None
+
+        def record_terminal_metrics(*, error: bool) -> None:
+            nonlocal metrics_recorded
+            if metrics is None or metrics_recorded:
+                return
+            metrics_recorded = True
+            metrics.observe(
+                "agent_run_duration_ms",
+                (loop.time() - started_monotonic) * 1000,
+            )
+            if error:
+                metrics.incr("agent_run_errors_total")
+
+        def complete_public_state(result: AgentRunResult) -> list[dict[str, object]]:
+            """Finish the public reducer even if a mapper/reducer hook fails."""
+
+            try:
+                return reducer.complete_run(result)
+            except Exception:
+                logger.exception(
+                    "public state reducer failed (thread %s, run %s)",
+                    thread_id,
+                    run_id,
                 )
-            logger.info("run %s cancelled (thread %s)", run_id, thread_id)
+                run_state = reducer.state.setdefault("run", {})
+                run_state["status"] = (
+                    "cancelled" if result.error_code == "run_cancelled" else "failed"
+                )
+                run_state["finishedAt"] = _utc_now()
+                if result.termination_reason:
+                    run_state["terminationReason"] = result.termination_reason
+                if result.error_code:
+                    run_state["errorCode"] = result.error_code
+                return []
+
+        async def settle_cancelled() -> bool:
+            nonlocal terminal_settled
+            async with settlement_lock:
+                if terminal_settled:
+                    return False
+                cancel_result = AgentRunResult(
+                    status="failed",
+                    answer=None,
+                    process_summary="The agent run was cancelled.",
+                    termination_reason="cancelled",
+                    error_code="run_cancelled",
+                )
+                complete_public_state(cancel_result)
+                reducer.state["run"]["status"] = "cancelled"
+                reducer.state["run"]["errorCode"] = "run_cancelled"
+                settled = (
+                    await _settle_with_retry(
+                        lambda: persistence.run_cancelled(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            state_json=reducer.state,
+                        )
+                    )
+                    if persistence
+                    else True
+                )
+                # A failed second retry is logged by _settle_with_retry, but
+                # this generator must still stop rather than racing another
+                # terminal event into the same run.
+                terminal_settled = True
+                record_terminal_metrics(error=True)
+                logger.info("run %s cancelled (thread %s)", run_id, thread_id)
+                return settled
+
+        async def settle_cancelled_bounded() -> bool:
+            """Give cancellation persistence a finite, shielded window."""
+
+            task = asyncio.create_task(settle_cancelled())
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(task), timeout=_CANCEL_SETTLEMENT_TIMEOUT_S
+                )
+            except TimeoutError:
+                task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await task
+                logger.error(
+                    "cancellation settlement timed out (thread %s, run %s)",
+                    thread_id,
+                    run_id,
+                )
+                return False
 
         try:
+            if persistence:
+                await persistence.mark_running(run_id=run_id, state_json=reducer.state)
             if await is_disconnected():
+                await settle_cancelled_bounded()
                 return
+
             yield emit(RunStartedEvent(thread_id=thread_id, run_id=run_id))
             yield emit(StateSnapshotEvent(snapshot=reducer.state))
             logger.info("run %s started (thread %s)", run_id, thread_id)
 
-            user_message = _last_user_message_json(input_data)
             continuation_history = (
-                await persistence.get_continuation_history(thread_id)
+                await persistence.get_continuation_history(thread_id, continuation_head)
                 if persistence
                 else None
             )
-            if persistence and user_message:
-                await persistence.run_started(
-                    thread_id=thread_id, run_id=run_id, user_message=user_message
-                )
-
             yield emit(StateDeltaEvent(delta=reducer.begin()))
 
             context = AgentRunContext(thread_id=thread_id, run_id=run_id)
@@ -125,21 +203,20 @@ class LiveDSPyCoordinator:
             engine_task = asyncio.create_task(
                 engine.run(
                     user_request=last_user_text(input_data),
-                    # continuation history arrives with persistence (PR 7)
                     history=continuation_history,
                     context=context,
                 )
             )
-            engine_task.add_done_callback(lambda _t: bus.close_from_loop())
+            engine_task.add_done_callback(lambda _task: bus.close_from_loop())
 
             try:
-                # The timeout bounds the ENTIRE run: drain + final result wait.
+                # This timeout covers event draining and the final engine wait.
                 async with asyncio.timeout(run_timeout_s):
                     while True:
                         if await is_disconnected():
                             bus.cancel_token.cancel()
                             engine_task.cancel()
-                            await mark_run_cancelled()
+                            await settle_cancelled_bounded()
                             return
                         event = await bus.next()
                         if event is DONE:
@@ -162,8 +239,6 @@ class LiveDSPyCoordinator:
                                 event, thread_id=thread_id, run_id=run_id
                             )
                         if metrics:
-                            from app.contracts.domain import ToolCompleted, ToolFailed
-
                             if isinstance(event, ToolCompleted):
                                 metrics.incr("agent_tool_calls_total")
                                 metrics.observe(
@@ -177,11 +252,16 @@ class LiveDSPyCoordinator:
                                 )
                         for agui_event in agui_events:
                             yield emit(agui_event)
-
-                    result = await engine_task  # exceptions land here, after draining
+                    result = await engine_task
             except TimeoutError:
                 bus.cancel_token.cancel()
                 engine_task.cancel()
+                try:
+                    await engine_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    logger.exception("engine cleanup failed after timeout")
                 result = AgentRunResult(
                     status="failed",
                     answer=None,
@@ -190,9 +270,10 @@ class LiveDSPyCoordinator:
                     error_code="agent_timeout",
                 )
 
+            delta = complete_public_state(result)
             if result.status == "completed":
-                yield emit(StateDeltaEvent(delta=reducer.complete_run(result)))
                 message_id = f"msg-{run_id}"
+                yield emit(StateDeltaEvent(delta=delta))
                 yield emit(
                     TextMessageStartEvent(message_id=message_id, role="assistant")
                 )
@@ -202,61 +283,144 @@ class LiveDSPyCoordinator:
                     )
                 )
                 yield emit(TextMessageEndEvent(message_id=message_id))
-                if persistence:
-                    await persistence.run_completed(
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        result=result,
-                        state_json=reducer.state,
-                        assistant_message_id=message_id,
+                settled = (
+                    await _settle_with_retry(
+                        lambda: persistence.run_completed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=reducer.state,
+                            assistant_message_id=message_id,
+                        )
                     )
+                    if persistence
+                    else True
+                )
+                if not settled:
+                    # The answer and completed public state are already on the
+                    # wire.  Persistence is retried above, but a database
+                    # outage must not turn this accepted stream into an
+                    # unterminated response or leak a driver exception.
+                    logger.error(
+                        "completed run could not be persisted (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                terminal_settled = True
+                record_terminal_metrics(error=False)
+                terminal_emitted = True
                 yield emit(RunFinishedEvent(thread_id=thread_id, run_id=run_id))
                 logger.info("run %s completed (thread %s)", run_id, thread_id)
-                if metrics:
-                    metrics.observe(
-                        "agent_run_duration_ms",
-                        (asyncio.get_running_loop().time() - started_monotonic) * 1000,
-                    )
             else:
-                yield emit(StateDeltaEvent(delta=reducer.complete_run(result)))
-                if persistence:
-                    await persistence.run_failed(
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        result=result,
-                        state_json=reducer.state,
+                yield emit(StateDeltaEvent(delta=delta))
+                settled = (
+                    await _settle_with_retry(
+                        lambda: persistence.run_failed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=reducer.state,
+                        )
                     )
+                    if persistence
+                    else True
+                )
+                if not settled:
+                    logger.error(
+                        "failed run could not be persisted (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                terminal_settled = True
                 code, message = public_error(result.error_code, "agent_no_output")
                 logger.warning(
                     "run %s failed [%s] (thread %s)", run_id, code, thread_id
                 )
-                if metrics:
-                    metrics.incr("agent_run_errors_total")
+                record_terminal_metrics(error=True)
+                terminal_emitted = True
                 yield emit(RunErrorEvent(message=message, code=code))
 
         except asyncio.CancelledError:
+            if not terminal_emitted:
+                if engine_task is not None and not engine_task.done():
+                    engine_task.cancel()
+                try:
+                    await settle_cancelled_bounded()
+                except Exception:
+                    logger.exception(
+                        "could not persist cancellation (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
             raise
         except Exception as exc:
+            if terminal_emitted or terminal_settled:
+                raise
             code, message = _code_for_exception(exc)
+            failure = AgentRunResult(
+                status="failed",
+                answer=None,
+                process_summary="The agent run failed before producing a response.",
+                termination_reason="failed",
+                error_code=code,
+            )
             logger.exception("live run failed (thread %s, run %s)", thread_id, run_id)
-            yield emit(
-                StateDeltaEvent(
-                    delta=reducer.complete_run(
-                        AgentRunResult(
-                            status="failed",
-                            answer=None,
-                            process_summary=(
-                                "The agent run failed before producing a response."
-                            ),
-                            termination_reason="failed",
-                            error_code=code,
+            delta = complete_public_state(failure)
+            settled = True
+            if persistence:
+                try:
+                    settled = await _settle_with_retry(
+                        lambda: persistence.run_failed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=failure,
+                            state_json=reducer.state,
                         )
                     )
+                except Exception:
+                    # Keep the fallback terminal event safe even if a custom
+                    # persistence implementation escapes the retry wrapper.
+                    logger.exception(
+                        "could not persist unexpected failure (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                    settled = False
+            if not settled:
+                logger.error(
+                    "unexpected terminal failure could not be persisted "
+                    "(thread %s, run %s)",
+                    thread_id,
+                    run_id,
                 )
-            )
+            # This fallback is deliberately unconditional: once the request
+            # was accepted, clients must receive one safe terminal event even
+            # when both persistence attempts fail.
+            terminal_settled = True
+            terminal_emitted = True
+            record_terminal_metrics(error=True)
+            yield emit(StateDeltaEvent(delta=delta))
             yield emit(RunErrorEvent(message=message, code=code))
-            if metrics:
-                metrics.incr("agent_run_errors_total")
+
+
+async def _settle_with_retry(
+    operation: Callable[[], Awaitable[bool | None]],
+) -> bool:
+    """Retry one lifecycle write with a fresh session after rollback."""
+
+    for attempt in range(2):
+        try:
+            result = await operation()
+            return result is not False
+        except Exception:
+            if attempt == 0:
+                logger.warning(
+                    "terminal persistence failed; retrying with a fresh session",
+                    exc_info=True,
+                )
+            else:
+                logger.exception("terminal persistence failed after retry")
+    return False
 
 
 def _code_for_exception(exc: Exception) -> tuple[str, str]:
@@ -266,8 +430,5 @@ def _code_for_exception(exc: Exception) -> tuple[str, str]:
     return public_error("internal_error")
 
 
-def _last_user_message_json(input_data: RunAgentInput) -> dict[str, Any] | None:
-    for message in reversed(input_data.messages):
-        if message.role == "user":
-            return message.model_dump(by_alias=True, mode="json", exclude_none=True)
-    return None
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")

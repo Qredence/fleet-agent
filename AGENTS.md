@@ -65,11 +65,13 @@ pnpm + uv monorepo:
   parsing, no Zustand mirror. Auto-open on first tool call lives in
   `AgentWorkspace` (panel unmounted while closed); flag persisted as
   `processPanelAutoOpened`.
-- Thread restoration: remount-per-thread runtime (`key={threadId}`) + isolated
-  history adapter (`features/threads/assistant-thread-adapter.ts`) +
-  `RestoreAgentState` seeding the panel snapshot from `bootstrap.agentState`
-  via RAW `fetchBootstrap` (the adapter keeps the TanStack cache). The
-  unstable `threadList` adapter is deliberately NOT used.
+- Thread restoration: the route fetches one versioned bootstrap snapshot before
+  mounting the keyed runtime (`key={threadId}`). `AgentRuntimeProvider` passes
+  it to the serialized history adapter, which restores the branch repository and
+  returns the safe `agentState` through adapter state. `HistoryHeadSync` persists
+  the selected branch head. The unstable `threadList` adapter and late restore
+  effects are deliberately NOT used. Adapter fallback loads
+  call raw `fetchBootstrap`; they never nest a cached bootstrap query.
 
 ## Backend
 
@@ -107,19 +109,24 @@ pnpm + uv monorepo:
   `internal_error`) with safe messages — raw exceptions never leave the backend.
 - **Persistence:** SQLAlchemy 2 async + Alembic + asyncpg. Engine mode requires
   the run's thread to exist (404 otherwise). Write path in
-  `services/run_persistence.py` (runs, user+assistant messages, run_states
-  snapshot, `History.model_dump` with version columns). Sources dedupe by
-  canonical URI or document id (`ON CONFLICT DO NOTHING`). Artifacts: per-thread
-  dirs, sanitized names, size caps, `ArtifactStorage` protocol w/ confined
-  `LocalArtifactStorage`; download only `ready` rows via
-  `GET /api/artifacts/{id}` (attachment + nosniff + media allowlist) — never
-  filesystem paths in payloads. Thread deletion cascades rows + storage folder.
+  `services/run_persistence.py` uses short transaction-bound sessions for
+  branch-aware messages, runs, per-head process snapshots, and versioned
+  DSPy histories; terminal transitions are idempotent and advance heads with
+  compare-and-set. Bootstrap is one repeatable-read, `schemaVersion`-tagged
+  safe snapshot. Sources dedupe by canonical URI or document id
+  (`ON CONFLICT DO NOTHING`). Artifacts: per-thread dirs, sanitized names, size
+  caps, `ArtifactStorage` protocol w/ confined `LocalArtifactStorage`; download
+  only `ready` rows via `GET /api/artifacts/{id}` (attachment + nosniff + media
+  allowlist) — never filesystem paths in payloads. Thread deletion cascades
+  rows + storage folder.
 - **Hardening:** public codes in `app/contracts/error_codes.py`. Disconnect →
   cancel token + engine task cancel + run marked `cancelled`; wrappers check
   the token before work. `asyncio.timeout(run_timeout_s)` bounds the WHOLE run.
-  Existing runId → 409; saturated semaphore → 429; orphaned runs marked
-  interrupted at startup. Optional `FLEET_AGENT_API_KEY` (X-API-Key) + 413
-  body-size middleware. MetricsRegistry: per-process JSON on `/metrics`.
+  Every accepted engine stream emits at most one safe terminal event, including
+  settlement failures. Existing runId → 409; saturated semaphore → 429;
+  orphaned runs marked interrupted at startup. Optional
+  `FLEET_AGENT_API_KEY` (X-API-Key) + 413 body-size middleware. MetricsRegistry:
+  per-process JSON on `/metrics`.
 
 ## DSPy engine (`app/agent/`)
 
@@ -147,7 +154,8 @@ pnpm + uv monorepo:
 
 - Bind `agent.threadId` to the URL thread — else engine calls 404.
 - Server-generate message-row ids — client ids collide across turns.
-- `getThreadBootstrap`/TanStack `fetchQuery` must NEVER wrap another queryFn
-  sharing the same queryKey — deadlocks "Loading conversation" forever.
+- Bootstrap query functions must use raw `fetchBootstrap`; never wrap a cached
+  bootstrap query (`queryClient.fetchQuery`) inside another queryFn sharing the
+  same queryKey — it deadlocks "Loading conversation" forever.
 
 Keep changes minimal and scoped to the PR sequence in `README.md`.

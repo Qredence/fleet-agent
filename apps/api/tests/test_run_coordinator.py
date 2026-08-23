@@ -47,6 +47,14 @@ async def test_fixture_ids_are_rebound_to_client_ids():
     assert run_started["type"] == "RUN_STARTED"
     assert run_started["threadId"] == "t-client"
     assert run_started["runId"] == "r-client"
+    tool_start = next(event for event in events if event["type"] == "TOOL_CALL_START")
+    tool_result = next(event for event in events if event["type"] == "TOOL_CALL_RESULT")
+    text_start = next(
+        event for event in events if event["type"] == "TEXT_MESSAGE_START"
+    )
+    assert tool_start["parentMessageId"] == "msg-tool-1-r-client"
+    assert tool_result["messageId"] == "msg-tool-1-r-client"
+    assert text_start["messageId"] == "msg-1-r-client"
 
 
 async def test_terminal_event_exactly_once_when_fixture_lacks_it():
@@ -54,6 +62,15 @@ async def test_terminal_event_exactly_once_when_fixture_lacks_it():
     events = await collect(coordinator(only_start))
     types = [e["type"] for e in events]
     assert types == ["RUN_STARTED", "RUN_FINISHED"]
+
+
+async def test_terminal_event_stops_late_fixture_events():
+    fixture = load_fixture("successful-run")
+    fixture.append(fixture[0])
+    events = await collect(coordinator(fixture))
+    types = [event["type"] for event in events]
+    assert types.count("RUN_FINISHED") == 1
+    assert types[-1] == "RUN_FINISHED"
 
 
 async def test_disconnect_stops_stream_before_later_events():

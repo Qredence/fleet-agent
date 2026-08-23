@@ -5,8 +5,10 @@ import json
 import dspy
 from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select, update
 
 from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     MessagesRepository,
     ProjectsRepository,
@@ -140,6 +142,57 @@ async def test_second_turn_uses_persisted_history(db_sessions):
     # The stored raw structured history contains execution internals
     # (tool calls + results) — the reason it stays server-side.
     assert "tool_calls" in json.dumps(record.history_json)
+
+
+async def test_regeneration_keeps_user_parent_and_uses_sibling_history(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+
+    first_input = run_input(thread_id, "run-regenerate-1")
+    first_input["messages"][0]["id"] = "user-root"
+    await persistence.reserve_run(input_data=RunAgentInput.model_validate(first_input))
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add(
+                Message(
+                    id="assistant-row-1",
+                    thread_id=thread_id,
+                    message_id="assistant-first",
+                    parent_message_id="user-root",
+                    role="assistant",
+                    format="ag-ui/v1",
+                    message_json={
+                        "id": "assistant-first",
+                        "role": "assistant",
+                        "content": "first answer",
+                    },
+                )
+            )
+            await session.execute(
+                update(Run)
+                .where(Run.id == "run-regenerate-1")
+                .values(status="completed", output_message_id="assistant-first")
+            )
+            await session.execute(
+                update(Thread)
+                .where(Thread.id == thread_id)
+                .values(active_head_message_id="assistant-first")
+            )
+
+    second_input = run_input(thread_id, "run-regenerate-2")
+    second_input["messages"][0]["id"] = "user-root"
+    await persistence.reserve_run(input_data=RunAgentInput.model_validate(second_input))
+
+    async with db_sessions() as session:
+        user = await session.scalar(
+            select(Message).where(
+                Message.thread_id == thread_id,
+                Message.message_id == "user-root",
+            )
+        )
+        run = await session.get(Run, "run-regenerate-2")
+    assert user is not None and user.parent_message_id is None
+    assert run is not None and run.continuation_message_id == "assistant-first"
 
 
 async def test_failed_run_keeps_user_message_only(db_sessions):
@@ -288,3 +341,59 @@ async def test_same_source_twice_is_idempotent(db_sessions):
         )
     listed = await repo.list_for_thread(thread.id)
     assert len(listed) == 1
+
+
+async def test_stale_user_branch_does_not_move_active_head(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    async with db_sessions() as session:
+        async with session.begin():
+            await MessagesRepository.upsert_in_session(
+                session,
+                thread_id=thread_id,
+                role="user",
+                message_json={"id": "user-root", "role": "user", "content": "root"},
+                message_id="user-root",
+                parent_message_id=None,
+                format="ag-ui/v1",
+            )
+            await MessagesRepository.upsert_in_session(
+                session,
+                thread_id=thread_id,
+                role="assistant",
+                message_json={
+                    "id": "assistant-current",
+                    "role": "assistant",
+                    "content": "current",
+                },
+                message_id="assistant-current",
+                parent_message_id="user-root",
+                format="ag-ui/v1",
+            )
+            await session.execute(
+                update(Thread)
+                .where(Thread.id == thread_id)
+                .values(active_head_message_id="assistant-current")
+            )
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        stale = await client.put(
+            f"/api/threads/{thread_id}/messages/user-stale",
+            json={
+                "parentId": "user-root",
+                "format": "aui/v0",
+                "content": {
+                    "id": "user-stale",
+                    "role": "user",
+                    "content": "stale fork",
+                },
+            },
+        )
+        assert stale.status_code == 200
+
+    current = await ThreadsRepository(db_sessions).get(thread_id)
+    assert current is not None
+    assert current.active_head_message_id == "assistant-current"
