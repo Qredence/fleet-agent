@@ -574,11 +574,27 @@ class RunStatesRepository:
             )
         )
         parents = {message_id: parent for message_id, parent in message_rows}
+        run_rows = await session.execute(
+            select(Run.id, Run.input_message_id, Run.output_message_id).where(
+                Run.thread_id == thread_id
+            )
+        )
+        for r_id, r_in, r_out in run_rows.all():
+            st = states.get(r_out) or states.get(f"msg-{r_id}")
+            if st is not None:
+                states[f"msg-tools-{r_id}"] = st
+                if r_in and r_in not in states:
+                    states[r_in] = st
+
         current = head_message_id
         seen: set[str] = set()
         while current is not None and current not in seen:
             if current in states:
                 return states[current]
+            if current.startswith("msg-tools-"):
+                alt = current.replace("msg-tools-", "msg-", 1)
+                if alt in states:
+                    return states[alt]
             seen.add(current)
             current = parents.get(current)
         return states.get(None)

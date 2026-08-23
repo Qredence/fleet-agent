@@ -296,18 +296,16 @@ class RunPersistence:
         head_message_id: str | None | object = _UNSET,
     ) -> dspy.History | None:
         repository = DspyHistoriesRepository(self._sessions)
-        if head_message_id is _UNSET:
+        if (
+            head_message_id is _UNSET
+            or head_message_id is None
+            or not isinstance(head_message_id, str)
+        ):
             return _history_from_record(await repository.get(thread_id))
         async with self._sessions() as session:
-            if isinstance(head_message_id, str):
-                record = await _nearest_history(session, thread_id, head_message_id)
-            else:
-                record = await session.scalar(
-                    select(DspyHistory).where(
-                        DspyHistory.thread_id == thread_id,
-                        DspyHistory.head_message_id.is_(None),
-                    )
-                )
+            record = await _nearest_history(session, thread_id, head_message_id)
+            if record is None:
+                record = await repository.get(thread_id)
             return _history_from_record(record)
 
     async def settle_completed(
@@ -494,13 +492,33 @@ class RunPersistence:
     ) -> None:
         if result.history is None:
             return
+        history = _normalize_history_tool_call_ids(result.history)
+        history_json = history.model_dump(mode="json")
+        for turn_idx, msg in enumerate(history_json.get("messages", [])):
+            tc_dict = msg.get("tool_calls")
+            if isinstance(tc_dict, dict) and "tool_calls" in tc_dict:
+                tcr_dict = tc_dict.get("tool_call_results")
+                tcr_list = (
+                    tcr_dict.get("tool_call_results", [])
+                    if isinstance(tcr_dict, dict)
+                    else []
+                )
+                for idx, call_dict in enumerate(tc_dict["tool_calls"]):
+                    if isinstance(call_dict, dict) and not call_dict.get("id"):
+                        if idx < len(tcr_list) and isinstance(tcr_list[idx], dict):
+                            call_dict["id"] = (
+                                tcr_list[idx].get("call_id") or f"call_{turn_idx}_{idx}"
+                            )
+                        else:
+                            call_dict["id"] = f"call_{turn_idx}_{idx}"
+
         await DspyHistoriesRepository.upsert_in_session(
             session,
             thread_id=thread_id,
             head_message_id=head_message_id,
             schema_version=HISTORY_SCHEMA_VERSION,
             dspy_version=dspy.__version__,
-            history_json=result.history.model_dump(mode="json"),
+            history_json=history_json,
         )
 
     async def record_domain_event(
@@ -602,11 +620,27 @@ async def _nearest_state(
         )
     )
     parents = {message_id: parent for message_id, parent in messages}
+    runs = await session.execute(
+        select(Run.id, Run.input_message_id, Run.output_message_id).where(
+            Run.thread_id == thread_id
+        )
+    )
+    for r_id, r_in, r_out in runs.all():
+        st = states.get(r_out) or states.get(f"msg-{r_id}")
+        if st is not None:
+            states[f"msg-tools-{r_id}"] = st
+            if r_in and r_in not in states:
+                states[r_in] = st
+
     current: str | None = head_message_id
     seen: set[str] = set()
     while current is not None and current not in seen:
         if current in states:
             return states[current]
+        if current.startswith("msg-tools-"):
+            alt = current.replace("msg-tools-", "msg-", 1)
+            if alt in states:
+                return states[alt]
         seen.add(current)
         current = parents.get(current)
     return states.get(None)
@@ -625,17 +659,56 @@ async def _nearest_history(
         )
     )
     parents = {message_id: parent for message_id, parent in messages}
+    runs = await session.execute(
+        select(Run.id, Run.input_message_id, Run.output_message_id).where(
+            Run.thread_id == thread_id
+        )
+    )
+    for r_id, r_in, r_out in runs.all():
+        hist = histories.get(r_out) or histories.get(f"msg-{r_id}")
+        if hist is not None:
+            histories[f"msg-tools-{r_id}"] = hist
+            if r_in and r_in not in histories:
+                histories[r_in] = hist
+
     current: str | None = head_message_id
     seen: set[str] = set()
     while current is not None and current not in seen:
         if current in histories:
             return histories[current]
+        if current.startswith("msg-tools-"):
+            alt = current.replace("msg-tools-", "msg-", 1)
+            if alt in histories:
+                return histories[alt]
         seen.add(current)
         current = parents.get(current)
     return histories.get(None)
 
 
+def _normalize_history_tool_call_ids(history: dspy.History) -> dspy.History:
+    """Ensure tool_calls and tool_call_results have matching IDs across turns."""
+    for turn_idx, msg in enumerate(history.messages):
+        tc = msg.get("tool_calls")
+        if tc is not None:
+            if isinstance(tc, dict):
+                tc = dspy.adapters.types.tool.ToolCalls.model_validate(tc)
+                msg["tool_calls"] = tc
+            tcr = getattr(tc, "tool_call_results", None)
+            if isinstance(tcr, dict):
+                tcr = dspy.adapters.types.tool.ToolCallResults.model_validate(tcr)
+                tc.tool_call_results = tcr
+
+            tcr_list = tcr.tool_call_results if tcr else []
+            for idx, call in enumerate(tc.tool_calls):
+                if call.id is None and idx < len(tcr_list):
+                    call.id = tcr_list[idx].call_id
+                elif call.id is None:
+                    call.id = f"call_{turn_idx}_{idx}"
+    return history
+
+
 def _history_from_record(record: DspyHistory | None) -> dspy.History | None:
     if record is None or record.schema_version != HISTORY_SCHEMA_VERSION:
         return None
-    return dspy.History.model_validate(record.history_json)
+    history = dspy.History.model_validate(record.history_json)
+    return _normalize_history_tool_call_ids(history)

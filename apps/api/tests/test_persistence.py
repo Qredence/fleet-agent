@@ -143,6 +143,13 @@ async def test_second_turn_uses_persisted_history(db_sessions):
     # (tool calls + results) — the reason it stays server-side.
     assert "tool_calls" in json.dumps(record.history_json)
 
+    # Resolving continuation history through the assistant-ui tool card ID works
+    tool_card_history = await persistence.get_continuation_history(
+        thread_id, head_message_id="msg-tools-run-1"
+    )
+    assert tool_card_history is not None
+    assert len(tool_card_history.messages) >= first_depth
+
 
 async def test_regeneration_keeps_user_parent_and_uses_sibling_history(db_sessions):
     _, thread_id = await seed_project_and_thread(db_sessions)
