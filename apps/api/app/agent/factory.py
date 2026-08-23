@@ -9,8 +9,8 @@ from typing import Any
 
 import dspy
 
+from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentEngine, DspyReActV2Engine
-from app.agent.instrumented import instrument_tool
 from app.agent.signature import AgentSignature
 from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
@@ -54,11 +54,11 @@ def build_dspy_engine(settings: Settings) -> AgentEngine:
 def make_engine_builder(
     settings: Settings, *, storage: ArtifactStorage
 ) -> EngineBuilder:
-    """Per-run engines over shared LM/adapter, with instrumented tools.
+    """Per-run engines over shared LM/adapter, using native DSPy callbacks.
 
     The LM and adapter are stateless config objects safe to share across runs
     and threads; every run gets its own ReActV2 instance, tool objects, and
-    wrappers so domain events land in that run's event bus only.
+    native callbacks so domain events land in that run's event bus only.
     """
     lm = _build_lm(settings)
     adapter = _build_adapter()
@@ -71,12 +71,12 @@ def make_engine_builder(
             thread_id=thread_id,
             max_bytes=settings.artifact_max_bytes,
         )
-        base_tools: list[Callable[..., Any]] = [
+        tools: list[Callable[..., Any]] = [
             docs_tool,
             report_tool,
             get_current_time,
         ]
-        tools = [instrument_tool(tool, bus, bus.cancel_token) for tool in base_tools]
+        callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
         def agent_factory() -> dspy.ReActV2:
             return dspy.ReActV2(
@@ -85,6 +85,11 @@ def make_engine_builder(
                 max_iters=settings.llm_max_iters,
             )
 
-        return DspyReActV2Engine(agent_factory=agent_factory, lm=lm, adapter=adapter)
+        return DspyReActV2Engine(
+            agent_factory=agent_factory,
+            lm=lm,
+            adapter=adapter,
+            callbacks=[callback],
+        )
 
     return build

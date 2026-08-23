@@ -6,7 +6,7 @@ dependencies = [
     "ag-ui-protocol>=0.1.20",
     "alembic>=1.19.1",
     "asyncpg>=0.31.0",
-    "dspy==3.3.*",
+    "dspy==3.3.1",
     "fastapi[standard]>=0.141.1",
     "greenlet>=3.5.5",
     "orjson>=3.12.0",

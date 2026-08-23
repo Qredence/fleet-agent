@@ -41,6 +41,28 @@ from app.services.run_persistence import RunPersistence
 
 logger = logging.getLogger(__name__)
 _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
+_TEXT_CHUNK_SIZE = 24
+
+
+def _chunk_text(text: str, chunk_size: int = _TEXT_CHUNK_SIZE) -> list[str]:
+    """Break text into streaming chunks for progressive client rendering."""
+    if not text:
+        return [""]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    words = text.split(" ")
+    for i, word in enumerate(words):
+        token = word if i == 0 else " " + word
+        current.append(token)
+        current_len += len(token)
+        if current_len >= chunk_size:
+            chunks.append("".join(current))
+            current = []
+            current_len = 0
+    if current:
+        chunks.append("".join(current))
+    return chunks or [text]
 
 
 class EngineBuilder(Protocol):
@@ -277,11 +299,10 @@ class LiveDSPyCoordinator:
                 yield emit(
                     TextMessageStartEvent(message_id=message_id, role="assistant")
                 )
-                yield emit(
-                    TextMessageContentEvent(
-                        message_id=message_id, delta=result.answer or ""
+                for chunk in _chunk_text(result.answer or ""):
+                    yield emit(
+                        TextMessageContentEvent(message_id=message_id, delta=chunk)
                     )
-                )
                 yield emit(TextMessageEndEvent(message_id=message_id))
                 settled = (
                     await _settle_with_retry(

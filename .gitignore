@@ -21,6 +21,10 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+.codex/
+
+# Artifacts & storage
+.artifacts/
 
 # Logs
 *.log
