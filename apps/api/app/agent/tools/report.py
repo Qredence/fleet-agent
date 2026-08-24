@@ -28,6 +28,7 @@ class WriteReportTool:
         bus: RunEventBus,
         thread_id: str,
         max_bytes: int,
+        step_id: str | None = None,
     ) -> None:
         self.__name__ = "write_report"
         self.__doc__ = WriteReportTool.__call__.__doc__
@@ -35,6 +36,7 @@ class WriteReportTool:
         self._bus = bus
         self._thread_id = thread_id
         self._max_bytes = max_bytes
+        self._step_id = step_id
 
     def __call__(self, title: str, content: str) -> str:
         """Write a short markdown report and return it as a downloadable artifact."""
@@ -49,7 +51,9 @@ class WriteReportTool:
             media_type="text/markdown",
             storage_key=f"{self._thread_id}/{artifact_id}/{name}",
         )
-        self._bus.publish_from_worker(ArtifactStarted(artifact=artifact))
+        self._bus.publish_from_worker(
+            ArtifactStarted(artifact=artifact, step_id=self._step_id)
+        )
 
         truncated = len(content.encode()) > self._max_bytes
         payload = content.encode()[: self._max_bytes]
@@ -68,6 +72,7 @@ class WriteReportTool:
             ArtifactReady(
                 artifact=ready,
                 download_url=f"{_DOWNLOAD_PREFIX}/{artifact_id}",
+                step_id=self._step_id,
             )
         )
         note = " (content truncated to the size limit)" if truncated else ""

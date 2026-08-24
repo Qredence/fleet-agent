@@ -266,7 +266,10 @@ class FetchPageTool:
         self._search = search
 
     def __call__(self, result_id: str, max_chars: int = _DEFAULT_EXTRACT_CHARS) -> str:
-        """Fetch the extracted text of one earlier web_search result by its id."""
+        """Fetch a current-run web_search result by its id.
+
+        Result ids from earlier conversation turns are not valid for this run.
+        """
         entry = self._search.get_result(result_id)
         if entry is None or _safe_http_url(entry["url"]) is None:
             raise RuntimeError(

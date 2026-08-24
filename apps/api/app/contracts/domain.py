@@ -20,6 +20,7 @@ class ToolStarted(DomainEvent):
     name: str
     """Redacted, size-limited argument preview (never raw args)."""
     input_preview: str
+    step_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,29 @@ class SourceResult(BaseModel):
 class SourceDiscovered(DomainEvent):
     tool_call_id: str
     source: SourceResult
+    step_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StepStarted(DomainEvent):
+    """A user-safe process step, optionally nested under a staged phase."""
+
+    step_id: str
+    phase: str
+    title: str
+    parent_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StepCompleted(DomainEvent):
+    step_id: str
+    public_summary: str | None = None
+
+
+@dataclass(frozen=True)
+class StepFailed(DomainEvent):
+    step_id: str
+    public_summary: str
 
 
 class ArtifactResult(BaseModel):
@@ -70,6 +94,7 @@ class ArtifactResult(BaseModel):
 @dataclass(frozen=True)
 class ArtifactStarted(DomainEvent):
     artifact: ArtifactResult
+    step_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +102,7 @@ class ArtifactReady(DomainEvent):
     artifact: ArtifactResult
     """Controlled relative URL — never a server filesystem path."""
     download_url: str
+    step_id: str | None = None
 
 
 @dataclass(frozen=True)

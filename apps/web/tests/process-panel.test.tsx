@@ -189,6 +189,60 @@ describe('ActivityTab', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders parallel child steps with their mixed tool statuses', () => {
+    const parallelState: AgentWorkspaceState = {
+      ...runningState,
+      run: { ...runningState.run, activeStepId: 'research-1', toolCallCount: 2 },
+      steps: [
+        ...baseSteps,
+        {
+          id: 'research-1',
+          parentId: 'step-research',
+          phase: 'research',
+          title: 'Check the first source',
+          status: 'running',
+          toolCallIds: ['tc-1'],
+          sourceIds: [],
+          artifactIds: [],
+        },
+        {
+          id: 'research-2',
+          parentId: 'step-research',
+          phase: 'research',
+          title: 'Check the second source',
+          status: 'failed',
+          publicSummary: 'This task failed safely.',
+          toolCallIds: ['tc-2'],
+          sourceIds: [],
+          artifactIds: [],
+        },
+      ],
+      toolCalls: [
+        ...runningState.toolCalls,
+        {
+          id: 'tc-2',
+          name: 'web_search',
+          status: 'failed',
+          errorMessage: 'The web_search tool call failed.',
+        },
+      ],
+    }
+
+    render(<ActivityTab state={parallelState} isRunning />)
+
+    const first = screen.getByRole('article', {
+      name: 'step: Check the first source',
+    }).parentElement
+    const second = screen.getByRole('article', {
+      name: 'step: Check the second source',
+    }).parentElement
+    expect(first).toHaveAttribute('data-parent-id', 'step-research')
+    expect(first).toHaveAttribute('data-depth', '1')
+    expect(first).toHaveStyle({ marginLeft: '16px' })
+    expect(second).toHaveTextContent('This task failed safely.')
+    expect(screen.getByText('The web_search tool call failed.')).toBeInTheDocument()
+  })
+
   it('renders completed state with metrics and a quiet termination note', () => {
     render(<ActivityTab state={completedState} isRunning={false} />)
 

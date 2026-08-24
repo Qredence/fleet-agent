@@ -12,6 +12,8 @@ import dspy
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentEngine, DspyReActV2Engine
 from app.agent.signature import AgentSignature
+from app.agent.staged import StagedDspyEngine
+from app.agent.tool_registry import ToolMetadata, ToolRegistry
 from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
@@ -107,6 +109,9 @@ def make_engine_builder(
             bus=bus,
             thread_id=thread_id,
             max_bytes=settings.artifact_max_bytes,
+            step_id="step-synthesis"
+            if settings.reasoning_program == "staged"
+            else None,
         )
         web_bundle = _build_web_tools(settings)
         tools: list[Callable[..., Any]] = [
@@ -116,6 +121,36 @@ def make_engine_builder(
             get_current_time,
         ]
         callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
+
+        registry = ToolRegistry(
+            [
+                (
+                    tool,
+                    ToolMetadata(
+                        name=tool.__name__,
+                        read_only=tool is not report_tool,
+                        idempotent=tool is not get_current_time,
+                        parallelizable=tool is not report_tool,
+                        timeout_seconds=settings.reasoning_task_timeout_seconds,
+                    ),
+                )
+                for tool in tools
+            ]
+        )
+
+        if settings.reasoning_program == "staged":
+            return StagedDspyEngine(
+                lm=lm,
+                adapter=adapter,
+                registry=registry,
+                bus=bus,
+                max_parallel_tasks=settings.reasoning_max_parallel_tasks,
+                max_model_calls=settings.reasoning_max_model_calls,
+                max_tool_calls=settings.reasoning_max_tool_calls,
+                task_timeout_seconds=settings.reasoning_task_timeout_seconds,
+                researcher_max_iters=settings.llm_max_iters,
+                cleanup=web_bundle.close if web_bundle else None,
+            )
 
         def agent_factory() -> dspy.ReActV2:
             return dspy.ReActV2(

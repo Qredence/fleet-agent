@@ -17,6 +17,9 @@ from app.contracts.domain import (
     ArtifactReady,
     ArtifactStarted,
     SourceDiscovered,
+    StepCompleted,
+    StepFailed,
+    StepStarted,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
@@ -27,6 +30,9 @@ AnyDomainEvent = (
     | ToolCompleted
     | ToolFailed
     | SourceDiscovered
+    | StepStarted
+    | StepCompleted
+    | StepFailed
     | ArtifactStarted
     | ArtifactReady
     | ArtifactFailed

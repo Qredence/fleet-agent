@@ -66,6 +66,34 @@ class Settings(BaseSettings):
             "default); 'engine' runs the live DSPy ReActV2 bridge (production)."
         ),
     )
+    reasoning_program: Literal["react", "staged"] = Field(
+        default="react",
+        description="Reasoning strategy. Staged is opt-in while it is validated.",
+    )
+    reasoning_max_parallel_tasks: int = Field(
+        default=4,
+        ge=1,
+        le=4,
+        description="Maximum concurrent read-only staged research tasks.",
+    )
+    reasoning_max_model_calls: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        description="Server-capped staged DSPy model-call budget.",
+    )
+    reasoning_max_tool_calls: int = Field(
+        default=12,
+        ge=1,
+        le=64,
+        description="Server-capped staged tool-call budget.",
+    )
+    reasoning_task_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=120.0,
+        description="Server-capped timeout for one staged research task.",
+    )
 
     database_url: SecretStr = Field(
         default=SecretStr(

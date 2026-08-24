@@ -66,3 +66,26 @@ def test_base_url_defaults_to_none():
     engine = build_dspy_engine(make)
     print("engine kwargs api_base:", engine._lm.kwargs.get("api_base"))
     assert engine._lm.kwargs.get("api_base") is None
+
+
+def test_factory_selects_opt_in_staged_program(tmp_path):
+    import asyncio
+
+    from app.agent.factory import make_engine_builder
+    from app.agent.staged import StagedDspyEngine
+    from app.agui.event_bus import RunEventBus
+    from app.services.artifact_storage import LocalArtifactStorage
+
+    settings = make_settings(reasoning_program="staged")
+    builder = make_engine_builder(
+        settings, storage=LocalArtifactStorage(tmp_path / "artifacts")
+    )
+    loop = asyncio.new_event_loop()
+    try:
+        engine = builder(RunEventBus(loop), thread_id="thread-1")
+    finally:
+        loop.close()
+
+    assert isinstance(engine, StagedDspyEngine)
+    assert engine._registry.get("write_report").metadata.read_only is False
+    assert engine._registry.get("write_report").metadata.parallelizable is False
