@@ -8,6 +8,8 @@ so ReActV2 converts them into error observations. Error messages are safe:
 they never include the API key or raw provider responses.
 """
 
+from __future__ import annotations
+
 import random
 import socket
 import struct
@@ -195,6 +197,10 @@ class WebSearchTool:
         """Registry lookup for FetchPageTool; ids are only valid within a run."""
         return self._results_by_id.get(result_id.strip())
 
+    def clone_for_worker(self, clones: dict[int, Any]) -> WebSearchTool:
+        del clones
+        return WebSearchTool(api_key="", client=self._client)
+
     def __call__(self, query: str, max_results: int = _DEFAULT_MAX_RESULTS) -> str:
         """Search the web for current information.
 
@@ -264,6 +270,13 @@ class FetchPageTool:
             else _build_client(api_key, dns_fallback=dns_fallback)
         )
         self._search = search
+
+    def clone_for_worker(self, clones: dict[int, Any]) -> FetchPageTool:
+        search = clones.get(id(self._search))
+        if search is None:
+            search = self._search.clone_for_worker(clones)
+            clones[id(self._search)] = search
+        return FetchPageTool(api_key="", search=search, client=self._client)
 
     def __call__(self, result_id: str, max_chars: int = _DEFAULT_EXTRACT_CHARS) -> str:
         """Fetch a current-run web_search result by its id.

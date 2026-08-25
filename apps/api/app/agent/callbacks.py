@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 from dspy.utils.callback import BaseCallback
 
@@ -15,6 +16,7 @@ from app.agent.instrumented import preview, sanitize_args
 from app.agui.cancel_token import RunCancelToken
 from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
+    InlineDataEvent,
     SourceDiscovered,
     SourceResult,
     ToolCompleted,
@@ -45,6 +47,8 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         self.sources: list[SourceResult] = []
         self._tool_starts: dict[str, float] = {}
         self._tool_instances: dict[str, Any] = {}
+        self._web_search_queries: dict[str, str] = {}
+        self._web_search_cycle = 0
 
     def on_tool_start(
         self,
@@ -67,6 +71,23 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         self._tool_instances[event_call_id] = instance
 
         kwargs = inputs.get("kwargs", inputs) if isinstance(inputs, dict) else {}
+        if name == "web_search":
+            self._web_search_cycle += 1
+            query = _safe_inline_text(kwargs.get("query"), limit=240)
+            self._web_search_queries[event_call_id] = query
+            self._bus.publish_from_worker(
+                InlineDataEvent(
+                    name="web-search",
+                    value={
+                        "schemaVersion": 1,
+                        "query": query or "Web search",
+                        "results": [],
+                        "visibleResults": 0,
+                        "searching": True,
+                        "cycle": self._web_search_cycle,
+                    },
+                )
+            )
         self._bus.publish_from_worker(
             ToolStarted(
                 tool_call_id=event_call_id,
@@ -84,6 +105,12 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
     ) -> None:
         event_call_id = f"{self._id_prefix}{call_id}"
         if event_call_id not in self._tool_starts:
+            return
+
+        if self._cancel_token is not None and self._cancel_token.cancelled:
+            self._tool_starts.pop(event_call_id, None)
+            self._tool_instances.pop(event_call_id, None)
+            self._web_search_queries.pop(event_call_id, None)
             return
 
         started = self._tool_starts.pop(event_call_id, time.monotonic())
@@ -104,6 +131,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                     duration_ms=duration_ms,
                 )
             )
+            self._publish_web_search_finished(event_call_id, [])
         else:
             self._bus.publish_from_worker(
                 ToolCompleted(
@@ -126,6 +154,8 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                         )
                     )
                     self.sources.append(source)
+                self._publish_sources()
+            self._publish_web_search_finished(event_call_id, list(produced or []))
 
     def on_lm_start(
         self,
@@ -137,3 +167,71 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
             self._cancel_token.check()
         if self._before_model is not None:
             self._before_model()
+
+    def _publish_web_search_finished(
+        self, event_call_id: str, sources: list[SourceResult]
+    ) -> None:
+        query = self._web_search_queries.pop(event_call_id, None)
+        if query is None:
+            return
+        self._bus.publish_from_worker(
+            InlineDataEvent(
+                name="web-search",
+                value={
+                    "schemaVersion": 1,
+                    "query": query or "Web search",
+                    "results": [
+                        {
+                            "title": _safe_inline_text(source.title, limit=240)
+                            or "Untitled source",
+                            "domain": _inline_source(source)["domain"],
+                        }
+                        for source in sources[:8]
+                    ],
+                    "visibleResults": min(len(sources), 8),
+                    "searching": False,
+                    "cycle": self._web_search_cycle,
+                },
+            )
+        )
+
+    def _publish_sources(self) -> None:
+        self._bus.publish_from_worker(
+            InlineDataEvent(
+                name="sources",
+                value={
+                    "schemaVersion": 1,
+                    "sources": _inline_sources(self.sources),
+                },
+            )
+        )
+
+
+def _safe_inline_text(value: Any, *, limit: int) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _inline_source(source: SourceResult) -> dict[str, str]:
+    hostname = ""
+    if source.uri:
+        try:
+            hostname = urlsplit(source.uri).hostname or ""
+        except ValueError:
+            hostname = ""
+    return {
+        "title": _safe_inline_text(source.title, limit=240) or "Untitled source",
+        "domain": _safe_inline_text(hostname or source.source_type, limit=120)
+        or "source",
+    }
+
+
+def _inline_sources(sources: list[SourceResult]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for source in sources:
+        key = (source.uri or "", source.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(_inline_source(source))
+    return result[-12:]

@@ -11,7 +11,7 @@ import asyncio
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import dspy
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,9 +80,18 @@ class ToolRegistry:
         *,
         read_only_only: bool = False,
         allowed_names: Iterable[str] | None = None,
+        isolate: bool = False,
     ) -> list[dspy.Tool]:
+        """Return tools for a DSPy invocation.
+
+        ``isolate`` creates fresh ``dspy.Tool`` wrappers and asks stateful
+        callable objects that support ``clone_for_worker`` for a per-worker
+        instance. Plain functions remain shared because they have no mutable
+        instance state.
+        """
         allowed = set(allowed_names) if allowed_names is not None else None
         result: list[dspy.Tool] = []
+        clones: dict[int, Callable[..., Any]] = {}
         for name, registered in self._tools.items():
             if allowed is not None and name not in allowed:
                 continue
@@ -90,7 +99,11 @@ class ToolRegistry:
                 registered.metadata.read_only and registered.metadata.parallelizable
             ):
                 continue
-            result.append(registered.tool)
+            if not isolate:
+                result.append(registered.tool)
+                continue
+            function = _clone_for_worker(registered.tool.func, clones)
+            result.append(dspy.Tool(function, name=name))
         return result
 
     def execute(
@@ -214,6 +227,25 @@ class BoundedReadOnlyExecutor:
                 if self._cancel_token is not None:
                     self._cancel_token.cancel()
                 raise
+
+
+def _clone_for_worker(
+    function: Callable[..., Any], clones: dict[int, Callable[..., Any]]
+) -> Callable[..., Any]:
+    identity = id(function)
+    if identity in clones:
+        return clones[identity]
+
+    clone_method = getattr(function, "clone_for_worker", None)
+    if clone_method is None:
+        clones[identity] = function
+        return function
+
+    clone = cast(Callable[..., Any], clone_method(clones))
+    if not callable(clone):
+        raise TypeError("clone_for_worker must return a callable")
+    clones[identity] = clone
+    return clone
 
 
 def _bounded_output(value: Any, limit: int) -> str:

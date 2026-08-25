@@ -5,6 +5,7 @@ mapper; domain events never travel on the wire directly.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -12,6 +13,22 @@ from pydantic import BaseModel
 @dataclass(frozen=True)
 class DomainEvent:
     """Base type for run-scoped domain events."""
+
+
+InlineEventName = Literal[
+    "agent-progress",
+    "web-search",
+    "sources",
+    "research-report",
+]
+
+
+@dataclass(frozen=True)
+class InlineDataEvent(DomainEvent):
+    """A bounded assistant-ui data part that is not public process state."""
+
+    name: InlineEventName
+    value: dict[str, object]
 
 
 @dataclass(frozen=True)

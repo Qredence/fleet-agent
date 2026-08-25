@@ -11,9 +11,10 @@ import asyncio
 import json
 import logging
 import threading
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import dspy
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ from app.agent.tool_registry import ToolRegistry
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
+    InlineDataEvent,
     SourceResult,
     StepCompleted,
     StepFailed,
@@ -40,6 +42,12 @@ logger = logging.getLogger(__name__)
 _MAX_PLAN_TASKS = 4
 _MAX_TEXT = 1200
 _MAX_EVIDENCE = 8000
+_INLINE_PHASES = (
+    ("planning", "Planning"),
+    ("research", "Parallel research"),
+    ("critique", "Verification"),
+    ("synthesis", "Synthesis"),
+)
 
 
 class PlannerSignature(dspy.Signature):  # type: ignore[misc]
@@ -124,6 +132,134 @@ class _BudgetExceeded(RuntimeError):
         self.code = code
 
 
+class _ResearchTaskTimeout(RunCancelledError):
+    """Cooperative timeout for one researcher inside DSPy's worker pool."""
+
+
+class _TaskCancelToken(RunCancelToken):
+    def __init__(self, parent: RunCancelToken, timeout_seconds: float) -> None:
+        super().__init__()
+        self._parent = parent
+        self._deadline = time.monotonic() + timeout_seconds
+
+    @property
+    def cancelled(self) -> bool:
+        return (
+            self._parent.cancelled
+            or super().cancelled
+            or time.monotonic() >= self._deadline
+        )
+
+    def check(self) -> None:
+        self._parent.check()
+        if super().cancelled or time.monotonic() >= self._deadline:
+            raise _ResearchTaskTimeout("research task timed out")
+
+
+class _ParallelResearchModule(dspy.Module):  # type: ignore[misc]
+    """Adapter that lets DSPy Parallel run one isolated ReAct worker."""
+
+    def __init__(
+        self,
+        engine: StagedDspyEngine,
+        *,
+        task: ResearchTask,
+        user_request: str,
+        step_id: str,
+        index: int,
+        cancel_token: RunCancelToken,
+    ) -> None:
+        super().__init__()
+        self._engine = engine
+        self._task = task
+        self._user_request = user_request
+        self._step_id = step_id
+        self._index = index
+        self._cancel_token = cancel_token
+        self._task_timeout_seconds = engine._task_timeout_seconds
+
+    def forward(self, user_request: str) -> _WorkerOutcome:
+        del user_request
+        task_cancel_token = _TaskCancelToken(
+            self._cancel_token, self._task_timeout_seconds
+        )
+        outcome: _WorkerOutcome | None = None
+
+        def run_research() -> None:
+            nonlocal outcome
+            try:
+                outcome = self._engine._research_sync(
+                    self._task,
+                    self._user_request,
+                    self._step_id,
+                    task_cancel_token,
+                )
+            except _BudgetExceeded as exc:
+                outcome = _WorkerOutcome(
+                    task=self._task,
+                    status="failed",
+                    error_code=exc.code,
+                    error_message=(
+                        "The research task was skipped because the run budget "
+                        "was exhausted."
+                    ),
+                )
+            except _ResearchTaskTimeout:
+                outcome = _WorkerOutcome(
+                    task=self._task,
+                    status="failed",
+                    error_code="task_timeout",
+                    error_message="The research task exceeded its time limit.",
+                )
+            except RunCancelledError:
+                outcome = _WorkerOutcome(
+                    task=self._task,
+                    status="cancelled",
+                    error_code="run_cancelled",
+                    error_message="The research task was cancelled.",
+                )
+            except TimeoutError:
+                outcome = _WorkerOutcome(
+                    task=self._task,
+                    status="failed",
+                    error_code="task_timeout",
+                    error_message="The research task exceeded its time limit.",
+                )
+            except Exception:
+                logger.exception("staged research task failed")
+                outcome = _WorkerOutcome(
+                    task=self._task,
+                    status="failed",
+                    error_code="research_failed",
+                    error_message="The research task failed.",
+                )
+
+        worker = threading.Thread(
+            target=run_research,
+            name=f"staged-research-{self._index + 1}",
+            daemon=True,
+        )
+        worker.start()
+        worker.join(self._task_timeout_seconds)
+        if worker.is_alive():
+            task_cancel_token.cancel()
+            outcome = _WorkerOutcome(
+                task=self._task,
+                status="failed",
+                error_code="task_timeout",
+                error_message="The research task exceeded its time limit.",
+            )
+        elif outcome is None:
+            outcome = _WorkerOutcome(
+                task=self._task,
+                status="failed",
+                error_code="research_failed",
+                error_message="The research task failed.",
+            )
+        self._engine._settle_research_task(self._index, outcome)
+        return outcome
+
+
 class StagedDspyEngine:
     """AgentEngine implementation for the opt-in staged strategy."""
 
@@ -139,7 +275,7 @@ class StagedDspyEngine:
         max_tool_calls: int,
         task_timeout_seconds: float,
         researcher_max_iters: int,
-        cleanup: Any | None = None,
+        cleanup: Callable[[], None] | None = None,
     ) -> None:
         self._lm = lm
         self._adapter = adapter
@@ -153,6 +289,22 @@ class StagedDspyEngine:
         self._cleanup = cleanup
         self._open_steps: set[str] = set()
         self._active_budget: _Budget | None = None
+        self._inline_lock = threading.Lock()
+        self._phase_status: dict[str, str] = {
+            "planning": "pending",
+            "research": "pending",
+            "critique": "pending",
+            "synthesis": "pending",
+        }
+        self._research_task_states: list[dict[str, object]] = []
+        self._research_step_settled: set[int] = set()
+        self._report_requested = False
+        self._report_status: dict[str, str] = {
+            "research": "pending",
+            "synthesis": "pending",
+            "export": "pending",
+        }
+        self._inline_source_count = 0
 
     async def run(
         self,
@@ -173,6 +325,7 @@ class StagedDspyEngine:
         self, user_request: str, history: Any | None, cancel_token: RunCancelToken
     ) -> AgentRunResult:
         del history
+        self._reset_inline_state(user_request)
         try:
             return asyncio.run(self._run_async(user_request, cancel_token))
         except RunCancelledError:
@@ -214,7 +367,7 @@ class StagedDspyEngine:
             )
         )
         try:
-            plan = await asyncio.to_thread(self._plan_sync, user_request)
+            plan = await self._plan_async(user_request)
         except _BudgetExceeded:
             self._publish(
                 StepFailed(
@@ -249,6 +402,8 @@ class StagedDspyEngine:
         tasks = plan.tasks[:_MAX_PLAN_TASKS]
         outcomes = await self._research_parallel(tasks, user_request, cancel_token)
         cancel_token.check()
+        self._inline_source_count = sum(len(outcome.sources) for outcome in outcomes)
+        self._publish_inline_progress()
         failed = sum(outcome.status != "completed" for outcome in outcomes)
         self._publish(
             StepCompleted(
@@ -278,9 +433,7 @@ class StagedDspyEngine:
                 )
             )
             try:
-                critique = await asyncio.to_thread(
-                    self._critic_sync, user_request, evidence
-                )
+                critique = await self._critic_async(user_request, evidence)
                 self._publish(
                     StepCompleted(
                         step_id="step-critique",
@@ -303,6 +456,8 @@ class StagedDspyEngine:
                     "Evidence checking was skipped because the model budget "
                     "was exhausted."
                 )
+        else:
+            self._set_phase_status("critique", "skipped")
         self._publish(
             StepStarted(
                 step_id="step-synthesis",
@@ -312,9 +467,7 @@ class StagedDspyEngine:
         )
         try:
             cancel_token.check()
-            result = await asyncio.to_thread(
-                self._synthesize_sync, user_request, evidence, critique
-            )
+            result = await self._synthesize_async(user_request, evidence, critique)
             result = self._maybe_write_report(result, user_request)
             self._publish(
                 StepCompleted(
@@ -349,117 +502,139 @@ class StagedDspyEngine:
         user_request: str,
         cancel_token: RunCancelToken,
     ) -> list[_WorkerOutcome]:
-        semaphore = asyncio.Semaphore(self._max_parallel_tasks)
-
-        async def run_one(index: int, task: ResearchTask) -> _WorkerOutcome:
-            step_id = f"step-research-{index + 1}"
+        self._research_task_states = [
+            {
+                "id": f"step-research-{index + 1}",
+                "name": "research",
+                "target": _short(task.title),
+                "state": "running",
+            }
+            for index, task in enumerate(tasks)
+        ]
+        self._research_step_settled.clear()
+        for index, task in enumerate(tasks):
             self._publish(
                 StepStarted(
-                    step_id=step_id,
+                    step_id=f"step-research-{index + 1}",
                     parent_id="step-research",
                     phase="research",
-                    title=task.title,
+                    title=_short(task.title),
                 )
             )
-            try:
-                cancel_token.check()
-                async with semaphore:
-                    outcome = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            self._research_sync,
-                            task,
-                            user_request,
-                            step_id,
-                            cancel_token,
-                        ),
-                        timeout=self._task_timeout_seconds,
-                    )
-                if outcome.status == "completed":
-                    self._publish(
-                        StepCompleted(
-                            step_id=step_id,
-                            public_summary=(
-                                "Research task completed with bounded evidence."
-                            ),
-                        )
-                    )
-                else:
-                    self._publish(
-                        StepFailed(
-                            step_id=step_id,
-                            public_summary=outcome.error_message
-                            or "Research task failed.",
-                        )
-                    )
-                return outcome
-            except _BudgetExceeded as exc:
-                outcome = _WorkerOutcome(
-                    task=task,
-                    status="failed",
-                    error_code=exc.code,
-                    error_message=(
-                        "The research task was skipped because the run budget "
-                        "was exhausted."
-                    ),
-                )
-            except TimeoutError:
-                outcome = _WorkerOutcome(
-                    task=task,
-                    status="failed",
-                    error_code="task_timeout",
-                    error_message="The research task exceeded its time limit.",
-                )
-            except RunCancelledError:
-                outcome = _WorkerOutcome(
-                    task=task,
-                    status="cancelled",
-                    error_code="run_cancelled",
-                    error_message="The research task was cancelled.",
-                )
-            except Exception:
-                logger.exception("staged research task failed")
-                outcome = _WorkerOutcome(
-                    task=task,
-                    status="failed",
-                    error_code="research_failed",
-                    error_message="The research task failed.",
-                )
-            self._publish(
-                StepFailed(
-                    step_id=step_id,
-                    public_summary=(outcome.error_message or "Research task failed."),
-                )
-            )
-            return outcome
+        self._publish_inline_progress()
+        cancel_token.check()
 
-        task_to_research = {
-            asyncio.create_task(run_one(index, task)): task
+        pairs = [
+            (
+                _ParallelResearchModule(
+                    self,
+                    task=task,
+                    user_request=user_request,
+                    step_id=f"step-research-{index + 1}",
+                    index=index,
+                    cancel_token=cancel_token,
+                ),
+                dspy.Example(
+                    user_request=(
+                        f"Research this independent subtask: {task.task}\n"
+                        f"Original user request: {user_request}"
+                    ).strip()
+                ).with_inputs("user_request"),
+            )
             for index, task in enumerate(tasks)
-        }
-        pending = set(task_to_research)
-        results: list[_WorkerOutcome] = []
-        while pending:
-            done, pending = await asyncio.wait(pending, timeout=0.1)
-            results.extend(task.result() for task in done)
-            if cancel_token.cancelled:
-                for task in pending:
-                    task.cancel()
-                cancelled = await asyncio.gather(*pending, return_exceptions=True)
-                for task_handle, value in zip(pending, cancelled, strict=True):
-                    if isinstance(value, _WorkerOutcome):
-                        results.append(value)
-                    else:
-                        results.append(
-                            _WorkerOutcome(
-                                task=task_to_research[task_handle],
-                                status="cancelled",
-                                error_code="run_cancelled",
-                                error_message="The research task was cancelled.",
-                            )
-                        )
-                pending = set()
-        results.sort(key=lambda outcome: tasks.index(outcome.task))
-        return results
+        ]
+
+        # DSPy 3.3.1's Parallel is intentionally called from one async-to-sync
+        # boundary. It owns the bounded worker pool and propagates the
+        # dspy.context overrides into each isolated module invocation.
+        result = await asyncio.to_thread(self._parallel_forward, pairs)
+        if isinstance(result, tuple):
+            raw_results: list[Any] = list(result[0])
+        else:
+            raw_results = list(result)
+
+        outcomes: list[_WorkerOutcome] = []
+        for index, raw in enumerate(raw_results or []):
+            if isinstance(raw, _WorkerOutcome):
+                outcomes.append(raw)
+                continue
+            task = tasks[index]
+            outcome = _WorkerOutcome(
+                task=task,
+                status="cancelled" if cancel_token.cancelled else "failed",
+                error_code=(
+                    "run_cancelled" if cancel_token.cancelled else "research_failed"
+                ),
+                error_message=(
+                    "The research task was cancelled."
+                    if cancel_token.cancelled
+                    else "The research task failed."
+                ),
+            )
+            self._settle_research_task(index, outcome)
+            outcomes.append(outcome)
+
+        while len(outcomes) < len(tasks):
+            index = len(outcomes)
+            task = tasks[index]
+            outcome = _WorkerOutcome(
+                task=task,
+                status="cancelled" if cancel_token.cancelled else "failed",
+                error_code=(
+                    "run_cancelled" if cancel_token.cancelled else "research_failed"
+                ),
+                error_message=(
+                    "The research task was cancelled."
+                    if cancel_token.cancelled
+                    else "The research task failed."
+                ),
+            )
+            self._settle_research_task(index, outcome)
+            outcomes.append(outcome)
+        return outcomes
+
+    def _parallel_forward(
+        self,
+        pairs: list[tuple[dspy.Module, dspy.Example]],
+    ) -> (
+        list[_WorkerOutcome] | tuple[list[_WorkerOutcome | None], list[Any], list[Any]]
+    ):
+        with dspy.context(
+            lm=self._lm,
+            adapter=self._adapter,
+            callbacks=[],
+            track_usage=True,
+        ):
+            parallel = dspy.Parallel(
+                num_threads=min(self._max_parallel_tasks, len(pairs)) or 1,
+                max_errors=len(pairs) or 1,
+                return_failed_examples=True,
+                disable_progress_bar=True,
+                # The module wrapper enforces a hard per-task deadline. DSPy's
+                # timeout resubmits stragglers rather than cancelling them.
+                timeout=0,
+                straggler_limit=0,
+            )
+            return cast(
+                list[_WorkerOutcome]
+                | tuple[list[_WorkerOutcome | None], list[Any], list[Any]],
+                parallel(pairs),
+            )
+
+    async def _plan_async(self, user_request: str) -> ResearchPlan:
+        # Preserve the synchronous override seam used by provider-free tests
+        # and integrations while the production path uses DSPy's asyncify.
+        if type(self)._plan_sync is not StagedDspyEngine._plan_sync:
+            return await asyncio.to_thread(self._plan_sync, user_request)
+        module = dspy.Predict(PlannerSignature)
+        with dspy.context(
+            lm=self._lm,
+            adapter=self._adapter,
+            callbacks=self._budget_callbacks(),
+            track_usage=True,
+        ):
+            prediction = await dspy.asyncify(module)(user_request=user_request)
+        return self._parse_plan_prediction(prediction, user_request)
 
     def _plan_sync(self, user_request: str) -> ResearchPlan:
         with dspy.context(
@@ -469,6 +644,11 @@ class StagedDspyEngine:
             track_usage=True,
         ):
             prediction = dspy.Predict(PlannerSignature)(user_request=user_request)
+        return self._parse_plan_prediction(prediction, user_request)
+
+    def _parse_plan_prediction(
+        self, prediction: dspy.Prediction, user_request: str
+    ) -> ResearchPlan:
         try:
             payload = json.loads(str(getattr(prediction, "plan_json", "{}")))
             if isinstance(payload, dict):
@@ -541,7 +721,9 @@ class StagedDspyEngine:
         )
         worker = dspy.ReActV2(
             AgentSignature,
-            tools=self._registry.dspy_tools(read_only_only=True, allowed_names=allowed),
+            tools=self._registry.dspy_tools(
+                read_only_only=True, allowed_names=allowed, isolate=True
+            ),
             max_iters=self._researcher_max_iters,
         )
         with dspy.context(
@@ -571,6 +753,21 @@ class StagedDspyEngine:
             sources=callback.sources,
         )
 
+    async def _critic_async(self, user_request: str, evidence: str) -> str:
+        if type(self)._critic_sync is not StagedDspyEngine._critic_sync:
+            return await asyncio.to_thread(self._critic_sync, user_request, evidence)
+        module = dspy.Predict(CriticSignature)
+        with dspy.context(
+            lm=self._lm,
+            adapter=self._adapter,
+            callbacks=self._budget_callbacks(),
+            track_usage=True,
+        ):
+            prediction = await dspy.asyncify(module)(
+                user_request=user_request, evidence_json=evidence
+            )
+        return _short(getattr(prediction, "critique", ""))
+
     def _critic_sync(self, user_request: str, evidence: str) -> str:
         with dspy.context(
             lm=self._lm,
@@ -582,6 +779,27 @@ class StagedDspyEngine:
                 user_request=user_request, evidence_json=evidence
             )
         return _short(getattr(prediction, "critique", ""))
+
+    async def _synthesize_async(
+        self, user_request: str, evidence: str, critique: str
+    ) -> AgentRunResult:
+        if type(self)._synthesize_sync is not StagedDspyEngine._synthesize_sync:
+            return await asyncio.to_thread(
+                self._synthesize_sync, user_request, evidence, critique
+            )
+        module = dspy.Predict(SynthesisSignature)
+        with dspy.context(
+            lm=self._lm,
+            adapter=self._adapter,
+            callbacks=self._budget_callbacks(),
+            track_usage=True,
+        ):
+            prediction = await dspy.asyncify(module)(
+                user_request=user_request,
+                evidence_json=evidence,
+                critique=_short(critique),
+            )
+        return self._synthesis_result(prediction)
 
     def _synthesize_sync(
         self, user_request: str, evidence: str, critique: str
@@ -597,6 +815,9 @@ class StagedDspyEngine:
                 evidence_json=evidence,
                 critique=_short(critique),
             )
+        return self._synthesis_result(prediction)
+
+    def _synthesis_result(self, prediction: dspy.Prediction) -> AgentRunResult:
         answer = _short(getattr(prediction, "answer", ""))
         if not answer:
             return AgentRunResult(
@@ -623,6 +844,7 @@ class StagedDspyEngine:
         if result.status != "completed" or not _requests_report(user_request):
             return result
         if "write_report" not in self._registry.names():
+            self._set_report_status("export", "failed")
             return replace(
                 result,
                 caveats=[
@@ -631,6 +853,7 @@ class StagedDspyEngine:
                 ],
             )
         tool_call_id = "staged-write-report"
+        self._set_report_status("export", "writing")
         self._publish(
             ToolStarted(
                 tool_call_id=tool_call_id,
@@ -647,6 +870,7 @@ class StagedDspyEngine:
             cancel_token=self._bus.cancel_token,
         )
         if report.status == "completed":
+            self._set_report_status("export", "done")
             self._publish(
                 ToolCompleted(
                     tool_call_id=tool_call_id,
@@ -656,6 +880,7 @@ class StagedDspyEngine:
                 )
             )
             return result
+        self._set_report_status("export", "failed")
         self._publish(
             ToolFailed(
                 tool_call_id=tool_call_id,
@@ -675,12 +900,157 @@ class StagedDspyEngine:
             ],
         )
 
+    def _reset_inline_state(self, user_request: str) -> None:
+        with self._inline_lock:
+            self._phase_status = {key: "pending" for key, _ in _INLINE_PHASES}
+            self._research_task_states = []
+            self._research_step_settled.clear()
+            self._report_requested = _requests_report(user_request)
+            self._report_status = {
+                "research": "pending",
+                "synthesis": "pending",
+                "export": "pending",
+            }
+            self._inline_source_count = 0
+
+    def _set_phase_status(self, phase: str, status: str) -> None:
+        with self._inline_lock:
+            self._phase_status[phase] = status
+        self._publish_inline_progress()
+        self._publish_report_snapshot()
+
+    def _settle_research_task(self, index: int, outcome: _WorkerOutcome) -> None:
+        with self._inline_lock:
+            if index in self._research_step_settled:
+                return
+            self._research_step_settled.add(index)
+            if index < len(self._research_task_states):
+                self._research_task_states[index]["state"] = (
+                    "done" if outcome.status == "completed" else "failed"
+                )
+        step_id = f"step-research-{index + 1}"
+        if outcome.status == "completed":
+            self._publish(
+                StepCompleted(
+                    step_id=step_id,
+                    public_summary="Research task completed with bounded evidence.",
+                )
+            )
+        else:
+            self._publish(
+                StepFailed(
+                    step_id=step_id,
+                    public_summary=outcome.error_message or "Research task failed.",
+                )
+            )
+
+    def _publish_inline_progress(self) -> None:
+        with self._inline_lock:
+            phases = [
+                {
+                    "id": key,
+                    "label": label,
+                    "status": self._phase_status[key],
+                }
+                for key, label in _INLINE_PHASES
+            ]
+            tools = [
+                dict(task) for task in self._research_task_states[:_MAX_PLAN_TASKS]
+            ]
+            source_count = self._inline_source_count
+        active_index = next(
+            (
+                index
+                for index, phase in enumerate(phases)
+                if phase["status"] in {"running", "pending"}
+            ),
+            len(phases),
+        )
+        value: dict[str, object] = {
+            "schemaVersion": 1,
+            "steps": phases,
+            "activeIndex": active_index,
+            "sourceCount": source_count,
+        }
+        if tools:
+            value["tools"] = tools
+        self._bus.publish_from_worker(
+            InlineDataEvent(name="agent-progress", value=value)
+        )
+
+    def _set_report_status(self, section: str, status: str) -> None:
+        with self._inline_lock:
+            self._report_status[section] = status
+        self._publish_report_snapshot()
+
+    def _publish_report_snapshot(self) -> None:
+        if not self._report_requested:
+            return
+        with self._inline_lock:
+            sections = [
+                {
+                    "id": "research",
+                    "heading": "Research evidence",
+                    "state": self._report_status["research"],
+                    "sources": self._inline_source_count,
+                },
+                {
+                    "id": "synthesis",
+                    "heading": "Synthesis",
+                    "state": self._report_status["synthesis"],
+                    "sources": self._inline_source_count,
+                },
+                {
+                    "id": "export",
+                    "heading": "Report file",
+                    "state": self._report_status["export"],
+                    "sources": 0,
+                },
+            ]
+            source_count = self._inline_source_count
+        self._bus.publish_from_worker(
+            InlineDataEvent(
+                name="research-report",
+                value={
+                    "schemaVersion": 1,
+                    "title": "Research report",
+                    "sections": sections,
+                    "sourcesRead": source_count,
+                },
+            )
+        )
+
     def _publish(self, event: Any) -> None:
-        if isinstance(event, StepStarted):
-            self._open_steps.add(event.step_id)
-        elif isinstance(event, (StepCompleted, StepFailed)):
-            self._open_steps.discard(event.step_id)
+        phase: str | None = None
+        with self._inline_lock:
+            if isinstance(event, StepStarted):
+                self._open_steps.add(event.step_id)
+                phase = _phase_for_step(event.step_id)
+                if phase is not None:
+                    self._phase_status[phase] = "running"
+            elif isinstance(event, (StepCompleted, StepFailed)):
+                self._open_steps.discard(event.step_id)
+                phase = _phase_for_step(event.step_id)
+                if phase is not None:
+                    self._phase_status[phase] = (
+                        "completed" if isinstance(event, StepCompleted) else "failed"
+                    )
+            if phase == "research":
+                self._report_status[phase] = (
+                    "done" if self._phase_status[phase] == "completed" else "writing"
+                )
+            elif phase == "synthesis":
+                self._report_status[phase] = (
+                    "done"
+                    if self._phase_status[phase] == "completed"
+                    else "failed"
+                    if self._phase_status[phase] == "failed"
+                    else "writing"
+                )
         self._bus.publish_from_worker(event)
+        if phase is not None:
+            self._publish_inline_progress()
+            self._publish_report_snapshot()
 
     def _budget_callbacks(self) -> list[AgUiRunCallback]:
         return [
@@ -751,3 +1121,12 @@ def _requests_report(user_request: str) -> bool:
             "export a report",
         )
     )
+
+
+def _phase_for_step(step_id: str) -> str | None:
+    return {
+        "step-plan": "planning",
+        "step-research": "research",
+        "step-critique": "critique",
+        "step-synthesis": "synthesis",
+    }.get(step_id)

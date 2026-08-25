@@ -5,12 +5,14 @@ import json
 
 import dspy
 
+from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import DspyReActV2Engine
 from app.agent.instrumented import instrument_tool
 from app.agent.signature import AgentSignature
 from app.agent.tools import search_docs
 from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.contracts.domain import SourceResult
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 
 
@@ -206,6 +208,70 @@ async def test_tool_activity_streams_before_final_answer():
             "alternatives": [],
             "status": "accepted",
         }
+    ]
+
+
+async def test_web_search_and_sources_are_transcript_custom_events():
+    source = SourceResult(
+        id="w1",
+        title="DSPy docs",
+        source_type="web",
+        uri="https://dspy.ai/api",
+    )
+
+    def web_search(query: str) -> str:
+        web_search.last_sources = [source]
+        return f"result for {query}"
+
+    web_search.last_sources = []
+
+    def builder(bus: RunEventBus, *, thread_id: str = "thread-live"):
+        del thread_id
+        callback = AgUiRunCallback(bus=bus)
+
+        def agent_factory() -> dspy.ReActV2:
+            return dspy.ReActV2(
+                AgentSignature,
+                tools=[web_search],
+                max_iters=2,
+            )
+
+        return DspyReActV2Engine(
+            agent_factory=agent_factory,
+            lm=ScriptedLM(
+                [
+                    [{"name": "web_search", "args": {"query": "DSPy"}}],
+                    [submit_call(answer="Found DSPy docs.")],
+                ]
+            ),
+            adapter=dspy.JSONAdapter(use_native_function_calling=True),
+            callbacks=[callback],
+        )
+
+    from ag_ui.core import RunAgentInput
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input()),
+        engine_builder=builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+
+    custom = [event for event in events if event["type"] == "CUSTOM"]
+    assert [event["name"] for event in custom] == [
+        "web-search",
+        "sources",
+        "web-search",
+    ]
+    assert custom[0]["value"]["searching"] is True
+    assert custom[1]["value"]["sources"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai"}
+    ]
+    assert custom[2]["value"]["results"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai"}
     ]
 
 

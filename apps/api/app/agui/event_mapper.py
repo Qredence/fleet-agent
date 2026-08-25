@@ -16,6 +16,7 @@ from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
     ArtifactStarted,
+    InlineDataEvent,
     SourceDiscovered,
     StepCompleted,
     StepFailed,
@@ -26,7 +27,8 @@ from app.contracts.domain import (
 )
 
 AnyDomainEvent = (
-    ToolStarted
+    InlineDataEvent
+    | ToolStarted
     | ToolCompleted
     | ToolFailed
     | SourceDiscovered
@@ -45,8 +47,16 @@ def map_domain_event(
     tools_message_id: str,
     reducer: TraceReducer,
 ) -> list[BaseEvent]:
-    """Single dispatch point: applies the state delta and wraps it with the
-    AG-UI events for the domain event's kind."""
+    """Single dispatch point: applies the state delta and wraps the
+    AG-UI events for the domain event's kind.
+
+    Inline data is deliberately not applied to ``AgentWorkspaceState``. It is
+    a bounded transcript projection, while the process panel remains the
+    authoritative AG-UI state view.
+    """
+    if isinstance(event, InlineDataEvent):
+        return [CustomEvent(name=event.name, value=event.value)]
+
     ops = reducer.apply_event(event)
     if isinstance(event, (ToolStarted, ToolCompleted, ToolFailed)):
         return map_tool_event(
@@ -63,6 +73,7 @@ def map_domain_event(
             CustomEvent(
                 name="artifact",
                 value={
+                    "schemaVersion": 1,
                     "id": event.artifact.id,
                     "name": event.artifact.name,
                     "mediaType": event.artifact.media_type,

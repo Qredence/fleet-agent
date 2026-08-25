@@ -11,7 +11,9 @@ from app.agent.tools.docs import SearchDocsTool
 from app.agui.cancel_token import RunCancelToken
 from app.agui.event_bus import DONE, RunEventBus
 from app.contracts.domain import (
+    InlineDataEvent,
     SourceDiscovered,
+    SourceResult,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
@@ -176,3 +178,57 @@ async def test_callback_respects_cancel_token():
     events = await _drain_bus(bus)
     # When cancelled, no tool started/completed events should be published to the bus
     assert len(events) == 0
+
+
+async def test_callback_emits_bounded_web_search_and_source_projections():
+    loop = asyncio.get_running_loop()
+    bus = RunEventBus(loop)
+    callback = AgUiRunCallback(bus)
+
+    class WebSearch:
+        __name__ = "web_search"
+
+        def __init__(self) -> None:
+            self.__name__ = "web_search"
+            self.last_sources = [
+                SourceResult(
+                    id="w1",
+                    title="Official docs",
+                    source_type="web",
+                    uri="https://example.com/path",
+                    excerpt="private excerpt stays out of the inline card",
+                )
+            ]
+
+    tool = WebSearch()
+    callback.on_tool_start(
+        "call-1",
+        tool,
+        {"kwargs": {"query": "latest DSPy behavior", "token": "secret"}},
+    )
+    callback.on_tool_end("call-1", "bounded result")
+    await asyncio.sleep(0)
+
+    events = await _drain_bus(bus)
+    web_events = [
+        event
+        for event in events
+        if isinstance(event, InlineDataEvent) and event.name == "web-search"
+    ]
+    source_events = [
+        event
+        for event in events
+        if isinstance(event, InlineDataEvent) and event.name == "sources"
+    ]
+    assert len(web_events) == 2
+    assert len(source_events) == 1
+    assert web_events[0].value["searching"] is True
+    assert web_events[1].value["searching"] is False
+    assert web_events[1].value["results"] == [
+        {"title": "Official docs", "domain": "example.com"}
+    ]
+    assert source_events[0].value == {
+        "schemaVersion": 1,
+        "sources": [{"title": "Official docs", "domain": "example.com"}],
+    }
+    assert "secret" not in str(web_events[0].value)

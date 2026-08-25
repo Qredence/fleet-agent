@@ -17,6 +17,7 @@ import {
   type ToolCallMessagePartStatus,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
+import { ToolCall } from "@/components/elements/tool-call";
 import {
   Collapsible,
   CollapsibleContent,
@@ -569,6 +570,32 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   if (isRequiresAction !== prevRequiresAction) {
     setPrevRequiresAction(isRequiresAction);
     if (isRequiresAction) setOpen(true);
+  }
+
+  if (!shouldRenderApproval && !isCancelled && status?.type !== "incomplete") {
+    const resultText =
+      result === undefined
+        ? "Waiting for the tool result."
+        : typeof result === "string"
+          ? result
+          : JSON.stringify(result);
+    return (
+      <ToolCall
+        label={`Used ${toolName}`}
+        activeLabel={`Using ${toolName}`}
+        query={toolName}
+        request={(argsText || "No arguments").slice(0, 400)}
+        result={
+          (resultText || "The tool returned no displayable result.").slice(
+            0,
+            2000,
+          )
+        }
+        running={status?.type === "running"}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    );
   }
 
   return (

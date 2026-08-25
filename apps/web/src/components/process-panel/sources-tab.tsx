@@ -65,6 +65,8 @@ export function SourcesTab({
                   <Button
                     variant="ghost"
                     size="icon"
+                    nativeButton={false}
+                    role="link"
                     render={
                       <a
                         href={source.uri}

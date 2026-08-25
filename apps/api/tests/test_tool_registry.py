@@ -46,6 +46,19 @@ def test_registry_returns_bounded_structured_results_and_sources():
     assert result.error_code is None
 
 
+def test_registry_can_isolate_stateful_dspy_tools():
+    registry = ToolRegistry([(SearchDocsTool(), ToolMetadata(name="search_docs"))])
+
+    first = registry.dspy_tools(read_only_only=True, isolate=True)[0]
+    second = registry.dspy_tools(read_only_only=True, isolate=True)[0]
+
+    assert first is not second
+    assert first.func is not second.func
+    first.func("AG-UI")
+    assert first.func.last_sources
+    assert second.func.last_sources == []
+
+
 def test_registry_converts_failures_and_cancellation_to_safe_results():
     def fail(value: str) -> str:
         raise RuntimeError(f"secret {value}")

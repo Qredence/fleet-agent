@@ -1,6 +1,6 @@
-import { FileBox } from 'lucide-react'
-
 import { useAssistantDataUI } from '@assistant-ui/react'
+
+import { ArtifactCard } from '@/components/elements/artifact-card'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
 interface ArtifactData {
@@ -10,28 +10,48 @@ interface ArtifactData {
   downloadUrl: string
 }
 
-function InlineArtifactCard({ data }: { data: ArtifactData }) {
+function parseArtifactData(value: unknown): ArtifactData | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null
+  }
+  const data = value as Record<string, unknown>
+  const id = typeof data.id === 'string' ? data.id.trim().slice(0, 120) : ''
+  const name = typeof data.name === 'string' ? data.name.trim().slice(0, 240) : ''
+  const mediaType =
+    typeof data.mediaType === 'string' ? data.mediaType.trim().slice(0, 120) : ''
+  const downloadUrl =
+    typeof data.downloadUrl === 'string' ? data.downloadUrl.trim() : ''
+  if (!id || !name || !mediaType || !downloadUrl.startsWith('/api/artifacts/')) {
+    return null
+  }
+  return { id, name, mediaType, downloadUrl }
+}
+
+function InlineArtifactCard({ data: rawData }: { data: unknown }) {
+  const data = parseArtifactData(rawData)
   const openPanel = useWorkspaceStore((s) => s.setProcessPanelOpen)
   const setTab = useWorkspaceStore((s) => s.setProcessPanelTab)
   const select = useWorkspaceStore((s) => s.setSelectedArtifactId)
 
+  if (!data) return null
+
   return (
     <button
       type="button"
+      aria-label={`Open artifact ${data.name}`}
       onClick={() => {
         openPanel(true)
         setTab('artifacts')
         select(data.id)
       }}
-      className="mt-2 flex w-full max-w-sm items-center gap-2 rounded-lg border bg-card p-3 text-left text-sm shadow-sm transition-colors hover:border-primary/40"
+      className="mt-2 block w-full max-w-sm rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <FileBox className="size-4 shrink-0 text-primary" />
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{data.name}</span>
-        <span className="block text-xs text-muted-foreground">
-          {data.mediaType} · open in Artifacts
-        </span>
-      </span>
+      <ArtifactCard
+        title={data.name}
+        meta={`${data.mediaType} · open in Artifacts`}
+        aria-hidden="true"
+        className="pointer-events-none w-full max-w-none"
+      />
     </button>
   )
 }

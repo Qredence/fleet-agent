@@ -130,7 +130,9 @@ def make_engine_builder(
                         name=tool.__name__,
                         read_only=tool is not report_tool,
                         idempotent=tool is not get_current_time,
-                        parallelizable=tool is not report_tool,
+                        parallelizable=(
+                            tool is not report_tool and tool is not get_current_time
+                        ),
                         timeout_seconds=settings.reasoning_task_timeout_seconds,
                     ),
                 )

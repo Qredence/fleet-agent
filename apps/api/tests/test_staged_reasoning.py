@@ -136,6 +136,50 @@ async def test_staged_engine_fans_out_four_tasks_and_critiques_partial_failure()
 
 
 @pytest.mark.asyncio
+async def test_staged_engine_bounds_a_blocking_research_worker():
+    loop = asyncio.get_running_loop()
+    bus = RunEventBus(loop)
+    finished = threading.Event()
+
+    class BlockingResearch(FakeStagedEngine):
+        def _research_sync(
+            self,
+            task: ResearchTask,
+            user_request: str,
+            step_id: str,
+            cancel_token,
+        ) -> _WorkerOutcome:
+            del user_request, step_id, cancel_token
+            time.sleep(0.5)
+            finished.set()
+            return _WorkerOutcome(task=task, status="completed", answer="late")
+
+    engine = BlockingResearch(
+        lm=ScriptedLM([]),
+        adapter=dspy.JSONAdapter(use_native_function_calling=True),
+        registry=ToolRegistry([]),
+        bus=bus,
+        max_parallel_tasks=1,
+        max_model_calls=8,
+        max_tool_calls=12,
+        task_timeout_seconds=0.05,
+        researcher_max_iters=1,
+    )
+
+    started = time.monotonic()
+    outcomes = await engine._research_parallel(
+        [ResearchTask(title="Blocking task", task="q")],
+        "request",
+        bus.cancel_token,
+    )
+
+    assert time.monotonic() - started < 0.25
+    assert outcomes[0].error_code == "task_timeout"
+    assert not finished.is_set()
+    assert finished.wait(1)
+
+
+@pytest.mark.asyncio
 async def test_staged_engine_cleanup_waits_for_cancelled_worker():
     loop = asyncio.get_running_loop()
     bus = RunEventBus(loop)
