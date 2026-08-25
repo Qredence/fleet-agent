@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage questions and project discussion
+    url: https://github.com/Qredence/fleet-agent/discussions
+    about: Ask setup questions, share ideas, and discuss project direction.
+  - name: Report a security vulnerability privately
+    url: https://github.com/Qredence/fleet-agent/security/advisories/new
+    about: Never disclose vulnerability details in a public issue or discussion.

@@ -1,38 +1,46 @@
 ---
 name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
+about: Report a reproducible problem with Fleet Agent
+title: "[Bug]: "
+labels: bug
 assignees: ''
-
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!-- Do not use this template for security vulnerabilities. See SECURITY.md. -->
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+## Summary
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+<!-- What went wrong? Keep this concise and user-focused. -->
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+## Reproduction
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+1.
+2.
+3.
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+### Expected behavior
 
-**Additional context**
-Add any other context about the problem here.
+### Actual behavior
+
+## Environment
+
+- Commit or version:
+- Agent mode: `fixtures` / `engine`
+- Operating system:
+- Browser and version (if applicable):
+- Node and pnpm versions (if applicable):
+- Python and uv versions (if applicable):
+- Database/provider setup (if applicable):
+
+## Logs and supporting material
+
+<!-- Remove API keys, provider prompts, raw reasoning, private data, and
+     unsanitized credentials before posting. -->
+
+```text
+<!-- sanitized logs or error output -->
+```
+
+## Additional context
+
+<!-- Screenshots, related issues, or a minimal reproduction link. -->
