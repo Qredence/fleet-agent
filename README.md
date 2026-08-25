@@ -3,61 +3,124 @@
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/Qredence/fleet-agent/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/Qredence/fleet-agent/tree/main)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Fleet Agent is a three-pane workspace for agent conversations and user-safe
-process visibility. It combines an assistant-ui conversation, project and
-thread navigation, and a live AG-UI Process panel backed by FastAPI and DSPy.
+Fleet Agent is an experimental agent workbench built around **DSPy**. Its
+purpose is to make multi-step agent work useful, inspectable, and recoverable:
+the user gets a direct answer while the workspace keeps the relevant process
+state, tool activity, evidence, decisions, and generated artifacts available.
 
-> **Status:** early-stage, pre-release software. The current application is
-> designed for a single local owner. It is not a complete multi-user identity
-> or authorization system.
+> Early-stage, pre-release software. The current application has a single
+> local owner; it is not a complete multi-user identity or authorization
+> system.
 
-## What it includes
+## Why Fleet Agent exists
 
-- A responsive workspace with project/thread navigation, assistant-ui chat,
-  and Activity, Sources, Artifacts, and Decisions views.
-- AG-UI over server-sent events (SSE), with fixture streams for deterministic
-  local development and CI.
-- A DSPy ReActV2 engine behind a small `AgentEngine` boundary for provider-backed
-  runs.
-- PostgreSQL persistence for projects, threads, messages, runs, branch-aware
-  history, sources, artifacts, and safe process snapshots.
-- A versioned JSON Schema contract in `packages/contracts`, used to generate
-  the TypeScript and Python state models.
-- A deliberate chain-of-thought boundary: raw DSPy thoughts, provider prompts,
-  stack traces, and unredacted tool payloads stay server-side.
+Most agent interfaces show a conversation and hide the work behind it. Fleet
+Agent treats the agent run as a first-class part of the product. A request
+belongs to a project and thread, the DSPy agent can use bounded typed tools,
+and the user can inspect what happened without receiving hidden model reasoning.
 
-## Architecture
+DSPy is the core reasoning framework. In engine mode, `dspy.ReActV2` receives
+the user request and persisted branch history, chooses tools, and produces
+explicit user-facing fields:
+
+- a direct answer;
+- a concise process summary;
+- important decisions; and
+- remaining caveats or uncertainty.
+
+The FastAPI backend wraps DSPy behind an `AgentEngine` boundary, coordinates
+the run, persists the safe result, and translates callbacks into AG-UI events.
+The React frontend renders the conversation and the live process projection.
+
+## Core features
+
+### DSPy-powered agent execution
+
+- ReActV2 is the default live agent loop, with provider configuration kept in
+  one server-side boundary.
+- An optional staged strategy uses DSPy modules for planning, parallel
+  research, verification, and synthesis while keeping budgets and cancellation
+  outside the model.
+- The agent uses typed tools such as bundled documentation search, current
+  time, and report generation. Optional Tavily configuration adds bounded
+  `web_search` and `fetch_page` tools.
+- OpenAI-compatible model endpoints are supported through the configured DSPy
+  model and base URL.
+
+### Evidence and artifacts
+
+- Tool calls expose bounded status, inputs, outputs, and failures.
+- Sources discovered during a run appear in the Sources view.
+- `write_report` produces a sanitized, size-capped Markdown artifact with a
+  controlled API download URL.
+- The process state includes decisions, caveats, run status, and run metrics
+  without exposing raw provider payloads.
+
+### A persistent agent workspace
+
+- Projects organize threads; the URL identifies the active project and thread.
+- Conversation messages, branch heads, safe process snapshots, sources, runs,
+  and artifacts persist in PostgreSQL.
+- Reloading a thread restores its versioned bootstrap snapshot and branch-aware
+  conversation history.
+- The responsive three-pane UI combines project/thread navigation, an
+  assistant-ui conversation, and an AG-UI process panel with Activity, Sources,
+  and Artifacts tabs.
+
+### Deterministic development and safe boundaries
+
+- Fixture mode replays canonical AG-UI streams without an LLM provider, making
+  local development and CI reproducible.
+- Engine mode uses the live DSPy bridge for provider-backed runs.
+- The public `AgentWorkspaceState` JSON Schema is the shared contract between
+  backend and frontend.
+- Raw `next_thought`, DSPy history, provider prompts, credentials, stack traces,
+  and unredacted tool payloads remain server-side.
+- Tool arguments and previews are bounded, public failures use safe error
+  codes, and CORS accepts exact configured origins only.
+
+## How the pieces fit together
 
 ```text
-┌──────────────────┬───────────────────────────────┬────────────────────────┐
-│ Projects/Threads │ Conversation                 │ Process panel          │
-│                  │                               │                        │
-│ Project A        │ assistant-ui messages         │ Activity               │
-│  ├ Thread 1      │ user-visible answers          │ Sources                │
-│  ├ Thread 2      │ attachments and tool output   │ Artifacts              │
-│  └ New thread    │                               │ Decisions              │
-└──────────────────┴───────────────────────────────┴────────────────────────┘
+React workspace
+  assistant-ui conversation + AG-UI process panel
+                │ REST + SSE
+                ▼
+FastAPI run coordinator
+  AgentEngine boundary + persistence + public-state reducer
+                │
+                ├── DSPy ReActV2 / optional staged strategy
+                ├── typed tools and evidence sources
+                └── PostgreSQL + controlled artifact storage
 ```
 
-The frontend lives in `apps/web`, the FastAPI backend in `apps/api`, and the
-public `AgentWorkspaceState` contract and deterministic fixtures live in
-`packages/contracts`. PostgreSQL is provided for local development by
-`compose.yaml`.
+The browser never needs to understand DSPy internals. It consumes ordinary
+conversation data plus `AgentWorkspaceState` snapshots and deltas, while the
+server retains the model history needed for continuation.
+
+## Repository map
+
+```text
+apps/web/          React 19 + Vite workspace and browser tests
+apps/api/          FastAPI API, DSPy engine, AG-UI bridge, persistence, migrations
+packages/contracts Public agent-state schema and deterministic fixtures
+compose.yaml       Local PostgreSQL service
+```
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22+
 - pnpm 11.15.1
-- Python 3.13 or newer
+- Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - Docker with Docker Compose
 
-The repository pins the workspace package manager in `package.json` and the
-Python dependencies in `apps/api/uv.lock`.
+The package manager and Python dependencies are pinned in `package.json` and
+`apps/api/uv.lock`.
 
 ## Quick start
 
-From the repository root:
+From the repository root, install dependencies and prepare PostgreSQL:
 
 ```bash
 pnpm install
@@ -71,35 +134,42 @@ uv sync --locked --all-groups
 uv run alembic upgrade head
 ```
 
-Start the services in separate terminals from the repository root:
+Start the services in separate terminals:
 
 ```bash
-# terminal 1 — API at http://localhost:8000
+# API — http://localhost:8000
 pnpm dev:api
+```
 
-# terminal 2 — web app at http://localhost:5173
+```bash
+# Web — http://localhost:5173
 pnpm dev:web
 ```
 
-Open <http://localhost:5173>. The default `fixtures` mode does not require an
-LLM provider key, but PostgreSQL is still required because the API initializes
-its persistence layer at startup.
+Open <http://localhost:5173>. The API docs are at
+<http://localhost:8000/docs>; health checks are available at `/health` and
+`/ready`.
 
-The FastAPI interactive documentation is available at
-<http://localhost:8000/docs>. Liveness and readiness checks are available at
-`/health` and `/ready`.
+If the API uses another port, set the matching browser origin before starting
+Vite, for example:
 
-## Agent modes
+```bash
+pnpm dev:api -- --port 8001
+VITE_API_BASE_URL=http://localhost:8001 pnpm dev:web
+```
 
-The backend supports two modes through `FLEET_AGENT_AGENT_MODE`:
+If the web app uses a different origin or port, add that exact origin to
+`FLEET_AGENT_CORS_ORIGINS` in `apps/api/.env`. Wildcard CORS is not supported.
 
-- `fixtures` (default) replays canonical NDJSON streams from
-  `packages/contracts/fixtures`. It is deterministic and provider-free.
-- `engine` runs the live DSPy ReActV2 bridge. It requires
-  `FLEET_AGENT_LLM_API_KEY` and may use an OpenAI-compatible endpoint through
-  `FLEET_AGENT_LLM_BASE_URL`.
+## Agent modes and configuration
 
-To try engine mode, set the following in `apps/api/.env`, then restart the API:
+The API defaults to deterministic fixture mode:
+
+- `fixtures` replays canonical streams from `packages/contracts/fixtures` and
+  does not need an LLM provider key.
+- `engine` runs the live DSPy ReActV2 bridge and requires a configured provider.
+
+To use engine mode, edit `apps/api/.env` and restart the API:
 
 ```dotenv
 FLEET_AGENT_AGENT_MODE=engine
@@ -107,91 +177,35 @@ FLEET_AGENT_LLM_MODEL=openai/gpt-4o-mini
 FLEET_AGENT_LLM_API_KEY=replace-me
 # Optional OpenAI-compatible endpoint:
 # FLEET_AGENT_LLM_BASE_URL=https://your-provider.example/v1
+# Optional web tools:
+# FLEET_AGENT_TAVILY_API_KEY=replace-me
 ```
 
-Never commit `.env` files or provider keys. The checked-in `.env.example`
-files contain configuration examples only.
+API settings load from `apps/api/.env`; environment variables override that
+file. The checked-in example contains the complete list. Common settings are:
 
-## Configuration
+| Variable | Purpose |
+| --- | --- |
+| `FLEET_AGENT_AGENT_MODE` | `fixtures` or `engine`. |
+| `FLEET_AGENT_REASONING_PROGRAM` | `react` or opt-in `staged` reasoning. |
+| `FLEET_AGENT_CORS_ORIGINS` | JSON array of exact allowed browser origins. |
+| `FLEET_AGENT_DATABASE_URL` | PostgreSQL connection URL. |
+| `FLEET_AGENT_LLM_MODEL` | DSPy/LiteLLM model identifier. |
+| `FLEET_AGENT_LLM_BASE_URL` | Optional OpenAI-compatible provider endpoint. |
+| `FLEET_AGENT_LLM_API_KEY` | Provider credential; never log it. |
+| `FLEET_AGENT_TAVILY_API_KEY` | Enables bounded web search and page fetch tools. |
+| `FLEET_AGENT_API_KEY` | Optional shared `X-API-Key` for `/api/*`. |
 
-The API reads `apps/api/.env` using an absolute path derived from the app
-location, so its behavior does not depend on the current working directory.
-Environment variables override values from that file.
+The web app reads `VITE_API_BASE_URL` for the API origin and `VITE_API_KEY` when
+the API requires a shared key. `VITE_*` values are bundled into the browser;
+`VITE_API_KEY` is not a substitute for user authentication.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FLEET_AGENT_ENVIRONMENT` | `development` | Environment label. |
-| `FLEET_AGENT_ENV_FILE` | `apps/api/.env` | Optional settings-file path override for the API. |
-| `FLEET_AGENT_CORS_ORIGINS` | `["http://localhost:5173"]` | JSON array of exact allowed browser origins; wildcards are not supported. |
-| `FLEET_AGENT_CORS_ALLOW_CREDENTIALS` | `true` | Whether CORS credentials are allowed. |
-| `FLEET_AGENT_AGENT_MODE` | `fixtures` | `fixtures` or `engine`. |
-| `FLEET_AGENT_DATABASE_URL` | `postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent` | SQLAlchemy async database URL. |
-| `FLEET_AGENT_LLM_MODEL` | `openai/gpt-4o-mini` | DSPy/LiteLLM model identifier. |
-| `FLEET_AGENT_LLM_BASE_URL` | unset | Optional OpenAI-compatible provider endpoint. |
-| `FLEET_AGENT_LLM_API_KEY` | unset | Provider credential; never logged or returned by the API. |
-| `FLEET_AGENT_LLM_MAX_ITERS` | `6` | Maximum ReActV2 loop iterations, from 1 to 25. |
-| `FLEET_AGENT_LLM_TEMPERATURE` | `0.2` | Provider sampling temperature, from 0 to 2. |
-| `FLEET_AGENT_ARTIFACTS_DIR` | `.artifacts` | Local artifact storage directory. |
-| `FLEET_AGENT_ARTIFACT_MAX_BYTES` | `65536` | Maximum stored artifact size. |
-| `FLEET_AGENT_RUN_TIMEOUT_SECONDS` | `300` | Whole-run timeout. |
-| `FLEET_AGENT_MAX_CONCURRENT_RUNS` | `4` | Per-process engine run limit. |
-| `FLEET_AGENT_MAX_BODY_BYTES` | `1048576` | Request body limit; oversized requests return 413. |
-| `FLEET_AGENT_API_KEY` | unset | Shared `X-API-Key` required for `/api/*` when configured. |
-
-The web app reads:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | API origin used by the browser. |
-| `VITE_API_KEY` | unset | Sends `X-API-Key` when the API key is enabled. |
-
-`VITE_*` values are bundled into the frontend and are therefore visible to
-browser users. `VITE_API_KEY` is a shared deployment credential, not a secret
-user authentication mechanism. Do not use it as a substitute for real
-identity and authorization in a shared deployment.
-
-## Persistence and runtime behavior
-
-Engine mode persists projects, threads, safe assistant-ui messages, runs,
-branch-aware history, sources, artifacts, and public process snapshots. Apply
-the latest Alembic migration before starting engine workers:
-
-```bash
-cd apps/api
-uv run alembic upgrade head
-```
-
-Thread restoration is served by a versioned bootstrap snapshot at
-`GET /api/threads/{thread_id}/bootstrap`. Assistant-ui presentation history is
-written through idempotent message and branch-head endpoints. DSPy history and
-internal reasoning never cross the API boundary.
-
-Artifacts are served through controlled API download URLs. The default local
-storage is suitable for development only. A shared production deployment
-should provide durable storage behind the existing storage boundary and should
-not expose the local artifact directory directly.
-
-## Security and deployment notes
-
-- Set `FLEET_AGENT_API_KEY` for any shared deployment. When it is unset, the
-  API intentionally runs in open local mode and logs a warning.
-- Keep `FLEET_AGENT_CORS_ORIGINS` limited to exact trusted origins.
-- Put the API behind a network boundary and real user authentication before
-  exposing it to untrusted users. Current project and thread ownership is the
-  single local owner `local`.
-- Preserve SSE streaming by disabling proxy buffering and allowing sufficiently
-  long ingress timeouts. `X-Accel-Buffering: no` is sent by the API.
-- Use a graceful shutdown strategy so open agent streams can drain.
-- `run_semaphore` and metrics are per-process. Do not split traffic across
-  multiple workers until a shared run/event backend is in place.
-- Keep provider prompts, API keys, raw reasoning, stack traces, and private
-  user data out of issues, fixtures, screenshots, and pull requests.
-
-See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+PostgreSQL is required in both modes because the API initializes its
+persistence layer at startup. Never commit `.env` files or provider keys.
 
 ## Development checks
 
-Web checks:
+Web:
 
 ```bash
 pnpm --filter web lint
@@ -199,7 +213,7 @@ pnpm --filter web test
 pnpm --filter web build
 ```
 
-API checks:
+API:
 
 ```bash
 cd apps/api
@@ -209,47 +223,33 @@ uv run mypy app
 uv run pytest
 ```
 
-Contract types are generated from
-`packages/contracts/agent-workspace-state.schema.json`. After changing the
-schema, regenerate the TypeScript and Python models using the commands in
-[`CONTRIBUTING.md`](CONTRIBUTING.md), then run the contract freshness tests.
-
-For deterministic browser validation, start both services in fixture mode and
-run:
+For deterministic browser coverage, start PostgreSQL and both services in
+fixture mode, then run:
 
 ```bash
 bash scripts/e2e-fixtures.sh
 ```
 
-The engine browser matrix in `scripts/e2e-engine.sh` requires a configured
-provider and should only be run against a safe test environment.
+The engine flow in `scripts/e2e-engine.sh` needs provider credentials and a
+safe test environment.
 
-## Repository map
+## Contracts, persistence, and security
 
-```text
-apps/
-  api/          FastAPI backend, DSPy engine, persistence, migrations, tests
-  web/          React 19 frontend and browser tests
-packages/
-  contracts/    JSON Schema and canonical AG-UI fixtures
-.circleci/      Canonical CI configuration
-.github/        Issue, pull-request, funding, and community configuration
-compose.yaml    Local PostgreSQL service
-AGENTS.md       Engineering invariants for contributors and coding agents
-```
+`packages/contracts/agent-workspace-state.schema.json` is the source of truth
+for the public agent-state contract. After changing it, regenerate the
+TypeScript and Python models and run the freshness tests. The exact commands
+are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Engine mode persists projects, threads, safe messages, runs, branch-aware
+history, sources, artifacts, and public process snapshots. Thread restoration
+uses the versioned bootstrap endpoint
+`GET /api/threads/{thread_id}/bootstrap`. DSPy history and internal reasoning
+never cross the API boundary. Artifacts are downloaded through controlled API
+URLs; do not expose the local artifact directory directly.
 
-## Community
-
-- [Discussions](https://github.com/Qredence/fleet-agent/discussions) — usage
-  questions, ideas, and general project conversation.
-- [Issues](https://github.com/Qredence/fleet-agent/issues) — reproducible bugs
-  and scoped feature requests.
-- [Support policy](SUPPORT.md) — how to choose the right channel.
-- [Security policy](SECURITY.md) — private vulnerability reporting.
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-
-## License
+Keep pull requests small and focused. Read [AGENTS.md](AGENTS.md) for
+engineering boundaries and [CONTRIBUTING.md](CONTRIBUTING.md) for contract,
+migration, validation, and review guidance. Report vulnerabilities privately
+using [SECURITY.md](SECURITY.md).
 
 Fleet Agent is released under the [MIT License](LICENSE).

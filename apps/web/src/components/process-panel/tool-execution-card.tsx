@@ -1,5 +1,6 @@
 import { Wrench } from 'lucide-react'
 
+import { TerminalBlock } from '@/components/elements/terminal-block'
 import { StatusIcon, formatDuration } from '@/components/process-panel/status-chip'
 import type { ToolExecution } from '@/contracts/generated'
 
@@ -25,19 +26,31 @@ export function ToolExecutionCard({ tool }: { tool: ToolExecution }) {
           </span>
         </div>
         {tool.errorMessage && (
-          <p className="mt-1 text-xs break-words text-destructive">
-            {tool.errorMessage}
-          </p>
+          <TerminalBlock
+            title="error"
+            copyText={tool.errorMessage}
+            className="mt-1"
+          >
+            <span className="text-destructive">{tool.errorMessage}</span>
+          </TerminalBlock>
         )}
         {tool.inputPreview && (
-          <p className="mt-1 line-clamp-2 text-xs break-all text-muted-foreground">
-            <span className="font-medium">in:</span> {tool.inputPreview}
-          </p>
+          <TerminalBlock
+            title="in"
+            copyText={tool.inputPreview}
+            className="mt-1"
+          >
+            {tool.inputPreview}
+          </TerminalBlock>
         )}
         {tool.outputPreview && (
-          <p className="mt-0.5 line-clamp-2 text-xs break-all text-muted-foreground">
-            <span className="font-medium">out:</span> {tool.outputPreview}
-          </p>
+          <TerminalBlock
+            title="out"
+            copyText={tool.outputPreview}
+            className="mt-1"
+          >
+            {tool.outputPreview}
+          </TerminalBlock>
         )}
       </div>
     </article>

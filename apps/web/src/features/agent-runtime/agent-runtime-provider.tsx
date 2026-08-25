@@ -77,6 +77,7 @@ export function AgentRuntimeProvider({
     agent,
     showThinking: false,
     adapters,
+    unstable_enableMessageQueue: true,
     onError: (error) => {
       // Structured client error reporting arrives with observability (PR 9).
       console.error('[ag-ui] run error', error)

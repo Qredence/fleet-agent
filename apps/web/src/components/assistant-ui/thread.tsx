@@ -17,6 +17,8 @@ import {
   ReasoningTrigger,
 } from "@/components/assistant-ui/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { ComposerQueue } from "@/components/assistant-ui/queue-item";
+import { ScrollAnchor } from "@/components/assistant-ui/scroll-anchor";
 import {
   ToolGroupContent,
   ToolGroupRoot,
@@ -44,7 +46,6 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import {
-  ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
   ChevronLeftIcon,
@@ -186,8 +187,9 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
                 "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
           >
-            <ThreadScrollToBottom />
+            <ScrollAnchor />
             <ThreadFollowupSuggestions />
+            <ComposerQueue />
             <Composer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />
@@ -208,12 +210,6 @@ const ThreadMessage: FC = () => {
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
   return <AssistantMessageComponent />;
-};
-
-const ThreadScrollToBottom: FC = () => {
-  return (
-    <ThreadPrimitive.ScrollToBottom render={<TooltipIconButton tooltip="Scroll to bottom" variant="outline" className="aui-thread-scroll-to-bottom dark:border-border dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible" />}><ArrowDownIcon /></ThreadPrimitive.ScrollToBottom>
-  );
 };
 
 const ThreadWelcome: FC = () => {

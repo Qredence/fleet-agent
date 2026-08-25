@@ -29,3 +29,7 @@ __pycache__/
 
 # Logs
 *.log
+
+.agents
+.claude/
+skills-lock.json

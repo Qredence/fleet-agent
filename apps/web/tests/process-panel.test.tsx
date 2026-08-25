@@ -309,9 +309,14 @@ describe('ToolExecutionCard', () => {
       outputPreview: `${'x'.repeat(500)}`,
     }
     render(<ToolExecutionCard tool={longTool} />)
-    const preview = screen.getByText(/out:/).parentElement as HTMLElement
-    expect(preview.className).toContain('break-all')
-    expect(preview.className).toContain('line-clamp-2')
+    // Long unbroken output wraps to the terminal-block's horizontal-scroll
+    // surface (`codeScroll` / `codeSurface`) rather than stretching the card.
+    const block = screen.getByLabelText('Copy terminal contents').closest(
+      '[data-slot="terminal-block"]',
+    ) as HTMLElement
+    expect(block).toBeInTheDocument()
+    const scroller = block.querySelector('.overflow-x-auto') as HTMLElement
+    expect(scroller).toBeInTheDocument()
   })
 
   it('surfaces tool errors in destructive text with no stack traces', () => {
