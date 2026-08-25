@@ -8,5 +8,12 @@ the bundled corpus and a clock.
 
 from app.agent.tools.corpus import CORPUS
 from app.agent.tools.docs import get_current_time, search_docs
+from app.agent.tools.web import FetchPageTool, WebSearchTool
 
-__all__ = ["CORPUS", "get_current_time", "search_docs"]
+__all__ = [
+    "CORPUS",
+    "FetchPageTool",
+    "WebSearchTool",
+    "get_current_time",
+    "search_docs",
+]

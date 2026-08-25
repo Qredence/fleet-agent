@@ -46,6 +46,22 @@ export function ActivityTab({
     () => new Map(state.sources.map((source) => [source.id, source.title])),
     [state.sources],
   )
+  const stepDepthById = useMemo(() => {
+    const stepsById = new Map(state.steps.map((step) => [step.id, step]))
+    const depths = new Map<string, number>()
+    const depthOf = (id: string, visiting = new Set<string>()): number => {
+      const cached = depths.get(id)
+      if (cached !== undefined) return cached
+      if (visiting.has(id)) return 0
+      visiting.add(id)
+      const parentId = stepsById.get(id)?.parentId
+      const depth = parentId ? depthOf(parentId, visiting) + 1 : 0
+      depths.set(id, depth)
+      return depth
+    }
+    state.steps.forEach((step) => depthOf(step.id))
+    return depths
+  }, [state.steps])
 
   return (
     <div
@@ -72,6 +88,11 @@ export function ActivityTab({
           {state.steps.map((step) => (
             <div
               key={step.id}
+              data-depth={stepDepthById.get(step.id) ?? 0}
+              data-parent-id={step.parentId}
+              style={{
+                marginLeft: `${Math.min(stepDepthById.get(step.id) ?? 0, 3) * 16}px`,
+              }}
               ref={(node) => {
                 if (step.id === state.run.activeStepId)
                   activeStepRef.current = node

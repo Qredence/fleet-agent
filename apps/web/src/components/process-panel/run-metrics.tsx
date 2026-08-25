@@ -6,11 +6,11 @@ import type { RunMetrics } from '@/contracts/generated'
 /** Token usage and counters for a finished (or in-flight) run. */
 export function RunMetricsLine({ metrics }: { metrics: RunMetrics }) {
   const parts = [
-    metrics.durationMs !== undefined && formatDuration(metrics.durationMs),
+    metrics.durationMs != null && formatDuration(metrics.durationMs),
     `${metrics.toolCallCount} tool${metrics.toolCallCount === 1 ? '' : 's'}`,
-    metrics.modelCallCount !== undefined &&
+    metrics.modelCallCount != null &&
       `${metrics.modelCallCount} model call${metrics.modelCallCount === 1 ? '' : 's'}`,
-    metrics.totalTokens !== undefined &&
+    metrics.totalTokens != null &&
       `${metrics.totalTokens.toLocaleString()} tokens`,
   ].filter(Boolean)
 

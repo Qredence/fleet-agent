@@ -14,6 +14,8 @@ from app.contracts.domain import (
     ArtifactStarted,
     SourceDiscovered,
     SourceResult,
+    StepCompleted,
+    StepStarted,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
@@ -123,6 +125,24 @@ def test_full_tool_run_stays_schema_valid_at_every_patch():
     assert state["metrics"]["toolCallCount"] == 1
 
 
+def test_partial_usage_omits_missing_optional_metrics():
+    reducer = TraceReducer(thread_id="t-1", run_id="r-1")
+    wire = WireConsumer(reducer)
+    wire.feed(reducer.begin())
+
+    result = AgentRunResult(
+        status="completed",
+        answer="Final answer.",
+        process_summary="Done.",
+        usage={"prompt_tokens": 10},
+    )
+    state = wire.feed(reducer.complete_run(result))
+
+    assert state["metrics"]["inputTokens"] == 10
+    assert "outputTokens" not in state["metrics"]
+    assert "totalTokens" not in state["metrics"]
+
+
 def test_failed_tool_marks_tool_not_run():
     reducer = TraceReducer(thread_id="t-1", run_id="r-1")
     wire = WireConsumer(reducer)
@@ -163,6 +183,87 @@ def test_no_tool_run_completes_without_research_step():
     wire.matches(reducer)
     assert [s["id"] for s in state["steps"]] == ["step-understand", "step-synthesis"]
     assert state["run"]["toolCallCount"] == 0
+
+
+def test_staged_child_steps_and_out_of_order_tools_stay_schema_valid():
+    reducer = TraceReducer(thread_id="t-1", run_id="r-staged")
+    wire = WireConsumer(reducer)
+    wire.feed(reducer.begin())
+
+    for step in (
+        StepStarted(
+            step_id="step-plan",
+            phase="planning",
+            title="Planning the research",
+        ),
+        StepStarted(
+            step_id="step-research",
+            phase="research",
+            title="Researching in parallel",
+        ),
+        StepStarted(
+            step_id="step-research-1",
+            parent_id="step-research",
+            phase="research",
+            title="Find source one",
+        ),
+        StepStarted(
+            step_id="step-research-2",
+            parent_id="step-research",
+            phase="research",
+            title="Find source two",
+        ),
+    ):
+        wire.feed(reducer.apply_event(step))
+
+    for tool_id, step_id in (
+        ("tool-2", "step-research-2"),
+        ("tool-1", "step-research-1"),
+    ):
+        wire.feed(
+            reducer.apply_event(
+                ToolStarted(
+                    tool_call_id=tool_id,
+                    name="search_docs",
+                    input_preview="{}",
+                    step_id=step_id,
+                )
+            )
+        )
+    wire.feed(
+        reducer.apply_event(
+            ToolCompleted(
+                tool_call_id="tool-1",
+                name="search_docs",
+                output_preview="first",
+                duration_ms=5,
+            )
+        )
+    )
+    state = wire.feed(
+        reducer.apply_event(
+            StepCompleted(
+                step_id="step-research-1",
+                public_summary="Completed.",
+            )
+        )
+    )
+
+    assert state["steps"][3]["parentId"] == "step-research"
+    assert state["steps"][3]["toolCallIds"] == ["tool-1"]
+    assert state["steps"][4]["toolCallIds"] == ["tool-2"]
+    wire.feed(
+        reducer.apply_event(
+            StepCompleted(step_id="step-research-2", public_summary="Completed.")
+        )
+    )
+    wire.feed(
+        reducer.apply_event(
+            StepCompleted(step_id="step-research", public_summary="All tasks done.")
+        )
+    )
+    state = wire.feed(reducer.complete_run(successful_result()))
+    assert len({step["id"] for step in state["steps"]}) == len(state["steps"])
 
 
 def test_second_run_inherits_prior_evidence():

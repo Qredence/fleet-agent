@@ -1,5 +1,13 @@
-from app.agui.event_mapper import map_tool_event
-from app.contracts.domain import ToolCompleted, ToolFailed, ToolStarted
+from app.agui.event_mapper import map_domain_event, map_tool_event
+from app.agui.trace_reducer import TraceReducer
+from app.contracts.domain import (
+    InlineDataEvent,
+    SourceDiscovered,
+    SourceResult,
+    ToolCompleted,
+    ToolFailed,
+    ToolStarted,
+)
 
 
 def ops(value: dict) -> list:
@@ -54,3 +62,51 @@ def test_long_results_are_truncated_for_the_thread():
     events = map_tool_event(event, tools_message_id="m", state_delta_ops=[])
     [result] = [e for e in events if e.type.value == "TOOL_CALL_RESULT"]
     assert len(result.content) <= 2001
+
+
+def test_inline_events_are_custom_parts_and_do_not_change_public_state():
+    reducer = TraceReducer(thread_id="thread-1", run_id="run-1")
+    event = InlineDataEvent(
+        name="agent-progress",
+        value={
+            "schemaVersion": 1,
+            "steps": [{"id": "planning", "label": "Planning", "status": "running"}],
+            "activeIndex": 0,
+        },
+    )
+
+    events = map_domain_event(
+        event,
+        tools_message_id="msg-tools-run-1",
+        reducer=reducer,
+    )
+
+    assert [mapped.type.value for mapped in events] == ["CUSTOM"]
+    assert events[0].name == "agent-progress"
+    assert events[0].value["schemaVersion"] == 1
+    assert reducer.state["steps"][0]["id"] == "step-understand"
+
+
+def test_source_events_only_update_authoritative_state():
+    reducer = TraceReducer(thread_id="thread-1", run_id="run-1")
+    source = SourceResult(
+        id="w1",
+        title="Official docs",
+        source_type="web",
+        uri="https://example.com/secret-path",
+        excerpt="untrusted excerpt",
+    )
+
+    first = map_domain_event(
+        SourceDiscovered(tool_call_id="tool-1", source=source),
+        tools_message_id="msg-tools-run-1",
+        reducer=reducer,
+    )
+    second = map_domain_event(
+        SourceDiscovered(tool_call_id="tool-2", source=source),
+        tools_message_id="msg-tools-run-1",
+        reducer=reducer,
+    )
+
+    assert not [event for event in first if event.type.value == "CUSTOM"]
+    assert not [event for event in second if event.type.value == "CUSTOM"]

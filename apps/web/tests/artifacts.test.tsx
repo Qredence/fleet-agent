@@ -1,6 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
@@ -43,14 +42,27 @@ const state: AgentWorkspaceState = {
   metrics: { toolCallCount: 1 },
 }
 
+const fetchMock = vi.fn()
+
 beforeEach(() => {
+  fetchMock.mockResolvedValue(
+    new Response(
+      '# DSPy report\n\n**Actual Markdown content**\n\n- One useful finding\n\n[Official source](https://dspy.ai)',
+      { headers: { 'content-type': 'text/markdown' } },
+    ),
+  )
+  vi.stubGlobal('fetch', fetchMock)
   useWorkspaceStore.setState({
     selectedArtifactId: null,
     processPanelTab: 'activity',
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  fetchMock.mockReset()
+})
 
 describe('SourcesTab — originating tool', () => {
   it('shows which tool produced the source', () => {
@@ -65,6 +77,27 @@ describe('SourcesTab — originating tool', () => {
 })
 
 describe('ArtifactsTab — selection + download URL', () => {
+  it('renders the actual Markdown content for the selected artifact', async () => {
+    render(<ArtifactsTab artifacts={state.artifacts} selectedArtifactId="a-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'DSPy report' })).toBeInTheDocument()
+    expect(screen.getByText('Actual Markdown content')).toBeInTheDocument()
+    expect(screen.getByText('One useful finding')).toBeInTheDocument()
+
+    const source = screen.getByRole('link', { name: 'Official source' })
+    expect(source).toHaveAttribute('href', 'https://dspy.ai/')
+    expect(source).toHaveAttribute('target', '_blank')
+    expect(source).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/api/artifacts/a-1',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'text/plain, text/markdown;q=0.9',
+        }),
+      }),
+    )
+  })
+
   it('resolves relative downloadUrl against the API base', () => {
     render(<ArtifactsTab artifacts={state.artifacts} />)
     const link = screen.getByRole('link', {

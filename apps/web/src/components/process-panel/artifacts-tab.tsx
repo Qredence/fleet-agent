@@ -1,8 +1,10 @@
 import { Download, FileBox } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { ArtifactMarkdown } from '@/features/artifacts/artifact-markdown'
 import { StatusChip } from '@/components/process-panel/status-chip'
 import { Button } from '@/components/ui/button'
+import { apiFetchText } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { AgentArtifact } from '@/contracts/generated'
 
@@ -16,6 +18,54 @@ function formatSize(sizeBytes: number | undefined): string | undefined {
 interface ArtifactsTabProps {
   artifacts: AgentArtifact[]
   selectedArtifactId?: string | null
+}
+
+const MAX_PREVIEW_CHARS = 64 * 1024
+
+type ArtifactPreviewState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; content: string; truncated: boolean }
+  | { status: 'error' }
+
+function useArtifactPreview(artifact: AgentArtifact | undefined): ArtifactPreviewState {
+  const [state, setState] = useState<ArtifactPreviewState>({ status: 'idle' })
+
+  useEffect(() => {
+    if (
+      !artifact ||
+      artifact.status !== 'ready' ||
+      artifact.mediaType !== 'text/markdown' ||
+      !artifact.downloadUrl?.startsWith('/api/artifacts/')
+    ) {
+      setState({ status: 'idle' })
+      return
+    }
+
+    const controller = new AbortController()
+    let active = true
+    setState({ status: 'loading' })
+
+    apiFetchText(artifact.downloadUrl, { signal: controller.signal })
+      .then((content) => {
+        if (!active) return
+        setState({
+          status: 'ready',
+          content: content.slice(0, MAX_PREVIEW_CHARS),
+          truncated: content.length > MAX_PREVIEW_CHARS,
+        })
+      })
+      .catch(() => {
+        if (active && !controller.signal.aborted) setState({ status: 'error' })
+      })
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [artifact?.downloadUrl, artifact?.id, artifact?.mediaType, artifact?.status])
+
+  return state
 }
 
 /**
@@ -42,6 +92,11 @@ export function ArtifactsTab({ artifacts, selectedArtifactId }: ArtifactsTabProp
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
   }, [selectedArtifactId])
 
+  const selectedArtifact = artifacts.find(
+    (artifact) => artifact.id === selectedArtifactId,
+  )
+  const preview = useArtifactPreview(selectedArtifact)
+
   if (artifacts.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">No artifacts yet.</p>
@@ -62,7 +117,7 @@ export function ArtifactsTab({ artifacts, selectedArtifactId }: ArtifactsTabProp
               if (isSelected) selectedRef.current = node
             }}
             className={cn(
-              'flex items-start gap-2 rounded-lg border p-2.5',
+              'grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-lg border p-2.5',
               isSelected && 'border-primary/50 bg-primary/5',
               index >= baselineRef.current && 'motion-safe:animate-highlight-fade',
             )}
@@ -83,6 +138,8 @@ export function ArtifactsTab({ artifacts, selectedArtifactId }: ArtifactsTabProp
                 <Button
                   variant="ghost"
                   size="icon"
+                  nativeButton={false}
+                  role="link"
                   render={
                     <a
                       href={href}
@@ -95,6 +152,36 @@ export function ArtifactsTab({ artifacts, selectedArtifactId }: ArtifactsTabProp
                 </Button>
               )}
             </div>
+            {isSelected && preview.status === 'loading' && (
+              <p
+                className="text-muted-foreground col-span-full border-t pt-3 text-xs"
+                role="status"
+              >
+                Loading Markdown preview…
+              </p>
+            )}
+            {isSelected && preview.status === 'error' && (
+              <p
+                className="text-muted-foreground col-span-full border-t pt-3 text-xs"
+                role="alert"
+              >
+                The Markdown preview could not be loaded. Use the download button
+                to open the artifact.
+              </p>
+            )}
+            {isSelected && preview.status === 'ready' && (
+              <div
+                className="col-span-full mt-1 max-h-[min(60vh,36rem)] overflow-y-auto border-t pt-3"
+                aria-label={`Preview of ${artifact.name}`}
+              >
+                <ArtifactMarkdown content={preview.content} />
+                {preview.truncated && (
+                  <p className="text-muted-foreground mt-3 text-xs">
+                    Preview truncated. Download the artifact to read the full file.
+                  </p>
+                )}
+              </div>
+            )}
           </article>
         )
       })}

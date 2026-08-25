@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ActivityTab } from '@/components/process-panel/activity-tab'
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
+import { RunMetricsLine } from '@/components/process-panel/run-metrics'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
 import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
 import { useAutoOpenProcessPanel } from '@/components/process-panel/use-auto-open-process-panel'
@@ -157,6 +158,21 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
+describe('RunMetricsLine', () => {
+  it('does not crash when an older snapshot contains null token usage', () => {
+    const malformedMetrics = {
+      durationMs: 900,
+      toolCallCount: 0,
+      totalTokens: null,
+    } as unknown as AgentWorkspaceState['metrics']
+
+    render(<RunMetricsLine metrics={malformedMetrics} />)
+
+    expect(screen.getByLabelText('run metrics')).toHaveTextContent('0 tools')
+    expect(screen.getByLabelText('run metrics')).not.toHaveTextContent('tokens')
+  })
+})
+
 describe('ActivityTab', () => {
   it('renders running state with the active step highlighted', () => {
     render(<ActivityTab state={runningState} isRunning />)
@@ -171,6 +187,60 @@ describe('ActivityTab', () => {
     expect(
       document.querySelector('[data-running="true"]'),
     ).toBeInTheDocument()
+  })
+
+  it('renders parallel child steps with their mixed tool statuses', () => {
+    const parallelState: AgentWorkspaceState = {
+      ...runningState,
+      run: { ...runningState.run, activeStepId: 'research-1', toolCallCount: 2 },
+      steps: [
+        ...baseSteps,
+        {
+          id: 'research-1',
+          parentId: 'step-research',
+          phase: 'research',
+          title: 'Check the first source',
+          status: 'running',
+          toolCallIds: ['tc-1'],
+          sourceIds: [],
+          artifactIds: [],
+        },
+        {
+          id: 'research-2',
+          parentId: 'step-research',
+          phase: 'research',
+          title: 'Check the second source',
+          status: 'failed',
+          publicSummary: 'This task failed safely.',
+          toolCallIds: ['tc-2'],
+          sourceIds: [],
+          artifactIds: [],
+        },
+      ],
+      toolCalls: [
+        ...runningState.toolCalls,
+        {
+          id: 'tc-2',
+          name: 'web_search',
+          status: 'failed',
+          errorMessage: 'The web_search tool call failed.',
+        },
+      ],
+    }
+
+    render(<ActivityTab state={parallelState} isRunning />)
+
+    const first = screen.getByRole('article', {
+      name: 'step: Check the first source',
+    }).parentElement
+    const second = screen.getByRole('article', {
+      name: 'step: Check the second source',
+    }).parentElement
+    expect(first).toHaveAttribute('data-parent-id', 'step-research')
+    expect(first).toHaveAttribute('data-depth', '1')
+    expect(first).toHaveStyle({ marginLeft: '16px' })
+    expect(second).toHaveTextContent('This task failed safely.')
+    expect(screen.getByText('The web_search tool call failed.')).toBeInTheDocument()
   })
 
   it('renders completed state with metrics and a quiet termination note', () => {

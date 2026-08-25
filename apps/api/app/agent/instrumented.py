@@ -16,10 +16,12 @@ import time
 import uuid
 from collections.abc import Callable
 from typing import Any, get_type_hints
+from urllib.parse import urlsplit
 
 from app.agui.cancel_token import RunCancelToken
 from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
+    InlineDataEvent,
     SourceDiscovered,
     ToolCompleted,
     ToolFailed,
@@ -115,6 +117,15 @@ def instrument_tool(
                 bus.publish_from_worker(
                     SourceDiscovered(tool_call_id=tool_call_id, source=source)
                 )
+            bus.publish_from_worker(
+                InlineDataEvent(
+                    name="sources",
+                    value={
+                        "schemaVersion": 1,
+                        "sources": _inline_sources(produced),
+                    },
+                )
+            )
         return value
 
     # Propagate the real type hints so dspy.Tool infers the true JSON schema
@@ -122,3 +133,29 @@ def instrument_tool(
     # what functools.wraps already copies; callable objects need it explicitly.
     wrapper.__annotations__ = dict(get_type_hints(hints_target))
     return wrapper
+
+
+def _inline_sources(sources: list[Any]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for source in sources:
+        uri = str(getattr(source, "uri", "") or "")
+        source_id = str(getattr(source, "id", "") or "")
+        key = (uri, source_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        hostname = ""
+        if uri:
+            try:
+                hostname = urlsplit(uri).hostname or ""
+            except ValueError:
+                hostname = ""
+        title = str(getattr(source, "title", "") or "Untitled source").strip()[:240]
+        domain = str(
+            hostname or getattr(source, "source_type", "") or "source"
+        ).strip()[:120]
+        result.append(
+            {"title": title or "Untitled source", "domain": domain or "source"}
+        )
+    return result[-12:]

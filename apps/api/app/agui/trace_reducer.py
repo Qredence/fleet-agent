@@ -21,6 +21,9 @@ from app.contracts.domain import (
     ArtifactReady,
     ArtifactStarted,
     SourceDiscovered,
+    StepCompleted,
+    StepFailed,
+    StepStarted,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
@@ -133,12 +136,21 @@ class TraceReducer:
         | ToolCompleted
         | ToolFailed
         | SourceDiscovered
+        | StepStarted
+        | StepCompleted
+        | StepFailed
         | ArtifactStarted
         | ArtifactReady
         | ArtifactFailed,
     ) -> list[JsonPatchOp]:
         if isinstance(event, ToolStarted):
             return self._tool_started(event)
+        if isinstance(event, StepStarted):
+            return self._step_started_event(event)
+        if isinstance(event, StepCompleted):
+            return self._step_completed_event(event)
+        if isinstance(event, StepFailed):
+            return self._step_failed_event(event)
         if isinstance(event, (ToolCompleted, ToolFailed)):
             return self._tool_settled(event)
         if isinstance(event, SourceDiscovered):
@@ -223,8 +235,45 @@ class TraceReducer:
             }
         )
         self._bump_tool_count(ops, length=len(self.state["toolCalls"]))
-        self._link_tool_to_research(ops, event.tool_call_id)
+        self._link_tool_to_step(ops, event.tool_call_id, event.step_id)
         return ops
+
+    def _step_started_event(self, event: StepStarted) -> list[JsonPatchOp]:
+        ops: list[JsonPatchOp] = []
+        if event.step_id not in self._step_index:
+            if event.phase == "planning" and "step-understand" in self._step_index:
+                ops += self._complete_step("step-understand")
+            ops += self._add_step(
+                event.step_id,
+                phase=event.phase,
+                title=event.title,
+                status="pending",
+                parent_id=event.parent_id,
+            )
+        return ops + self._start_step(event.step_id)
+
+    def _step_completed_event(self, event: StepCompleted) -> list[JsonPatchOp]:
+        if event.step_id not in self._step_index:
+            return []
+        return self._complete_step(event.step_id, public_summary=event.public_summary)
+
+    def _step_failed_event(self, event: StepFailed) -> list[JsonPatchOp]:
+        if event.step_id not in self._step_index:
+            return []
+        idx = self._step_index[event.step_id]
+        step = self.state["steps"][idx]
+        step["status"] = "failed"
+        step["finishedAt"] = _utc_now()
+        step["publicSummary"] = event.public_summary
+        if event.step_id in self._step_started_monotonic:
+            step["durationMs"] = int(
+                (time.monotonic() - self._step_started_monotonic[event.step_id]) * 1000
+            )
+        return [
+            {"op": "add", "path": f"/steps/{idx}/{key}", "value": value}
+            for key, value in step.items()
+            if key in {"status", "finishedAt", "durationMs", "publicSummary"}
+        ]
 
     # -- completion ----------------------------------------------------------
 
@@ -235,13 +284,14 @@ class TraceReducer:
         else:
             ops += self._complete_step("step-understand")
 
-        ops += self._add_step(
-            "step-synthesis",
-            phase="synthesis",
-            title="Preparing the response",
-            status="running",
-        )
-        ops += self._start_step("step-synthesis")
+        if "step-synthesis" not in self._step_index:
+            ops += self._add_step(
+                "step-synthesis",
+                phase="synthesis",
+                title="Preparing the response",
+                status="running",
+            )
+            ops += self._start_step("step-synthesis")
 
         summary = result.process_summary or (
             "The agent finished without producing a final answer."
@@ -271,10 +321,15 @@ class TraceReducer:
             )
 
         metrics = self.state["metrics"]
-        if result.usage.get("prompt_tokens") is not None:
-            metrics["inputTokens"] = result.usage["prompt_tokens"]
-            metrics["outputTokens"] = result.usage.get("completion_tokens")
-            metrics["totalTokens"] = result.usage.get("total_tokens")
+        usage_metric_names = (
+            ("prompt_tokens", "inputTokens"),
+            ("completion_tokens", "outputTokens"),
+            ("total_tokens", "totalTokens"),
+        )
+        for usage_name, metric_name in usage_metric_names:
+            value = result.usage.get(usage_name)
+            if value is not None:
+                metrics[metric_name] = value
         metrics["durationMs"] = int((time.monotonic() - self._monotonic_start) * 1000)
         for key, value in metrics.items():
             if value is not None:
@@ -307,7 +362,13 @@ class TraceReducer:
     # -- helpers ---------------------------------------------------------
 
     def _add_step(
-        self, step_id: str, *, phase: str, title: str, status: str
+        self,
+        step_id: str,
+        *,
+        phase: str,
+        title: str,
+        status: str,
+        parent_id: str | None = None,
     ) -> list[JsonPatchOp]:
         self._step_index[step_id] = len(self.state["steps"])
         step = {
@@ -319,6 +380,8 @@ class TraceReducer:
             "sourceIds": [],
             "artifactIds": [],
         }
+        if parent_id is not None:
+            step["parentId"] = parent_id
         self.state["steps"].append(step)
         return [{"op": "add", "path": "/steps/-", "value": step}]
 
@@ -364,8 +427,13 @@ class TraceReducer:
         ops.append({"op": "replace", "path": "/run/toolCallCount", "value": length})
         ops.append({"op": "replace", "path": "/metrics/toolCallCount", "value": length})
 
-    def _link_tool_to_research(self, ops: list[JsonPatchOp], tool_call_id: str) -> None:
-        idx = self._step_index["step-research"]
+    def _link_tool_to_step(
+        self, ops: list[JsonPatchOp], tool_call_id: str, step_id: str | None
+    ) -> None:
+        target = step_id if step_id in self._step_index else "step-research"
+        if target not in self._step_index:
+            return
+        idx = self._step_index[target]
         ids = self.state["steps"][idx]["toolCallIds"]
         ids.append(tool_call_id)
         ops.append(
@@ -398,8 +466,11 @@ class TraceReducer:
         }
         self.state["sources"].append(entry)
         ops: list[JsonPatchOp] = [{"op": "add", "path": "/sources/-", "value": entry}]
-        if "step-research" in self._step_index:
-            idx = self._step_index["step-research"]
+        target_step = (
+            event.step_id if event.step_id in self._step_index else "step-research"
+        )
+        if target_step in self._step_index:
+            idx = self._step_index[target_step]
             ids = self.state["steps"][idx]["sourceIds"]
             if source_id not in ids:
                 ids.append(source_id)
@@ -430,8 +501,11 @@ class TraceReducer:
         artifact["sizeBytes"] = event.artifact.size_bytes
         artifact["downloadUrl"] = event.download_url
         step_ops: list[JsonPatchOp] = []
-        if "step-research" in self._step_index:
-            step_idx = self._step_index["step-research"]
+        target_step = (
+            event.step_id if event.step_id in self._step_index else "step-research"
+        )
+        if target_step in self._step_index:
+            step_idx = self._step_index[target_step]
             ids = self.state["steps"][step_idx]["artifactIds"]
             if event.artifact.id not in ids:
                 ids.append(event.artifact.id)

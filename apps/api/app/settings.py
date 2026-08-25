@@ -51,6 +51,13 @@ class Settings(BaseSettings):
         description="Hard bound on ReActV2 loop iterations per run.",
     )
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    llm_native_function_calling: bool = Field(
+        default=True,
+        description=(
+            "Use provider-native function calling. Disable for gateways that "
+            "support DSPy JSON tool calls but not native tool calls."
+        ),
+    )
 
     agent_mode: Literal["fixtures", "engine"] = Field(
         default="fixtures",
@@ -58,6 +65,34 @@ class Settings(BaseSettings):
             "'fixtures' replays the canonical NDJSON mock streams (dev/CI "
             "default); 'engine' runs the live DSPy ReActV2 bridge (production)."
         ),
+    )
+    reasoning_program: Literal["react", "staged"] = Field(
+        default="react",
+        description="Reasoning strategy. Staged is opt-in while it is validated.",
+    )
+    reasoning_max_parallel_tasks: int = Field(
+        default=4,
+        ge=1,
+        le=4,
+        description="Maximum concurrent read-only staged research tasks.",
+    )
+    reasoning_max_model_calls: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        description="Server-capped staged DSPy model-call budget.",
+    )
+    reasoning_max_tool_calls: int = Field(
+        default=12,
+        ge=1,
+        le=64,
+        description="Server-capped staged tool-call budget.",
+    )
+    reasoning_task_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=120.0,
+        description="Server-capped timeout for one staged research task.",
     )
 
     database_url: SecretStr = Field(
@@ -94,6 +129,21 @@ class Settings(BaseSettings):
         description=(
             "When set, /api/* requires the X-API-Key header to match. "
             "Unset = open local/dev mode (log an advisory at startup)."
+        ),
+    )
+
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Tavily API key. When set, the engine gains web_search and "
+            "fetch_page tools (Tavily REST). Never logged or returned."
+        ),
+    )
+    tavily_dns_fallback: bool = Field(
+        default=False,
+        description=(
+            "Use UDP public DNS only when the system resolver cannot resolve "
+            "api.tavily.com. Useful in restricted local runtimes."
         ),
     )
 
