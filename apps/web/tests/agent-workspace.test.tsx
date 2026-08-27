@@ -60,13 +60,13 @@ describe('AgentWorkspace — wide desktop', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Sources' }))
     expect(
-      screen.getByText(/sources the agent consults will appear here/i),
+      screen.getByText(/sources referenced during agent runs will appear here/i),
     ).toBeInTheDocument()
     expect(useWorkspaceStore.getState().processPanelTab).toBe('sources')
 
     await user.click(screen.getByRole('tab', { name: 'Artifacts' }))
     expect(
-      screen.getByText(/generated artifacts will appear here/i),
+      screen.getByText(/files, reports, and code produced by the agent will be listed here/i),
     ).toBeInTheDocument()
   })
 

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AgentWorkspaceState } from '@/contracts/generated'
 import { useHasAgUiRuntime } from '@/features/agent-runtime/ag-ui-presence'
+import { cn } from '@/lib/utils'
 import { surfaceClasses } from '@/lib/surface-classes'
 import {
   useWorkspaceStore,
@@ -88,7 +89,7 @@ function ActiveProcessPanel({
     <aside
       data-slot="process-panel"
       aria-labelledby="process-heading"
-      className={`flex h-full min-w-0 flex-col border-s ${surfaceClasses.panel}`}
+      className={cn('flex h-full min-w-0 flex-col border-s', surfaceClasses(1))}
     >
       <ProcessHeader onClose={onClose} />
 
@@ -182,7 +183,7 @@ function FallbackProcessPanel({
     <aside
       data-slot="process-panel"
       aria-labelledby="process-heading"
-      className={`flex h-full min-w-0 flex-col border-s ${surfaceClasses.panel}`}
+      className={cn('flex h-full min-w-0 flex-col border-s', surfaceClasses(1))}
     >
       <ProcessHeader onClose={onClose} />
 

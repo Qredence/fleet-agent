@@ -172,7 +172,6 @@ function DesktopWorkspace({
               Agent process: steps, tool calls, sources, and artifacts.
             </SheetDescription>
             <ProcessPanel
-              compact
               onClose={() => setProcessSheetOpen(false)}
             />
           </SheetContent>
@@ -303,7 +302,6 @@ function MobileWorkspace({
             Agent process: steps, tool calls, sources, and artifacts.
           </SheetDescription>
           <ProcessPanel
-            compact
             onClose={() => setProcessSheetOpen(false)}
           />
         </SheetContent>
