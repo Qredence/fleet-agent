@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AgentWorkspaceState } from '@/contracts/generated'
+import { useHasAgUiRuntime } from '@/features/agent-runtime/ag-ui-presence'
 import { surfaceClasses } from '@/lib/surface-classes'
 import {
   useWorkspaceStore,
@@ -234,8 +235,137 @@ function IdleState({ icon, message }: { icon: ReactNode; message: string }) {
   )
 }
 
+interface ProcessPanelTabsProps {
+  agentState?: AgentWorkspaceState
+  isRunning?: boolean
+  selectedArtifactId: string | null
+  activeFilePath: string
+  setActiveFilePath: (path: string) => void
+}
+
+/**
+ * Tabbed body of the process panel. Without an AG-UI agent state (preview
+ * routes have no runtime) every tab shows its idle state.
+ */
+function ProcessPanelTabs({
+  agentState,
+  isRunning = false,
+  selectedArtifactId,
+  activeFilePath,
+  setActiveFilePath,
+}: ProcessPanelTabsProps) {
+  const tab = useWorkspaceStore((state) => state.processPanelTab)
+  const setTab = useWorkspaceStore((state) => state.setProcessPanelTab)
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as ProcessPanelTab)}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <TabsList className="mx-4 mt-2 shrink-0">
+        {TABS.map(({ value, label }) => (
+          <TabsTrigger key={value} value={value}>
+            {label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      <TabsContent value="activity" className="min-h-0 flex-1">
+        {agentState ? (
+          <ActivityTab state={agentState} isRunning={isRunning} />
+        ) : (
+          <IdleState
+            icon={<Activity className="size-5" />}
+            message="No active run — send a message to see steps and tool calls here."
+          />
+        )}
+      </TabsContent>
+
+      <TabsContent value="sources" className="min-h-0 flex-1">
+        {agentState ? (
+          <SourcesTab
+            sources={agentState.sources}
+            toolNamesById={
+              new Map(agentState.toolCalls.map((tool) => [tool.id, tool.name]))
+            }
+          />
+        ) : (
+          <IdleState
+            icon={<FolderSearch className="size-5" />}
+            message="Sources the agent consults will appear here."
+          />
+        )}
+      </TabsContent>
+
+      <TabsContent value="artifacts" className="min-h-0 flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] h-full min-h-0">
+          <div className="min-h-0 overflow-y-auto">
+            {agentState ? (
+              <ArtifactsTab
+                artifacts={agentState.artifacts}
+                selectedArtifactId={selectedArtifactId}
+              />
+            ) : (
+              <IdleState
+                icon={<FileBox className="size-5" />}
+                message="Generated artifacts will appear here."
+              />
+            )}
+          </div>
+
+          <FileExplorer
+            selectedPath={activeFilePath}
+            onSelectPath={setActiveFilePath}
+          />
+        </div>
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+/**
+ * Renders children with the AG-UI agent state when a runtime is mounted
+ * (WorkspaceRoute), and the fallback when it is not (preview routes such as
+ * /tools, /optimizer, /connectors, where useAgUiState would throw).
+ */
+function RuntimeAgentStateGate({
+  children,
+  fallback,
+}: {
+  children: (
+    agentState: AgentWorkspaceState | undefined,
+    isRunning: boolean,
+  ) => ReactNode
+  fallback: ReactNode
+}) {
+  const hasRuntime = useHasAgUiRuntime()
+  if (!hasRuntime) return <>{fallback}</>
+  return (
+    <RuntimeAgentStateSubscription>{children}</RuntimeAgentStateSubscription>
+  )
+}
+
+function RuntimeAgentStateSubscription({
+  children,
+}: {
+  children: (
+    agentState: AgentWorkspaceState | undefined,
+    isRunning: boolean,
+  ) => ReactNode
+}) {
+  const agentState = useAgUiState<AgentWorkspaceState>()
+  const isRunning = useAuiState((state) => state.thread.isRunning)
+  return <>{children(agentState, isRunning)}</>
+}
+
 /**
  * Renders the process panel with activity, sources, and artifacts views for the current agent workspace state.
+ *
+ * Renders ONLY the AG-UI agent state (useAgUiState) — an intentional,
+ * user-safe trace of steps, tool calls, sources, and artifacts. Never parses
+ * messages; never sees chain-of-thought. Without an AG-UI runtime (preview
+ * routes) it degrades to idle-state tabs.
  *
  * @param onClose - Closes the process panel.
  * @param compact - Uses compact panel styling and controls when `true`.
@@ -247,11 +377,6 @@ export function ProcessPanel({
   onClose: () => void
   compact?: boolean
 }) {
-  const tab = useWorkspaceStore((state) => state.processPanelTab)
-  const setTab = useWorkspaceStore((state) => state.setProcessPanelTab)
-
-  const agentState = useAgUiState<AgentWorkspaceState>()
-  const isRunning = useAuiState((state) => state.thread.isRunning)
   const selectedArtifactId = useWorkspaceStore((s) => s.selectedArtifactId)
   const [activeFilePath, setActiveFilePath] = useState('README.md')
 
@@ -269,69 +394,25 @@ export function ProcessPanel({
         compact={compact}
       />
 
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as ProcessPanelTab)}
-        className="flex min-h-0 flex-1 flex-col"
+      <RuntimeAgentStateGate
+        fallback={
+          <ProcessPanelTabs
+            selectedArtifactId={selectedArtifactId}
+            activeFilePath={activeFilePath}
+            setActiveFilePath={setActiveFilePath}
+          />
+        }
       >
-        <TabsList className="mx-4 mt-2 shrink-0">
-          {TABS.map(({ value, label }) => (
-            <TabsTrigger key={value} value={value}>
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="activity" className="min-h-0 flex-1">
-          {agentState ? (
-            <ActivityTab state={agentState} isRunning={isRunning} />
-          ) : (
-            <IdleState
-              icon={<Activity className="size-5" />}
-              message="No active run — send a message to see steps and tool calls here."
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="sources" className="min-h-0 flex-1">
-          {agentState ? (
-            <SourcesTab
-              sources={agentState.sources}
-              toolNamesById={
-                new Map(agentState.toolCalls.map((tool) => [tool.id, tool.name]))
-              }
-            />
-          ) : (
-            <IdleState
-              icon={<FolderSearch className="size-5" />}
-              message="Sources the agent consults will appear here."
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="artifacts" className="min-h-0 flex-1">
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] h-full min-h-0">
-            <div className="min-h-0 overflow-y-auto">
-              {agentState ? (
-                <ArtifactsTab
-                  artifacts={agentState.artifacts}
-                  selectedArtifactId={selectedArtifactId}
-                />
-              ) : (
-                <IdleState
-                  icon={<FileBox className="size-5" />}
-                  message="Generated artifacts will appear here."
-                />
-              )}
-            </div>
-
-            <FileExplorer
-              selectedPath={activeFilePath}
-              onSelectPath={setActiveFilePath}
-            />
-          </div>
-        </TabsContent>
-      </Tabs>
+        {(agentState, isRunning) => (
+          <ProcessPanelTabs
+            agentState={agentState}
+            isRunning={isRunning}
+            selectedArtifactId={selectedArtifactId}
+            activeFilePath={activeFilePath}
+            setActiveFilePath={setActiveFilePath}
+          />
+        )}
+      </RuntimeAgentStateGate>
     </aside>
   )
 }

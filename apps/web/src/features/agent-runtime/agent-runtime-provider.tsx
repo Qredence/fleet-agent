@@ -15,6 +15,7 @@ import {
   type UserMessagePersistedHandler,
   waitForThreadHistoryWrites,
 } from '@/features/threads/assistant-thread-adapter'
+import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-presence'
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
@@ -132,15 +133,17 @@ export function AgentRuntimeProvider({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ArtifactDataUIRegistration />
-      <InlineAgentDataUIRegistration />
-      {threadId ? (
-        <HistoryHeadSync
-          threadId={threadId}
-          initialHeadId={bootstrap?.messageRepository?.headId ?? null}
-        />
-      ) : null}
-      {children}
+      <AgUiRuntimePresenceProvider>
+        <ArtifactDataUIRegistration />
+        <InlineAgentDataUIRegistration />
+        {threadId ? (
+          <HistoryHeadSync
+            threadId={threadId}
+            initialHeadId={bootstrap?.messageRepository?.headId ?? null}
+          />
+        ) : null}
+        {children}
+      </AgUiRuntimePresenceProvider>
     </AssistantRuntimeProvider>
   )
 }
