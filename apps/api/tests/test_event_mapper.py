@@ -110,3 +110,56 @@ def test_source_events_only_update_authoritative_state():
 
     assert not [event for event in first if event.type.value == "CUSTOM"]
     assert not [event for event in second if event.type.value == "CUSTOM"]
+
+
+def test_chunk_text_preserves_whitespace_across_boundaries():
+    """Concatenating streamed chunks must reproduce the answer exactly."""
+    from app.agui.event_mapper import chunk_text
+
+    answer = (
+        "Fleet Agent is an AI agent built with LangSmith Fleet that can be "
+        "created through chat or prebuilt templates and deployed to work "
+        "inside tools like Slack, Teams, and Gmail.\n\nIt ships with two "
+        "paths:  a guided chat builder and prebuilt templates."
+    )
+
+    chunks = chunk_text(answer)
+
+    assert chunks, "long answers must stream as multiple chunks"
+    assert len(chunks) > 1
+    assert "".join(chunks) == answer
+
+
+def test_chunk_text_handles_empty_and_short_text():
+    from app.agui.event_mapper import chunk_text
+
+    assert chunk_text("") == []
+    assert chunk_text("Short.") == ["Short."]
+
+
+def test_final_fields_event_streams_answer_with_intact_spacing():
+    """The HTTP answer must not lose spaces at chunk boundaries."""
+    from app.agui.event_mapper import map_final_fields_event
+    from app.contracts.domain import FinalFieldsReady
+
+    reducer = TraceReducer(thread_id="thread-1", run_id="run-1")
+    answer = (
+        "Fleet Agent is an AI agent built with LangSmith Fleet that can be "
+        "created through chat or prebuilt templates."
+    )
+    events = map_final_fields_event(
+        FinalFieldsReady(
+            answer=answer,
+            process_summary="Searched the web.",
+        ),
+        answer_message_id="msg-run-1",
+        reducer=reducer,
+    )
+
+    by_type = {
+        e.type.value: e for e in events if e.type.value.startswith("TEXT_MESSAGE")
+    }
+    contents = [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"]
+    assert by_type["TEXT_MESSAGE_START"].message_id == "msg-run-1"
+    assert by_type["TEXT_MESSAGE_END"].message_id == "msg-run-1"
+    assert "".join(contents) == answer

@@ -1,5 +1,7 @@
 """Domain event → AG-UI event mapping (pure)."""
 
+import re
+
 from ag_ui.core import (
     BaseEvent,
     CustomEvent,
@@ -46,22 +48,25 @@ AnyDomainEvent = (
 )
 
 _TEXT_CHUNK_SIZE = 24
+_WHITESPACE_SPLIT = re.compile(r"(\s+)")
 
 
 def chunk_text(text: str, *, chunk_size: int = _TEXT_CHUNK_SIZE) -> list[str]:
-    """Split text into small word-boundary chunks for incremental streaming."""
+    """Split text into small word-boundary chunks for incremental streaming.
+
+    Whitespace is preserved: concatenating the chunks reproduces the input
+    exactly, including newlines and repeated spaces.
+    """
     if not text:
         return []
-    words = text.split(" ")
+    tokens = [token for token in _WHITESPACE_SPLIT.split(text) if token]
     chunks: list[str] = []
     current = ""
-    for word in words:
-        candidate = f"{current} {word}" if current else word
-        if len(candidate) > chunk_size and current:
+    for token in tokens:
+        if len(current) + len(token) > chunk_size and current:
             chunks.append(current)
-            current = word
-        else:
-            current = candidate
+            current = ""
+        current += token
     if current:
         chunks.append(current)
     return chunks
