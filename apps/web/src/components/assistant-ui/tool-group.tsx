@@ -107,7 +107,7 @@ function ToolGroupTrigger({
     <CollapsibleTrigger
       data-slot="tool-group-trigger"
       className={cn(
-        "aui-tool-group-trigger group/trigger flex origin-left items-center gap-2 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-group-trigger group/trigger flex origin-left rtl:origin-right items-center gap-2 text-sm transition-[color,scale] active:scale-[0.96]",
         "group-data-[variant=ghost]/tool-group-root:text-muted-foreground group-data-[variant=ghost]/tool-group-root:hover:text-foreground group-data-[variant=ghost]/tool-group-root:py-1.5",
         "group-data-[variant=outline]/tool-group-root:w-full group-data-[variant=outline]/tool-group-root:px-4",
         "group-data-[variant=muted]/tool-group-root:w-full group-data-[variant=muted]/tool-group-root:px-4",
@@ -164,13 +164,9 @@ function ToolGroupContent({
     <CollapsibleContent
       data-slot="tool-group-content"
       className={cn(
-        "aui-tool-group-content relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
-        "data-closed:animate-collapsible-up",
-        "data-open:animate-collapsible-down",
-        "data-closed:fill-mode-forwards",
+        "aui-tool-group-content relative h-(--collapsible-panel-height) overflow-hidden text-sm outline-none",
+        "group/collapsible-content transition-[height] duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
         "data-closed:pointer-events-none",
-        "[--tw-duration:var(--animation-duration)]",
         className,
       )}
       {...props}

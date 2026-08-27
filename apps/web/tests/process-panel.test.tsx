@@ -1,14 +1,12 @@
-import { cleanup, render, screen, act } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ActivityTab } from '@/components/process-panel/activity-tab'
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
 import { RunMetricsLine } from '@/components/process-panel/run-metrics'
+import { RunActivityInlineContent } from '@/components/process-panel/run-activity-inline'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
 import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
-import { useAutoOpenProcessPanel } from '@/components/process-panel/use-auto-open-process-panel'
 import type { AgentWorkspaceState } from '@/contracts/generated'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
@@ -149,8 +147,7 @@ beforeEach(() => {
   useWorkspaceStore.setState({
     sidebarCollapsed: false,
     processPanelOpen: true,
-    processPanelTab: 'activity',
-    processPanelAutoOpened: false,
+    processPanelTab: 'sources',
     sidebarSheetOpen: false,
     processSheetOpen: false,
   })
@@ -173,15 +170,63 @@ describe('RunMetricsLine', () => {
   })
 })
 
-describe('ActivityTab', () => {
-  it('renders running state with the active step highlighted', () => {
-    render(<ActivityTab state={runningState} isRunning />)
+describe('RunActivityInlineContent', () => {
+  // Content lives inside a collapsible that is closed once the run stops
+  // streaming, so non-running cases expand it first, like a user would.
+  async function renderActivity(
+    state: AgentWorkspaceState | undefined,
+    isRunning = false,
+  ) {
+    const user = userEvent.setup()
+    render(<RunActivityInlineContent state={state} isRunning={isRunning} />)
+    if (!isRunning) {
+      await user.click(screen.getByRole('button', { name: /run activity/i }))
+    }
+  }
+
+  it('renders nothing before the first run of the session', () => {
+    const idleState: AgentWorkspaceState = {
+      ...runningState,
+      run: { id: 'r-2', status: 'idle', toolCallCount: 0 },
+      steps: [],
+      decisions: [],
+      toolCalls: [],
+      sources: [],
+    }
+    const { container } = render(
+      <RunActivityInlineContent state={idleState} isRunning={false} />,
+    )
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('renders nothing when there is no workspace state', () => {
+    const { container } = render(
+      <RunActivityInlineContent state={undefined} isRunning={false} />,
+    )
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('collapses to a status summary when the run completes', async () => {
+    render(<RunActivityInlineContent state={completedState} isRunning={false} />)
+
+    const trigger = screen.getByRole('button', { name: /run activity/i })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveTextContent('Completed')
+    expect(screen.queryByText('Completed normally')).not.toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await user.click(trigger)
+    expect(screen.getByText('Completed normally')).toBeInTheDocument()
+  })
+
+  it('renders running state with the active step highlighted', async () => {
+    await renderActivity(runningState, true)
 
     expect(screen.getByText('Running')).toBeInTheDocument()
     const activeStep = screen.getByRole('article', {
       name: 'step: Searching the documentation',
     })
-    expect(activeStep.className).toContain('border-primary/40')
+    expect(activeStep).toHaveAttribute('data-active', 'true')
 
     // Running status icon is rendered (motion-safe only).
     expect(
@@ -189,7 +234,30 @@ describe('ActivityTab', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders parallel child steps with their mixed tool statuses', () => {
+  it('keeps detail-less steps quiet and hides sub-100ms durations', async () => {
+    const quietState: AgentWorkspaceState = {
+      ...completedState,
+      steps: completedState.steps.map((step) =>
+        step.id === 'step-synthesis' ? { ...step, durationMs: 2 } : step,
+      ),
+    }
+    await renderActivity(quietState)
+
+    const detailLess = screen.getByRole('article', {
+      name: 'step: Understanding the request',
+    })
+    expect(within(detailLess).queryByRole('button')).not.toBeInTheDocument()
+    // Meaningful durations still render on quiet rows.
+    expect(within(detailLess).getByText('400ms')).toBeInTheDocument()
+
+    const instant = screen.getByRole('article', {
+      name: 'step: Preparing the response',
+    })
+    expect(within(instant).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(instant).queryByText('2ms')).not.toBeInTheDocument()
+  })
+
+  it('renders parallel child steps with their mixed tool statuses', async () => {
     const parallelState: AgentWorkspaceState = {
       ...runningState,
       run: { ...runningState.run, activeStepId: 'research-1', toolCallCount: 2 },
@@ -228,7 +296,7 @@ describe('ActivityTab', () => {
       ],
     }
 
-    render(<ActivityTab state={parallelState} isRunning />)
+    await renderActivity(parallelState, true)
 
     const first = screen.getByRole('article', {
       name: 'step: Check the first source',
@@ -238,13 +306,13 @@ describe('ActivityTab', () => {
     }).parentElement
     expect(first).toHaveAttribute('data-parent-id', 'step-research')
     expect(first).toHaveAttribute('data-depth', '1')
-    expect(first).toHaveStyle({ marginLeft: '16px' })
+    expect(first).toHaveStyle({ marginInlineStart: '16px' })
     expect(second).toHaveTextContent('This task failed safely.')
     expect(screen.getByText('The web_search tool call failed.')).toBeInTheDocument()
   })
 
-  it('renders completed state with metrics and a quiet termination note', () => {
-    render(<ActivityTab state={completedState} isRunning={false} />)
+  it('renders completed state with metrics and a quiet termination note', async () => {
+    await renderActivity(completedState)
 
     expect(screen.getByText('Completed normally')).toBeInTheDocument()
     expect(screen.getByRole('status')).toBeInTheDocument()
@@ -256,21 +324,21 @@ describe('ActivityTab', () => {
     )
   })
 
-  it('renders failed state as an alert with the public error code', () => {
-    render(<ActivityTab state={failedState} isRunning={false} />)
+  it('renders failed state as an alert with the public error code', async () => {
+    await renderActivity(failedState)
 
     expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.getByText('agent_no_output')).toBeInTheDocument()
   })
 
-  it('renders cancelled runs without alarming chrome', () => {
-    render(<ActivityTab state={cancelledState} isRunning={false} />)
+  it('renders cancelled runs without alarming chrome', async () => {
+    await renderActivity(cancelledState)
     expect(screen.getByText('Cancelled')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('expands the active step to show tools and evidence', () => {
-    render(<ActivityTab state={runningState} isRunning />)
+  it('expands the active step to show tools and evidence', async () => {
+    await renderActivity(runningState, true)
 
     const activeStep = screen.getByRole('article', {
       name: 'step: Searching the documentation',
@@ -279,22 +347,22 @@ describe('ActivityTab', () => {
     expect(activeStep.textContent).toContain('AG-UI — Events')
   })
 
-  it('renders caveats when the run produced them', () => {
+  it('renders caveats when the run produced them', async () => {
     const withCaveats: AgentWorkspaceState = {
       ...completedState,
       caveats: [
         'The answer was summarized from partial progress and may be incomplete.',
       ],
     }
-    render(<ActivityTab state={withCaveats} isRunning={false} />)
+    await renderActivity(withCaveats)
     expect(screen.getByLabelText('Caveats')).toBeInTheDocument()
     expect(
       screen.getByText(/summarized from partial progress/),
     ).toBeInTheDocument()
   })
 
-  it('renders decisions with the selected alternative marked', () => {
-    render(<ActivityTab state={runningState} isRunning />)
+  it('renders decisions with the selected alternative marked', async () => {
+    await renderActivity(runningState, true)
     expect(screen.getByText(/AG-UI · selected/)).toBeInTheDocument()
     expect(screen.getByText(/Custom SSE/)).toBeInTheDocument()
   })
@@ -409,35 +477,5 @@ describe('ArtifactsTab', () => {
     expect(
       screen.queryByRole('link', { name: 'download artifact: raw-data.csv' }),
     ).not.toBeInTheDocument()
-  })
-})
-
-describe('useAutoOpenProcessPanel', () => {
-  function Probe() {
-    const [count, setCount] = useState(0)
-    Probe.setCount = setCount
-    useAutoOpenProcessPanel(count)
-    return null
-  }
-  Probe.setCount = (_: number) => {}
-
-  it('opens the panel once on the first tool call (desktop only)', async () => {
-    // Desktop viewport is the mockViewport() default.
-    useWorkspaceStore.getState().setProcessPanelOpen(false)
-    render(<Probe />)
-
-    // First tool call: auto-open once.
-    act(() => Probe.setCount(1))
-    await vi.waitFor(() => {
-      expect(useWorkspaceStore.getState().processPanelOpen).toBe(true)
-      expect(useWorkspaceStore.getState().processPanelAutoOpened).toBe(true)
-    })
-
-    // Later tool calls must not re-open the panel after the user closes it.
-    useWorkspaceStore.getState().setProcessPanelOpen(false)
-    act(() => Probe.setCount(2))
-    // The hook only ever fires on the 0 -> >0 transition.
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(useWorkspaceStore.getState().processPanelOpen).toBe(false)
   })
 })

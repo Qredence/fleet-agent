@@ -98,6 +98,19 @@ class StepFailed(DomainEvent):
     public_summary: str
 
 
+@dataclass(frozen=True)
+class FinalFieldsReady(DomainEvent):
+    """The finish tool just delivered the public answer/summary.
+
+    Emitted the moment ReActV2's submit tool executes, so the browser sees
+    the answer before the run settles. Carries only AgentSignature output
+    fields — never raw reasoning or provider payloads.
+    """
+
+    answer: str | None = None
+    process_summary: str | None = None
+
+
 class ArtifactResult(BaseModel):
     """Standard contract for generated artifacts (plan.md Phase 10)."""
 

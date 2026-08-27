@@ -185,6 +185,35 @@ def test_no_tool_run_completes_without_research_step():
     assert state["run"]["toolCallCount"] == 0
 
 
+def test_live_synthesis_summary_starts_step_with_started_at():
+    reducer = TraceReducer(thread_id="t-1", run_id="r-1")
+    wire = WireConsumer(reducer)
+    wire.feed(reducer.begin())
+    state = _state_after(reducer, wire, reducer.live_synthesis_summary("Drafting..."))
+    wire.matches(reducer)
+    synthesis = state["steps"][-1]
+    assert synthesis["id"] == "step-synthesis"
+    assert synthesis["status"] == "running"
+    assert synthesis["startedAt"]
+    assert synthesis["publicSummary"] == "Drafting..."
+    assert state["run"]["activeStepId"] == "step-synthesis"
+
+    # A second chunk must not restart or duplicate the running step.
+    started_at = synthesis["startedAt"]
+    ops = reducer.live_synthesis_summary("Drafting the rest...")
+    state = _state_after(reducer, wire, ops)
+    wire.matches(reducer)
+    assert state["steps"][-1]["startedAt"] == started_at
+    assert len([s for s in state["steps"] if s["id"] == "step-synthesis"]) == 1
+
+    final = _state_after(reducer, wire, reducer.complete_run(successful_result()))
+    wire.matches(reducer)
+    finished = next(s for s in final["steps"] if s["id"] == "step-synthesis")
+    assert finished["status"] == "completed"
+    assert finished["durationMs"] >= 0
+    assert finished["publicSummary"] == "Looked up docs and summarized."
+
+
 def test_staged_child_steps_and_out_of_order_tools_stay_schema_valid():
     reducer = TraceReducer(thread_id="t-1", run_id="r-staged")
     wire = WireConsumer(reducer)

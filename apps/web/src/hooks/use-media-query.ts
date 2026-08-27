@@ -12,9 +12,14 @@ export function useMediaQuery(query: string): boolean {
   )
 }
 
-/** Below 768px: both side panels become sheets. */
+/**
+ * Below 781px: both side panels become sheets. Derived from the desktop
+ * layout's content minimum — 220px (project sidebar) + 1px (resize handle)
+ * + 560px (conversation min) = 781px — so the sheet layout engages just
+ * before the resizable panel minimums stop fitting.
+ */
 export function useIsMobile(): boolean {
-  return useMediaQuery('(max-width: 767px)')
+  return useMediaQuery('(max-width: 780px)')
 }
 
 /** Below 1200px: the process panel becomes a sheet. */

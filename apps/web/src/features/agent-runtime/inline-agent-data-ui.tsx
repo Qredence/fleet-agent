@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { useAssistantDataUI } from '@assistant-ui/react'
+import { useAssistantDataUI, useAuiState } from '@assistant-ui/react'
 
 import {
   AgentPlan,
@@ -186,14 +186,20 @@ function InlineProgress({ data }: { data: unknown }) {
 }
 
 function InlineWebSearch({ data }: { data: unknown }) {
+  const isRunning = useAuiState((state) => state.thread.isRunning)
   const parsed = parseWebSearch(data)
   if (!parsed) return null
+  // A historical transcript can hold a "search started" event that was never
+  // superseded. Outside a live run it shimmers forever with an empty results
+  // hole; drop result-less stale markers and settle the rest.
+  const settled = !isRunning && parsed.searching
+  if (settled && parsed.results.length === 0) return null
   return (
     <WebSearch
       query={parsed.query}
       results={parsed.results}
       visibleResults={parsed.visibleResults}
-      searching={parsed.searching}
+      searching={parsed.searching && isRunning}
       cycle={parsed.cycle}
       className="py-2"
       aria-label={`Web search: ${parsed.query}`}

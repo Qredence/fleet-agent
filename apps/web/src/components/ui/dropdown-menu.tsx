@@ -2,6 +2,7 @@ import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
 import { cn } from "@/lib/utils"
+import { surfaceClasses } from "@/lib/surface-classes"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
@@ -12,10 +13,22 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
+/**
+ * Renders the control that opens and closes the dropdown menu.
+ */
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+/**
+ * Renders the dropdown menu content in a positioned portal.
+ *
+ * @param align - The alignment of the content relative to its anchor.
+ * @param alignOffset - The distance to offset the content along its alignment axis.
+ * @param side - The side of the anchor on which to place the content.
+ * @param sideOffset - The distance between the content and its anchor.
+ * @returns The positioned dropdown menu content.
+ */
 function DropdownMenuContent({
   align = "start",
   alignOffset = 0,
@@ -39,7 +52,12 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
-          className={cn("z-50 max-h-(--available-height) w-(--anchor-width) min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          className={cn(
+            "z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl p-1 text-popover-foreground duration-150 outline-none",
+            surfaceClasses(3, 3),
+            "data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95",
+            className
+          )}
           {...props}
         />
       </MenuPrimitive.Positioner>
@@ -47,10 +65,18 @@ function DropdownMenuContent({
   )
 }
 
+/**
+ * Groups related dropdown menu items.
+ */
 function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
 }
 
+/**
+ * Renders a styled label for a group of dropdown menu items.
+ *
+ * @param inset - Aligns the label with inset menu items when `true`.
+ */
 function DropdownMenuLabel({
   className,
   inset,
@@ -63,7 +89,7 @@ function DropdownMenuLabel({
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
-        "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+        "px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider data-inset:pl-7",
         className
       )}
       {...props}
@@ -71,6 +97,13 @@ function DropdownMenuLabel({
   )
 }
 
+/**
+ * Renders a styled dropdown menu item with optional indentation and destructive styling.
+ *
+ * @param inset - Indents the item content.
+ * @param variant - Controls whether the item uses default or destructive styling.
+ * @returns The styled dropdown menu item.
+ */
 function DropdownMenuItem({
   className,
   inset,
@@ -86,7 +119,7 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/dropdown-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
+        "group/dropdown-menu-item relative flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs outline-hidden select-none transition-colors duration-80 focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 data-[variant=destructive]:*:[svg]:text-destructive",
         className
       )}
       {...props}
@@ -94,10 +127,20 @@ function DropdownMenuItem({
   )
 }
 
+/**
+ * Groups a dropdown menu's trigger and nested content into a submenu.
+ *
+ * @param props - Properties for the submenu root.
+ */
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />
 }
 
+/**
+ * Renders a menu item that opens a nested submenu.
+ *
+ * @param inset - Whether to apply inset alignment styling.
+ */
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -111,17 +154,22 @@ function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-popup-open:bg-accent data-popup-open:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs outline-hidden select-none transition-colors duration-80 focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-popup-open:bg-accent data-popup-open:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className
       )}
       {...props}
     >
       {children}
-      <ChevronRightIcon className="ml-auto" />
+      <ChevronRightIcon className="ml-auto size-3 text-muted-foreground" />
     </MenuPrimitive.SubmenuTrigger>
   )
 }
 
+/**
+ * Renders the content area for a nested dropdown menu.
+ *
+ * @returns The styled submenu content element.
+ */
 function DropdownMenuSubContent({
   align = "start",
   alignOffset = -3,
@@ -133,7 +181,7 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
-      className={cn("w-auto min-w-[96px] rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+      className={cn("w-auto min-w-[96px] rounded-xl p-1", className)}
       align={align}
       alignOffset={alignOffset}
       side={side}
@@ -143,6 +191,13 @@ function DropdownMenuSubContent({
   )
 }
 
+/**
+ * Renders a checkbox item within a dropdown menu.
+ *
+ * @param checked - Controls whether the item is selected.
+ * @param inset - Adds indentation to align the item with inset menu content.
+ * @returns A checkbox menu item with a selection indicator.
+ */
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -157,7 +212,7 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-8 pl-2 text-xs outline-hidden select-none transition-colors duration-80 focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className
       )}
       checked={checked}
@@ -168,8 +223,7 @@ function DropdownMenuCheckboxItem({
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <MenuPrimitive.CheckboxItemIndicator>
-          <CheckIcon
-          />
+          <CheckIcon className="size-3.5" />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -186,6 +240,11 @@ function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
   )
 }
 
+/**
+ * Renders a radio menu item with an optional inset layout and selection indicator.
+ *
+ * @param inset - Whether to apply inset spacing for the item content
+ */
 function DropdownMenuRadioItem({
   className,
   children,
@@ -199,7 +258,7 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-8 pl-2 text-xs outline-hidden select-none transition-colors duration-80 focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className
       )}
       {...props}
@@ -209,8 +268,7 @@ function DropdownMenuRadioItem({
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
-          <CheckIcon
-          />
+          <CheckIcon className="size-3.5" />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}
@@ -218,6 +276,11 @@ function DropdownMenuRadioItem({
   )
 }
 
+/**
+ * Renders a horizontal divider between dropdown menu sections.
+ *
+ * @param className - Additional classes to apply to the separator.
+ */
 function DropdownMenuSeparator({
   className,
   ...props
@@ -225,12 +288,17 @@ function DropdownMenuSeparator({
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      className={cn("-mx-1 my-1 h-px bg-border/60", className)}
       {...props}
     />
   )
 }
 
+/**
+ * Displays keyboard shortcut text within a dropdown menu item.
+ *
+ * @param className - Additional CSS classes to apply to the shortcut
+ */
 function DropdownMenuShortcut({
   className,
   ...props
@@ -239,7 +307,7 @@ function DropdownMenuShortcut({
     <span
       data-slot="dropdown-menu-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground",
+        "ml-auto text-[10px] tracking-widest text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground font-mono",
         className
       )}
       {...props}

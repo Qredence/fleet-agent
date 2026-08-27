@@ -73,7 +73,7 @@ export function ScrollAnchor() {
           <span
             aria-hidden
             className={cn(
-              "absolute -top-2 -right-3 min-w-4 rounded-full bg-primary px-1 text-[10px] font-medium leading-4 text-primary-foreground tabular-nums",
+              "absolute -top-2 -end-3 min-w-4 rounded-full bg-primary px-1 text-[10px] font-medium leading-4 text-primary-foreground tabular-nums",
               "motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-50 motion-safe:duration-200",
             )}
           >

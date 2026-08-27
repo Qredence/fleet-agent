@@ -1,10 +1,10 @@
 import {
-  CheckCircle2,
-  Circle,
-  CircleSlash,
-  Clock,
-  Loader2,
-  XCircle,
+  CheckIcon,
+  CircleIcon,
+  CircleSlashIcon,
+  ClockIcon,
+  Loader2Icon,
+  XIcon,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -25,25 +25,25 @@ type AnyStatus =
   | ArtifactStatus
 
 const ICONS: Record<AnyStatus, ReactNode> = {
-  idle: <Circle className="size-3.5 text-muted-foreground" />,
-  queued: <Clock className="size-3.5 text-muted-foreground" />,
-  pending: <Circle className="size-3.5 text-muted-foreground" />,
-  considering: <Clock className="size-3.5 text-muted-foreground" />,
+  idle: <CircleIcon className="size-3 text-foreground/25" />,
+  queued: <ClockIcon className="size-3 text-foreground/25" />,
+  pending: <CircleIcon className="size-3 text-foreground/25" />,
+  considering: <ClockIcon className="size-3 text-foreground/25" />,
   generating: (
-    <Loader2 className="size-3.5 text-muted-foreground motion-safe:animate-spin" />
+    <Loader2Icon className="size-3 text-foreground/35 motion-safe:animate-spin" />
   ),
   running: (
-    <Loader2
+    <Loader2Icon
       data-running="true"
-      className="size-3.5 text-primary motion-safe:animate-spin"
+      className="size-3 text-foreground/90 motion-safe:animate-spin"
     />
   ),
-  completed: <CheckCircle2 className="size-3.5 text-success" />,
-  accepted: <CheckCircle2 className="size-3.5 text-success" />,
-  ready: <CheckCircle2 className="size-3.5 text-success" />,
-  failed: <XCircle className="size-3.5 text-destructive" />,
-  rejected: <XCircle className="size-3.5 text-destructive" />,
-  cancelled: <CircleSlash className="size-3.5 text-muted-foreground" />,
+  completed: <CheckIcon className="size-3 text-emerald-500" />,
+  accepted: <CheckIcon className="size-3 text-emerald-500" />,
+  ready: <CheckIcon className="size-3 text-emerald-500" />,
+  failed: <XIcon className="size-3 text-red-500" />,
+  rejected: <XIcon className="size-3 text-red-500" />,
+  cancelled: <CircleSlashIcon className="size-3 text-foreground/25" />,
 }
 
 const LABELS: Record<AnyStatus, string> = {
@@ -61,14 +61,26 @@ const LABELS: Record<AnyStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-export function StatusIcon({ status }: { status: AnyStatus }) {
+/** Status icon inside a fixed optical slot, so rows of any status align. */
+export function StatusIcon({
+  status,
+  decorative = false,
+}: {
+  status: AnyStatus
+  decorative?: boolean
+}) {
   return (
-    <span aria-label={`status: ${LABELS[status]}`} className="shrink-0">
+    <span
+      aria-hidden={decorative || undefined}
+      aria-label={decorative ? undefined : `status: ${LABELS[status]}`}
+      className="flex size-3.5 shrink-0 items-center justify-center"
+    >
       {ICONS[status]}
     </span>
   )
 }
 
+/** Flat status word with its icon — no pill, no border. */
 export function StatusChip({
   status,
   className,
@@ -76,20 +88,24 @@ export function StatusChip({
   status: AnyStatus
   className?: string
 }) {
+  const tone =
+    status === 'failed' || status === 'rejected'
+      ? 'text-red-600 dark:text-red-400'
+      : status === 'completed' || status === 'accepted' || status === 'ready'
+        ? 'text-emerald-600 dark:text-emerald-400'
+        : status === 'running' || status === 'generating'
+          ? 'text-foreground/60'
+          : 'text-foreground/45'
+
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
-        (status === 'running' || status === 'generating') &&
-          'border-primary/30 text-primary',
-        (status === 'failed' || status === 'rejected') &&
-          'border-destructive/30 text-destructive',
-        (status === 'completed' || status === 'accepted' || status === 'ready') &&
-          'border-success/30 text-success',
+        'inline-flex shrink-0 items-center gap-1.5 text-[13px] leading-none',
+        tone,
         className,
       )}
     >
-      <StatusIcon status={status} />
+      <StatusIcon status={status} decorative />
       {LABELS[status]}
     </span>
   )

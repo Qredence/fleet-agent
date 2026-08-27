@@ -18,6 +18,10 @@ import type {
   ThreadBootstrap,
 } from '@/features/threads/threads-api'
 
+export type UserMessagePersistedHandler = (
+  message: ExportedMessageRepositoryItem['message'],
+) => void | Promise<void>
+
 type ReadonlyJSONValue =
   | null
   | boolean
@@ -29,13 +33,15 @@ type ReadonlyJSONValue =
 const threadWriteBarriers = new Map<string, Promise<void>>()
 
 /**
- * The AG-UI request waits until assistant-ui's append/update write lands.
+ * Waits for the pending history write for a thread.
  *
- * A rejected write is surfaced to the current send, then consumed. Keeping a
- * rejected promise in this map would permanently block every later send after
- * one transient history failure. The failed write still rejects the current
- * run, while the next assistant-ui append (or the backend's idempotent user
- * fallback) can recover the branch.
+ * Failed writes are rethrown. By default, a failed write is consumed so it
+ * does not block subsequent history operations; set `consumeFailure` to
+ * `false` to preserve the failed write.
+ *
+ * @param threadId - The thread whose pending write to await
+ * @param options - Controls whether a failed write is removed
+ * @throws The error from the pending history write
  */
 export async function waitForThreadHistoryWrites(
   threadId: string,
@@ -59,9 +65,18 @@ export async function waitForThreadHistoryWrites(
   }
 }
 
+/**
+ * Creates a history adapter for loading and persisting a thread's messages.
+ *
+ * @param threadId - The thread whose history is managed
+ * @param suppliedBootstrap - Optional preloaded thread data used instead of fetching bootstrap data
+ * @param options - Optional callbacks invoked after successful message persistence
+ * @returns An adapter that loads, appends, and updates thread messages
+ */
 export function buildHistoryAdapter(
   threadId: string,
   suppliedBootstrap?: ThreadBootstrap,
+  options: { onUserMessagePersisted?: UserMessagePersistedHandler } = {},
 ): {
   load: () => Promise<
     ExportedMessageRepository & { state?: ReadonlyJSONValue }
@@ -147,6 +162,15 @@ export function buildHistoryAdapter(
           : {}),
       })
       await threadApi.invalidateThreadBootstrap(threadId)
+
+      if (item.message.role === 'user') {
+        // A title sync must never make a successful message write fail. The
+        // callback runs only after the message has been accepted by the API,
+        // while its own failure remains local to title enrichment.
+        void Promise.resolve(options.onUserMessagePersisted?.(item.message)).catch(
+          () => undefined,
+        )
+      }
     })
 
   return { load, append: persist, update: persist }

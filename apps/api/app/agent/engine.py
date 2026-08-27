@@ -9,7 +9,7 @@ and MUST NOT cross to the browser (enforced by tests).
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -46,7 +46,49 @@ class AgentEngine(Protocol):
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
-    ) -> AgentRunResult: ...
+    ) -> AgentRunResult:
+        """
+        Execute an agent run for the user's request and conversation history.
+
+        Parameters:
+            user_request (str): The request to process.
+            history (Any | None): Previous conversation history, if available.
+            context (AgentRunContext): Thread and run identifiers for the execution.
+
+        Returns:
+            AgentRunResult: The completed or failed agent run result.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class AgentStreamUpdate:
+    """Incremental engine output delivered before the run settles.
+
+    ``final_fields`` carries the finish tool's public answer/process_summary
+    the moment ReActV2's submit tool executes; ``result`` is the
+    authoritative AgentRunResult that ends the stream. Engines without
+    incremental delivery simply keep the ``run()`` contract.
+    """
+
+    kind: Literal["final_fields", "result"]
+    answer: str | None = None
+    process_summary: str | None = None
+    result: AgentRunResult | None = None
+
+
+class _StreamFailed:
+    """Wakes the stream consumer so it re-raises the producer's exception."""
+
+    __slots__ = ("error",)
+
+    def __init__(self, error: BaseException) -> None:
+        """Store an exception raised by the stream producer.
+
+        Parameters:
+            error (BaseException): The exception to propagate to stream consumers.
+        """
+        self.error = error
 
 
 _REASON_TO_PUBLIC_CODE = {
@@ -121,13 +163,137 @@ class DspyReActV2Engine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
+        """
+        Execute an agent run and convert its prediction into a public result.
+
+        Parameters:
+            user_request (str): The user's request to process.
+            history (Any | None): Optional prior conversation history.
+
+        Returns:
+            AgentRunResult: The completed or failed agent run result.
+        """
         del context  # run identity is consumed by the bridge (PR 6)
         prediction = await asyncio.to_thread(self._run_sync, user_request, history)
         return _map_result(prediction)
 
-    def _run_sync(self, user_request: str, history: Any | None) -> dspy.Prediction:
+    async def stream(
+        self,
+        *,
+        user_request: str,
+        history: Any | None,
+        context: AgentRunContext,
+    ) -> AsyncIterator[AgentStreamUpdate]:
+        """Stream public submission fields when available, then settled result.
+
+        Yields:
+            AgentStreamUpdate: A submission update with public final fields
+                or a result update containing the completed run result.
+
+        Raises:
+            BaseException: If agent execution fails.
+        """
+        del context  # run identity is consumed by the bridge (PR 6)
+        loop = asyncio.get_running_loop()
+        updates: asyncio.Queue[AgentStreamUpdate | _StreamFailed] = asyncio.Queue()
+
+        def on_agent_ready(agent: dspy.ReActV2) -> None:
+            """
+            Configure the agent's submission tool to publish final fields to the stream.
+
+            Parameters:
+                agent (dspy.ReActV2): Agent whose submission tool should be monitored.
+            """
+            submit = agent.tools.get("submit")
+            if submit is None:
+                return
+            original = submit.func
+
+            def submit_hook(**kwargs: Any) -> Any:
+                """Bridge submitted answer fields to the stream and return result.
+
+                Parameters:
+                    **kwargs (Any): Submission fields including answer and summary.
+
+                Returns:
+                    Any: The result of the original submission handler.
+                """
+                value = original(**kwargs)
+                final = AgentStreamUpdate(
+                    kind="final_fields",
+                    answer=str(kwargs["answer"]) if kwargs.get("answer") else None,
+                    process_summary=(
+                        str(kwargs["process_summary"])
+                        if kwargs.get("process_summary")
+                        else None
+                    ),
+                )
+                try:
+                    loop.call_soon_threadsafe(updates.put_nowait, final)
+                except RuntimeError:
+                    logger.debug("stream bridge loop closed before final fields")
+                return value
+
+            submit.func = submit_hook
+
+        async def produce() -> None:
+            """
+            Run the agent execution and enqueue its final stream update.
+
+            Agent execution failures are enqueued for stream consumers before being
+                propagated.
+            """
+            try:
+                prediction = await asyncio.to_thread(
+                    self._run_sync,
+                    user_request,
+                    history,
+                    on_agent_ready=on_agent_ready,
+                )
+            except BaseException as exc:
+                updates.put_nowait(_StreamFailed(exc))
+                raise
+            await updates.put(
+                AgentStreamUpdate(kind="result", result=_map_result(prediction))
+            )
+
+        producer = asyncio.create_task(produce())
+        try:
+            while True:
+                update = await updates.get()
+                if isinstance(update, _StreamFailed):
+                    raise update.error
+                yield update
+                if update.kind == "result":
+                    break
+            await producer
+        finally:
+            if not producer.done():
+                producer.cancel()
+
+    def _run_sync(
+        self,
+        user_request: str,
+        history: Any | None,
+        *,
+        on_agent_ready: Callable[[dspy.ReActV2], None] | None = None,
+    ) -> dspy.Prediction:
+        """
+        Execute the configured agent for a user request and conversation history.
+
+        Parameters:
+            user_request (str): The user's request to process.
+            history (Any | None): Optional conversation history.
+            on_agent_ready (Callable[[dspy.ReActV2], None] | None): Optional callback
+                invoked after the agent is created.
+
+        Returns:
+            dspy.Prediction: The agent's prediction.
+        """
         try:
             agent = self._agent_factory()
+            if on_agent_ready is not None:
+                on_agent_ready(agent)
             with dspy.context(
                 lm=self._lm,
                 adapter=self._adapter,

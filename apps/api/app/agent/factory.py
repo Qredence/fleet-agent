@@ -18,6 +18,7 @@ from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agent.tools.web import WebToolBundle, build_web_tool_bundle
+from app.agent.tools_catalog import tool_catalog_by_name
 from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import EngineBuilder
 from app.services.artifact_storage import ArtifactStorage
@@ -91,18 +92,31 @@ def _build_web_tools(settings: Settings) -> WebToolBundle | None:
 def make_engine_builder(
     settings: Settings, *, storage: ArtifactStorage
 ) -> EngineBuilder:
-    """Per-run engines over shared LM/adapter, using native DSPy callbacks.
+    """
+    Create a builder for run-scoped agent engines using shared language-model
+        configuration.
 
-    The LM and adapter are stateless config objects safe to share across runs
-    and threads; every run gets its own ReActV2 instance, tool objects, and
-    native callbacks so domain events land in that run's event bus only.
-    Web search/fetch are per-run too; their result-id registry never crosses
-    runs.
+    Parameters:
+        storage (ArtifactStorage): Storage used by report-writing tools created for each
+            run.
+
+    Returns:
+        EngineBuilder: A builder that creates an engine bound to a run event bus and
+            thread.
     """
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
 
     def build(bus: RunEventBus, *, thread_id: str) -> AgentEngine:
+        """
+        Build an agent engine configured for the current run.
+
+        Parameters:
+            thread_id (str): Identifier of the thread associated with report artifacts.
+
+        Returns:
+            AgentEngine: A staged or ReAct engine configured from the current settings.
+        """
         docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(
             storage=storage,
@@ -122,18 +136,19 @@ def make_engine_builder(
         ]
         callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
+        # Metadata comes from the shared catalog (also served by GET /api/tools)
+        # so the public page can never drift from what runs actually use.
+        catalog = tool_catalog_by_name(settings)
         registry = ToolRegistry(
             [
                 (
                     tool,
                     ToolMetadata(
-                        name=tool.__name__,
-                        read_only=tool is not report_tool,
-                        idempotent=tool is not get_current_time,
-                        parallelizable=(
-                            tool is not report_tool and tool is not get_current_time
-                        ),
-                        timeout_seconds=settings.reasoning_task_timeout_seconds,
+                        name=catalog[tool.__name__].name,
+                        read_only=catalog[tool.__name__].read_only,
+                        idempotent=catalog[tool.__name__].idempotent,
+                        parallelizable=catalog[tool.__name__].parallelizable,
+                        timeout_seconds=catalog[tool.__name__].timeout_seconds,
                     ),
                 )
                 for tool in tools

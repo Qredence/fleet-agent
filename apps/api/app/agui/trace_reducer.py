@@ -277,7 +277,48 @@ class TraceReducer:
 
     # -- completion ----------------------------------------------------------
 
+    def live_synthesis_summary(self, summary: str) -> list[JsonPatchOp]:
+        """
+        Publish a model-written process summary while the run is in progress.
+
+        Parameters:
+            summary (str): Process summary to expose in the synthesis step.
+
+        Returns:
+            list[JsonPatchOp]: JSON Patch operations that create or update the synthesis
+                step; an empty list if the summary is empty.
+        """
+        if not summary:
+            return []
+        ops: list[JsonPatchOp] = []
+        if "step-synthesis" not in self._step_index:
+            ops += self._add_step(
+                "step-synthesis",
+                phase="synthesis",
+                title="Preparing the response",
+                status="pending",
+            )
+        idx = self._step_index["step-synthesis"]
+        if self.state["steps"][idx].get("status") != "running":
+            ops += self._start_step("step-synthesis")
+            idx = self._step_index["step-synthesis"]
+        self.state["steps"][idx]["publicSummary"] = summary
+        ops.append(
+            {"op": "add", "path": f"/steps/{idx}/publicSummary", "value": summary}
+        )
+        return ops
+
     def complete_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
+        """
+        Complete the agent run and publish its final status, summary, metrics,
+            decisions, and caveats.
+
+        Parameters:
+            result (AgentRunResult): Final result data used to update the run state.
+
+        Returns:
+            list[JsonPatchOp]: JSON Patch operations describing the completed run.
+        """
         ops: list[JsonPatchOp] = []
         if "step-research" in self._step_index:
             ops += self._complete_step("step-research")

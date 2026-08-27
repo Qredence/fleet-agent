@@ -1,13 +1,21 @@
 import { HttpAgent } from '@ag-ui/client'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
+import {
+  AssistantRuntimeProvider,
+  CompositeAttachmentAdapter,
+  type FeedbackAdapter,
+  SimpleImageAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
+} from '@assistant-ui/react'
 import { useAgUiRuntime } from '@assistant-ui/react-ag-ui'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import {
   buildHistoryAdapter,
   HistoryHeadSync,
+  type UserMessagePersistedHandler,
   waitForThreadHistoryWrites,
 } from '@/features/threads/assistant-thread-adapter'
+import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-presence'
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
@@ -18,23 +26,51 @@ const AGENT_URL = `${
 
 const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 
+// Attachments stay local to the assistant-ui runtime. The simple adapters
+// provide picker/drop previews and convert supported files into message parts
+// at send time; no upload endpoint or persistence is involved.
+const attachmentAdapter = new CompositeAttachmentAdapter([
+  new SimpleImageAttachmentAdapter(),
+  new SimpleTextAttachmentAdapter(),
+])
+
+// Message feedback is tracked in memory only: the backend has no feedback
+// endpoint yet, so thumbs state lives for the current session and resets on
+// reload. Swap in a persistent adapter when feedback storage lands.
+const feedbackByMessageId = new Map<string, 'positive' | 'negative'>()
+
+const feedbackAdapter: FeedbackAdapter = {
+  submit: ({ message, type }) => {
+    feedbackByMessageId.set(message.id, type)
+  },
+}
+
 /**
- * AG-UI runtime for the workspace: one HttpAgent to the FastAPI SSE endpoint.
+ * Provides the AG-UI runtime for a workspace conversation.
  *
- * `showThinking: false` is deliberate — the ProcessPanel renders the
- * intentional user-safe trace from agent state; reasoning blocks stay hidden.
- * When `threadId` is set, the history adapter restores persisted AG-UI
- * messages and the supplied bootstrap state seeds the process panel.
+ * @param threadId - The persisted conversation identifier.
+ * @param bootstrap - Initial state used to restore the conversation.
+ * @param onUserMessagePersisted - Callback invoked after a user message is persisted.
+ * @param children - Content rendered within the runtime provider.
+ * @returns The runtime provider containing the workspace content.
  */
 export function AgentRuntimeProvider({
   threadId,
   bootstrap,
+  onUserMessagePersisted,
   children,
 }: {
   threadId?: string
   bootstrap?: ThreadBootstrap
+  onUserMessagePersisted?: UserMessagePersistedHandler
   children: ReactNode
 }) {
+  const onUserMessagePersistedRef = useRef(onUserMessagePersisted)
+
+  useEffect(() => {
+    onUserMessagePersistedRef.current = onUserMessagePersisted
+  }, [onUserMessagePersisted])
+
   const agent = useMemo(
     () =>
       new HttpAgent({
@@ -63,10 +99,18 @@ export function AgentRuntimeProvider({
   }, [agent, threadId])
 
   const adapters = useMemo(
-    () =>
-      threadId
-        ? { history: buildHistoryAdapter(threadId, bootstrap) }
-        : undefined,
+    () => ({
+      attachments: attachmentAdapter,
+      feedback: feedbackAdapter,
+      ...(threadId
+        ? {
+            history: buildHistoryAdapter(threadId, bootstrap, {
+              onUserMessagePersisted: (message) =>
+                onUserMessagePersistedRef.current?.(message),
+            }),
+          }
+        : {}),
+    }),
     // Bootstrap is fetched before this keyed provider mounts. Keep the
     // adapter identity stable after mount so cache invalidation from an
     // append/update cannot trigger a second runtime load.
@@ -89,15 +133,17 @@ export function AgentRuntimeProvider({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ArtifactDataUIRegistration />
-      <InlineAgentDataUIRegistration />
-      {threadId ? (
-        <HistoryHeadSync
-          threadId={threadId}
-          initialHeadId={bootstrap?.messageRepository?.headId ?? null}
-        />
-      ) : null}
-      {children}
+      <AgUiRuntimePresenceProvider>
+        <ArtifactDataUIRegistration />
+        <InlineAgentDataUIRegistration />
+        {threadId ? (
+          <HistoryHeadSync
+            threadId={threadId}
+            initialHeadId={bootstrap?.messageRepository?.headId ?? null}
+          />
+        ) : null}
+        {children}
+      </AgUiRuntimePresenceProvider>
     </AssistantRuntimeProvider>
   )
 }

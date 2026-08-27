@@ -1,9 +1,14 @@
 """Domain event → AG-UI event mapping (pure)."""
 
+import re
+
 from ag_ui.core import (
     BaseEvent,
     CustomEvent,
     StateDeltaEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
     ToolCallResultEvent,
@@ -16,6 +21,7 @@ from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
     ArtifactStarted,
+    FinalFieldsReady,
     InlineDataEvent,
     SourceDiscovered,
     StepCompleted,
@@ -38,7 +44,32 @@ AnyDomainEvent = (
     | ArtifactStarted
     | ArtifactReady
     | ArtifactFailed
+    | FinalFieldsReady
 )
+
+_TEXT_CHUNK_SIZE = 24
+_WHITESPACE_SPLIT = re.compile(r"(\s+)")
+
+
+def chunk_text(text: str, *, chunk_size: int = _TEXT_CHUNK_SIZE) -> list[str]:
+    """Split text into small word-boundary chunks for incremental streaming.
+
+    Whitespace is preserved: concatenating the chunks reproduces the input
+    exactly, including newlines and repeated spaces.
+    """
+    if not text:
+        return []
+    tokens = [token for token in _WHITESPACE_SPLIT.split(text) if token]
+    chunks: list[str] = []
+    current = ""
+    for token in tokens:
+        if len(current) + len(token) > chunk_size and current:
+            chunks.append(current)
+            current = ""
+        current += token
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def map_domain_event(
@@ -46,14 +77,25 @@ def map_domain_event(
     *,
     tools_message_id: str,
     reducer: TraceReducer,
+    answer_message_id: str | None = None,
 ) -> list[BaseEvent]:
-    """Single dispatch point: applies the state delta and wraps the
-    AG-UI events for the domain event's kind.
-
-    Inline data is deliberately not applied to ``AgentWorkspaceState``. It is
-    a bounded transcript projection, while the process panel remains the
-    authoritative AG-UI state view.
     """
+    Convert a domain event into the corresponding AG-UI events and state updates.
+
+    Parameters:
+        event (AnyDomainEvent): The domain event to convert.
+        tools_message_id (str): The message identifier used for tool-related events.
+        answer_message_id (str | None): The message identifier used for final answer
+            events, when available.
+
+    Returns:
+        list[BaseEvent]: The AG-UI events representing the domain event.
+    """
+    if isinstance(event, FinalFieldsReady):
+        return map_final_fields_event(
+            event, answer_message_id=answer_message_id, reducer=reducer
+        )
+
     if isinstance(event, InlineDataEvent):
         return [CustomEvent(name=event.name, value=event.value)]
 
@@ -90,6 +132,19 @@ def map_tool_event(
     tools_message_id: str,
     state_delta_ops: list[JsonPatchOp],
 ) -> list[BaseEvent]:
+    """
+    Convert a tool lifecycle event into AG-UI events, including any associated state
+        updates.
+
+    Parameters:
+        event: The tool start, completion, or failure event to convert.
+        tools_message_id: The message identifier associated with the tool call.
+        state_delta_ops: State operations to include in the resulting events.
+
+    Returns:
+        list[BaseEvent]: The AG-UI events representing the tool event and any state
+            changes.
+    """
     events: list[BaseEvent] = []
 
     if isinstance(event, ToolStarted):
@@ -123,4 +178,39 @@ def map_tool_event(
 
     if state_delta_ops:
         events.append(StateDeltaEvent(delta=state_delta_ops))
+    return events
+
+
+def map_final_fields_event(
+    event: FinalFieldsReady,
+    *,
+    answer_message_id: str | None,
+    reducer: TraceReducer,
+) -> list[BaseEvent]:
+    """Convert final answer and process summary fields into AG-UI events.
+
+    Parameters:
+        event (FinalFieldsReady): Final answer and process summary data.
+        answer_message_id (str | None): Identifier for the assistant message.
+        reducer (TraceReducer): Reducer used to apply the process summary.
+
+    Returns:
+        list[BaseEvent]: Streamed answer and state update events.
+    """
+    events: list[BaseEvent] = []
+
+    if event.answer and answer_message_id:
+        events.append(
+            TextMessageStartEvent(message_id=answer_message_id, role="assistant")
+        )
+        for chunk in chunk_text(event.answer):
+            events.append(
+                TextMessageContentEvent(message_id=answer_message_id, delta=chunk)
+            )
+        events.append(TextMessageEndEvent(message_id=answer_message_id))
+
+    if event.process_summary:
+        ops = reducer.live_synthesis_summary(event.process_summary)
+        if ops:
+            events.append(StateDeltaEvent(delta=ops))
     return events

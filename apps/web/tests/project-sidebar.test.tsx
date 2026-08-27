@@ -5,7 +5,6 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProjectSidebar } from '@/components/projects/project-sidebar'
-import type { ReactNode } from 'react'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api-client')>()
@@ -15,6 +14,7 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
 import { apiFetch } from '@/lib/api-client'
 import type { ProjectOut } from '@/features/projects/projects-api'
 import type { ThreadOut } from '@/features/threads/threads-api'
+import { mockViewport } from './setup'
 
 const project: ProjectOut = {
   id: 'project_1',
@@ -114,6 +114,27 @@ afterEach(() => {
 })
 
 describe('ProjectSidebar (live)', () => {
+  it('fills the embedded desktop rail while preserving the mobile drawer width', async () => {
+    setup('/projects/project_1/threads/thread_a')
+
+    const wrapper = document.querySelector('[data-slot="sidebar-wrapper"]')
+    expect(wrapper).toHaveStyle('--sidebar-width: 100%')
+    expect(wrapper).toHaveStyle('--sidebar-width-mobile: 18rem')
+
+    const activeThread = await screen.findByRole(
+      'button',
+      { name: 'First thread' },
+      { timeout: 5000 },
+    )
+    expect(activeThread.className).toContain('w-full')
+
+    cleanup()
+    mockViewport({ mobile: true, compact: true })
+    setup('/projects/project_1/threads/thread_a')
+    const mobileWrapper = document.querySelector('[data-slot="sidebar-wrapper"]')
+    expect(mobileWrapper).toHaveStyle('--sidebar-width-mobile: 18rem')
+  })
+
   it('renders projects with their threads', async () => {
     setup('/projects/project_1/threads/thread_a')
 
@@ -123,6 +144,41 @@ describe('ProjectSidebar (live)', () => {
     expect(
       screen.getByRole('button', { name: 'New thread' }),
     ).toBeEnabled()
+  })
+
+  it('reserves the project action slot and reveals actions on hover or focus', async () => {
+    const user = userEvent.setup()
+    setup('/projects/project_1/threads/thread_a')
+
+    const projectLabel = await screen.findByRole('button', {
+      name: 'Project: Workspace',
+    })
+    const actions = document.querySelector('[data-sidebar="group-actions"]')
+    expect(actions).toBeInTheDocument()
+    expect(actions).toHaveClass('pointer-events-none', 'opacity-0')
+    expect(actions?.className).toContain('group-hover/group-header:opacity-100')
+    expect(actions?.className).toContain(
+      'group-focus-within/group-header:opacity-100',
+    )
+    expect(actions?.className).toContain('has-[[data-state=open]]:opacity-100')
+    expect(projectLabel).toHaveClass('pe-[62px]')
+
+    await user.hover(projectLabel)
+    await user.click(
+      screen.getByRole('button', { name: 'New thread in: Workspace' }),
+    )
+    expect(
+      screen.getByRole('button', { name: 'New thread in: Workspace' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the Fleet Agent switcher label and chevron in separate flex regions', async () => {
+    setup('/projects/project_1/threads/thread_a')
+
+    const trigger = await screen.findByRole('button', { name: 'Fleet Agent' })
+    expect(trigger).toHaveClass('w-full', 'min-w-0')
+    expect(trigger.querySelector('span.min-w-0.flex-1')).toBeInTheDocument()
+    expect(trigger.querySelector('svg')).toHaveClass('ms-auto', 'shrink-0')
   })
 
   it('navigates to a thread on click', async () => {

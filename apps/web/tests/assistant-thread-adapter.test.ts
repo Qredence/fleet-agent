@@ -23,6 +23,65 @@ afterEach(() => {
 })
 
 describe('assistant-ui history adapter', () => {
+  it('notifies title enrichment only after an accepted user message write', async () => {
+    const onUserMessagePersisted = vi.fn()
+    persistThreadMessageMock.mockResolvedValue({ id: 'user-1' })
+    invalidateThreadBootstrapMock.mockResolvedValue(undefined)
+    const adapter = buildHistoryAdapter(
+      'thread-1',
+      {
+        schemaVersion: 1,
+        thread: {} as never,
+        messageRepository: { headId: null, messages: [] },
+        messages: [],
+        agentState: null,
+        latestRun: null,
+      },
+      { onUserMessagePersisted },
+    )
+    const message = {
+      id: 'user-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'Explain the project' }],
+    }
+
+    await adapter.append({ message, parentId: null } as never)
+
+    expect(persistThreadMessageMock).toHaveBeenCalledBefore(
+      invalidateThreadBootstrapMock,
+    )
+    expect(onUserMessagePersisted).toHaveBeenCalledWith(message)
+  })
+
+  it('does not invoke title enrichment for assistant messages', async () => {
+    const onUserMessagePersisted = vi.fn()
+    persistThreadMessageMock.mockResolvedValue({ id: 'assistant-1' })
+    invalidateThreadBootstrapMock.mockResolvedValue(undefined)
+    const adapter = buildHistoryAdapter(
+      'thread-1',
+      {
+        schemaVersion: 1,
+        thread: {} as never,
+        messageRepository: { headId: null, messages: [] },
+        messages: [],
+        agentState: null,
+        latestRun: null,
+      },
+      { onUserMessagePersisted },
+    )
+
+    await adapter.append({
+      parentId: 'user-1',
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'The answer' }],
+      },
+    } as never)
+
+    expect(onUserMessagePersisted).not.toHaveBeenCalled()
+  })
+
   it('restores legacy flat messages as one linear sequence', async () => {
     const bootstrap = {
       schemaVersion: 1 as const,

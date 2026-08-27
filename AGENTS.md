@@ -45,7 +45,16 @@ loads call raw `fetchBootstrap`; never nest a cached bootstrap query inside its
 own `queryFn`.
 
 The UI uses shadcn/ui's Base UI flavor. Compose links with `render={<a />}`;
-do not introduce Radix-specific `asChild` patterns.
+do not introduce Radix-specific `asChild` patterns. Follow Fluid Functionalism
+design tokens across custom components (`Card`, `Switch`, etc.), ensuring
+interactive controls wire accessible names properly (e.g. `aria-labelledby`
+linked to `CardTitle` or explicit labels). Maintain CSS logical properties
+(`marginInlineStart`, `paddingInlineStart`, `insetInlineStart`, etc.) across
+components and layouts for bidirectional (RTL) support.
+
+Agent run activity is projected inline within the assistant-ui message stream
+as collapsible step cards (`RunActivityInline`), while the desktop process
+panel focuses on Sources, Artifacts, and file exploration.
 
 ## Backend and DSPy rules
 

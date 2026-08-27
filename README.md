@@ -64,8 +64,11 @@ The React frontend renders the conversation and the live process projection.
 - Reloading a thread restores its versioned bootstrap snapshot and branch-aware
   conversation history.
 - The responsive three-pane UI combines project/thread navigation, an
-  assistant-ui conversation, and an AG-UI process panel with Activity, Sources,
-  and Artifacts tabs.
+  assistant-ui conversation with inline collapsible run activity, and an AG-UI
+  process panel with Sources and Artifacts tabs plus file exploration.
+- Frontend components use `@base-ui/react` primitives and Fluid Functionalism
+  design tokens, adhering to CSS logical properties for bidirectional (RTL)
+  layout support.
 
 ### Deterministic development and safe boundaries
 

@@ -26,7 +26,7 @@ function renderWorkspace(ui: ReactElement = <AgentWorkspace />) {
 const storeDefaults = {
   sidebarCollapsed: false,
   processPanelOpen: true,
-  processPanelTab: 'activity',
+  processPanelTab: 'sources',
   sidebarSheetOpen: false,
   processSheetOpen: false,
 } as const
@@ -60,14 +60,32 @@ describe('AgentWorkspace — wide desktop', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Sources' }))
     expect(
-      screen.getByText(/sources the agent consults will appear here/i),
+      screen.getByText(/sources referenced during agent runs will appear here/i),
     ).toBeInTheDocument()
     expect(useWorkspaceStore.getState().processPanelTab).toBe('sources')
 
     await user.click(screen.getByRole('tab', { name: 'Artifacts' }))
     expect(
-      screen.getByText(/generated artifacts will appear here/i),
+      screen.getByText(/files, reports, and code produced by the agent will be listed here/i),
     ).toBeInTheDocument()
+  })
+
+  it('keeps the process header minimal', () => {
+    renderWorkspace(
+      <AgentWorkspace
+        projectId="project_1"
+        threadId="thread_a"
+        threadTitle="First thread"
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Process' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /close process panel/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /copy path/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Open/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('fleet-agent, README.md')).not.toBeInTheDocument()
   })
 
   it('hides the process panel via its close button and reopens via header toggle', async () => {
@@ -178,6 +196,10 @@ describe('AgentWorkspace — mobile', () => {
     )
     await screen.findByRole('dialog', { name: /^process$/i })
 
+    expect(
+      screen.queryByRole('button', { name: 'More process actions' }),
+    ).not.toBeInTheDocument()
+
     await user.click(
       screen.getByRole('button', { name: /close process panel/i }),
     )
@@ -186,5 +208,31 @@ describe('AgentWorkspace — mobile', () => {
         screen.queryByRole('dialog', { name: /^process$/i }),
       ).not.toBeInTheDocument(),
     )
+  })
+})
+
+describe('AgentWorkspace — compact sheet', () => {
+  beforeEach(() => mockViewport({ compact: true }))
+
+  it('shows tabs with no header overflow actions', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(
+      screen.getByRole('button', { name: /toggle process panel/i }),
+    )
+    await screen.findByRole('dialog', { name: /^process$/i })
+
+    expect(screen.getByRole('tab', { name: 'Sources' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Artifacts' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /copy path/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /open/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'More process actions' }),
+    ).not.toBeInTheDocument()
   })
 })
