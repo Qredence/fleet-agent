@@ -1,58 +1,319 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
+"use client";
 
-import { cn } from "@/lib/utils"
+import {
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import type { IconComponent } from "@/lib/icon-context";
+import { cn } from "@/lib/utils";
+import { useShape } from "@/lib/shape-context";
+import { useSizeVariant } from "@/lib/size-context";
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  [
+    "group relative isolate inline-flex items-center justify-center outline-none cursor-pointer",
+    "transition-colors duration-80",
+    "disabled:opacity-50 disabled:pointer-events-none",
+    "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
+  ],
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-        ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-        destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+        primary: "text-background",
+        default: "text-background",
+        secondary: "text-foreground",
+        tertiary: "text-foreground",
+        outline: "text-foreground",
+        ghost: "text-muted-foreground hover:text-foreground",
+        destructive: "text-destructive-foreground",
       },
       size: {
-        default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+        default: "h-9 px-4 text-[13px] gap-1.5",
+        compact: "h-7 px-3 text-[12px] gap-1",
+        sm: "h-7 px-3 text-[12px] gap-1",
+        md: "h-9 px-4 text-[13px] gap-1.5",
+        lg: "h-10 px-5 text-sm gap-2",
+        icon: "h-9 w-9 p-0 [&_svg]:h-4 [&_svg]:w-4",
+        "icon-compact": "h-7 w-7 p-0 [&_svg]:h-3.5 [&_svg]:w-3.5",
+        "icon-xs": "h-6 w-6 p-0 [&_svg]:h-3 [&_svg]:w-3",
+        "icon-sm": "h-7 w-7 p-0 [&_svg]:h-3.5 [&_svg]:w-3.5",
+        "icon-lg": "h-9 w-9 p-0 [&_svg]:h-4 [&_svg]:w-4",
       },
+      iconLeft: { true: "" },
+      iconRight: { true: "" },
     },
+    compoundVariants: [
+      { size: "compact", iconLeft: true, className: "pl-[6px]" },
+      { size: "default", iconLeft: true, className: "pl-[10px]" },
+      { size: "compact", iconRight: true, className: "pr-[6px]" },
+      { size: "default", iconRight: true, className: "pr-[10px]" },
+    ],
     defaultVariants: {
-      variant: "default",
+      variant: "primary",
       size: "default",
     },
   }
-)
+);
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-  return (
-    <ButtonPrimitive
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
+type ButtonSizeCanonical =
+  | "default"
+  | "compact"
+  | "sm"
+  | "md"
+  | "lg"
+  | "icon"
+  | "icon-compact"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon-lg";
+
+type ButtonSize = ButtonSizeCanonical;
+
+interface ButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement>,
+    Omit<VariantProps<typeof buttonVariants>, "size" | "variant"> {
+  variant?:
+    | "primary"
+    | "default"
+    | "secondary"
+    | "tertiary"
+    | "outline"
+    | "ghost"
+    | "destructive"
+    | null;
+  size?: ButtonSize;
+  asChild?: boolean;
+  render?: ReactElement;
+  nativeButton?: boolean;
+  role?: string;
+  loading?: boolean;
+  leadingIcon?: IconComponent;
+  trailingIcon?: IconComponent;
+  active?: boolean;
 }
 
-export { Button, buttonVariants }
+const bgVariants: Record<string, string> = {
+  primary:
+    "[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  default:
+    "[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  destructive:
+    "[--btn-bg:var(--color-destructive,red)] bg-destructive text-destructive-foreground shadow-[0_0_0_1px_var(--destructive)] group-hover:bg-destructive/90",
+  secondary:
+    "[--btn-bg:var(--accent)] group-hover:[--btn-bg:color-mix(in_oklab,var(--accent)_80%,var(--background))] group-active:[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  tertiary:
+    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+  outline:
+    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+  ghost:
+    "bg-transparent shadow-[0_0_0_1px_transparent] group-hover:bg-hover group-hover:shadow-[0_0_0_1px_var(--hover)] group-active:bg-active group-active:shadow-[0_0_0_0px_var(--active)]",
+};
+
+const activeBgVariants: Record<string, string> = {
+  primary:
+    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  default:
+    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  destructive:
+    "bg-destructive/90 text-destructive-foreground shadow-[0_0_0_1px_var(--destructive)]",
+  secondary:
+    "[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+  tertiary:
+    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+  outline:
+    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+  ghost:
+    "bg-active shadow-[0_0_0_1px_var(--active)] group-active:shadow-[0_0_0_0px_var(--active)]",
+};
+
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      className,
+      variant = "primary",
+      size,
+      asChild = false,
+      render,
+      nativeButton: _nativeButton,
+      loading = false,
+      leadingIcon: LeadingIcon,
+      trailingIcon: TrailingIcon,
+      active = false,
+      disabled,
+      children,
+      style,
+      ...props
+    },
+    ref
+  ) => {
+    const asChildElement =
+      asChild && isValidElement(children)
+        ? (children as ReactElement<{
+            children?: ReactNode;
+            className?: string;
+            style?: React.CSSProperties;
+            ref?: React.Ref<HTMLButtonElement>;
+          }>)
+        : null;
+    const label = asChildElement ? asChildElement.props.children : children;
+    const contextSize = useSizeVariant();
+    const resolvedSize: ButtonSizeCanonical = size
+      ? size
+      : contextSize === "compact"
+        ? "compact"
+        : "default";
+    const isIconOnly =
+      resolvedSize === "icon" ||
+      resolvedSize === "icon-compact" ||
+      resolvedSize === "icon-xs" ||
+      resolvedSize === "icon-sm" ||
+      resolvedSize === "icon-lg";
+    const isCompact =
+      resolvedSize === "compact" ||
+      resolvedSize === "icon-compact" ||
+      resolvedSize === "sm" ||
+      resolvedSize === "icon-xs" ||
+      resolvedSize === "icon-sm";
+    const iconSize = isCompact ? 14 : 16;
+    const spinnerSizeClass = isCompact ? "h-7 w-7" : "h-9 w-9";
+    const shape = useShape();
+    const effectiveVariant = variant ?? "primary";
+    const bgClass = active
+      ? activeBgVariants[effectiveVariant] ?? activeBgVariants.primary
+      : bgVariants[effectiveVariant] ?? bgVariants.primary;
+
+    const internals = (
+      <>
+        <span
+          aria-hidden
+          className={cn(
+            "absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:180ms,80ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active:[transition-duration:80ms,80ms]",
+            bgClass
+          )}
+        />
+        <span className="relative inline-flex items-center justify-center gap-[inherit]">
+          {loading ? (
+            <>
+              <span className="flex items-center justify-center gap-[inherit] opacity-0">
+                {LeadingIcon && !isIconOnly && (
+                  <LeadingIcon size={iconSize} strokeWidth={2} />
+                )}
+                {label}
+                {TrailingIcon && !isIconOnly && (
+                  <TrailingIcon size={iconSize} strokeWidth={2} />
+                )}
+              </span>
+              <span className="absolute inset-0 flex items-center justify-center">
+                <svg
+                  className={spinnerSizeClass}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path
+                    d="M 12 12 C 14 8.5 19 8.5 19 12 C 19 15.5 14 15.5 12 12 C 10 8.5 5 8.5 5 12 C 5 15.5 10 15.5 12 12 Z"
+                    stroke="currentColor"
+                    strokeWidth="1.125"
+                    strokeLinecap="round"
+                    pathLength="100"
+                    style={{
+                      strokeDasharray: "15 85",
+                      animation:
+                        "spinner-move 2s linear infinite, spinner-dash 4s ease-in-out infinite",
+                    }}
+                  />
+                </svg>
+              </span>
+            </>
+          ) : isIconOnly ? (
+            <span className="[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover:[&_svg]:stroke-[2]">
+              {label}
+            </span>
+          ) : (
+            <>
+              {LeadingIcon && (
+                <LeadingIcon
+                  size={iconSize}
+                  strokeWidth={1.5}
+                  className="transition-[stroke-width] duration-80 group-hover:stroke-[2]"
+                />
+              )}
+              <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+              {TrailingIcon && (
+                <TrailingIcon
+                  size={iconSize}
+                  strokeWidth={1.5}
+                  className="transition-[stroke-width] duration-80 group-hover:stroke-[2]"
+                />
+              )}
+            </>
+          )}
+        </span>
+      </>
+    );
+
+    const rootClassName = cn(
+      buttonVariants({
+        variant: effectiveVariant,
+        size: resolvedSize,
+        iconLeft: !isIconOnly && !!LeadingIcon,
+        iconRight: !isIconOnly && !!TrailingIcon,
+      }),
+      shape?.button,
+      className
+    );
+
+    if (render && isValidElement(render)) {
+      const renderEl = render as ReactElement<{
+        className?: string;
+        style?: React.CSSProperties;
+        children?: ReactNode;
+      }>;
+      return cloneElement(
+        renderEl,
+        {
+          ...props,
+          className: cn(rootClassName, renderEl.props.className),
+          style: { ...style, ...renderEl.props.style },
+        },
+        internals
+      );
+    }
+
+    if (asChildElement) {
+      const childProps = asChildElement.props;
+      return cloneElement(
+        asChildElement,
+        {
+          ...props,
+          ref,
+          className: cn(rootClassName, childProps.className),
+          style: { ...style, ...childProps.style },
+        },
+        internals
+      );
+    }
+
+    return (
+      <ButtonPrimitive
+        ref={ref as React.Ref<HTMLButtonElement>}
+        className={rootClassName}
+        disabled={disabled || loading}
+        style={style}
+        {...props}
+      >
+        {internals}
+      </ButtonPrimitive>
+    );
+  }
+);
+
+Button.displayName = "Button";
+
+export { Button, buttonVariants };
+export type { ButtonProps, ButtonSize };
