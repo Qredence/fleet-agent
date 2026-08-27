@@ -91,8 +91,8 @@ flowchart TB
         HIST("history_safety · mock_run")
     end
 
-    R1 --> SW; R2 --> SW; R3 --> SW
-    SW --> LC; SW --> RC
+    SW --> R1; SW --> R2; SW --> R3
+    R1 --> LC; R2 --> LC; R2 --> RC
     LC --> E; RC --> MOD
     E --> F; E --> SIG; F --> TC; E --> CB
     CB --> BC; BC --> EMP; EMP --> TR; EMP --> LC

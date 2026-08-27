@@ -405,8 +405,8 @@ flowchart LR
   <table>
     <thead><tr><th>area</th><th>coverage</th><th>command</th></tr></thead>
     <tbody>
-      <tr><td class="mono">app/api/tests (25 files)</td><td>agent endpoint, DSPy engine, live coordinator, run/event/trace, staged, persistence, tools, hardening, history-safety</td><td class="mono">uv run pytest</td></tr>
-      <tr><td class="mono">app/web/tests (14 files)</td><td>agent-workspace, runtime restore, process-panel, thread-adapter, artifacts, contracts-freshness, projects/threads</td><td class="mono">pnpm --filter web test</td></tr>
+      <tr><td class="mono">apps/api/tests (25 files)</td><td>agent endpoint, DSPy engine, live coordinator, run/event/trace, staged, persistence, tools, hardening, history-safety</td><td class="mono">uv run pytest</td></tr>
+      <tr><td class="mono">apps/web/tests (14 files)</td><td>agent-workspace, runtime restore, process-panel, thread-adapter, artifacts, contracts-freshness, projects/threads</td><td class="mono">pnpm --filter web test</td></tr>
       <tr><td class="mono">static checks</td><td>ruff format+lint, mypy</td><td class="mono">uv run ruff ... · mypy app</td></tr>
       <tr><td class="mono">contract freshness</td><td>schema ↔ generated model parity</td><td class="mono">web contracts-freshness.test</td></tr>
       <tr><td class="mono">CI</td><td>.circleci · lint, test, typecheck, build</td><td class="mono">CircleCI</td></tr>
