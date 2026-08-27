@@ -23,6 +23,8 @@ export function ProcessStepCard({
   isActive,
 }: ProcessStepCardProps) {
   const [expanded, setExpanded] = useState(isActive)
+  const showLiveCursor =
+    isActive && step.status === 'running' && step.publicSummary
 
   return (
     <article
@@ -57,6 +59,12 @@ export function ProcessStepCard({
           {step.publicSummary && (
             <p className="mt-0.5 pl-5 text-xs text-muted-foreground">
               {step.publicSummary}
+              {showLiveCursor && (
+                <span
+                  aria-hidden
+                  className="ml-0.5 inline-block h-3 w-[2px] translate-y-0.5 bg-primary motion-safe:animate-pulse"
+                />
+              )}
             </p>
           )}
         </div>

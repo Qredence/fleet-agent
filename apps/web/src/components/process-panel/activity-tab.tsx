@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { DecisionCard } from '@/components/process-panel/decision-card'
 import { ProcessStepCard } from '@/components/process-panel/process-step-card'
@@ -24,6 +24,17 @@ export function ActivityTab({
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const activeStepRef = useRef<HTMLElement | null>(null)
+
+  // Live elapsed clock: ticks once per second while the run is active so the
+  // header shows real elapsed time instead of freezing at the last state
+  // delta. Pauses (stops ticking) the moment the run settles.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (!isRunning || !state.run.startedAt) return
+    setNowMs(Date.now())
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [isRunning, state.run.startedAt])
 
   // Scroll to the active step only when the user is already near the bottom;
   // never yank the scroll position while they inspect an older step.
@@ -73,7 +84,7 @@ export function ActivityTab({
         <StatusChip status={state.run.status} />
         <span className="text-xs tabular-nums text-muted-foreground">
           {isRunning && state.run.startedAt
-            ? 'in progress'
+            ? formatDuration(Math.max(0, nowMs - Date.parse(state.run.startedAt)))
             : formatDuration(state.metrics.durationMs)}
         </span>
       </div>
