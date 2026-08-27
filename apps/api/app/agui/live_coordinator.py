@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import suppress
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from ag_ui.core import (
     BaseEvent,
@@ -22,14 +22,20 @@ from ag_ui.core import (
 from ag_ui.encoder import EventEncoder
 from litellm.exceptions import RateLimitError
 
-from app.agent.engine import AgentEngine, AgentRunContext, AgentRunResult
+from app.agent.engine import (
+    AgentEngine,
+    AgentRunContext,
+    AgentRunResult,
+    AgentStreamUpdate,
+)
 from app.agui.event_bus import DONE, RunEventBus
-from app.agui.event_mapper import map_domain_event
+from app.agui.event_mapper import chunk_text, map_domain_event
 from app.agui.trace_reducer import TraceReducer
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
     ArtifactStarted,
+    FinalFieldsReady,
     SourceDiscovered,
     ToolCompleted,
     ToolFailed,
@@ -41,28 +47,6 @@ from app.services.run_persistence import RunPersistence
 
 logger = logging.getLogger(__name__)
 _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
-_TEXT_CHUNK_SIZE = 24
-
-
-def _chunk_text(text: str, chunk_size: int = _TEXT_CHUNK_SIZE) -> list[str]:
-    """Break text into streaming chunks for progressive client rendering."""
-    if not text:
-        return [""]
-    chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
-    words = text.split(" ")
-    for i, word in enumerate(words):
-        token = word if i == 0 else " " + word
-        current.append(token)
-        current_len += len(token)
-        if current_len >= chunk_size:
-            chunks.append("".join(current))
-            current = []
-            current_len = 0
-    if current:
-        chunks.append("".join(current))
-    return chunks or [text]
 
 
 class EngineBuilder(Protocol):
@@ -102,6 +86,7 @@ class LiveDSPyCoordinator:
             run_scoped_decisions=persistence is not None,
         )
         tools_message_id = f"msg-tools-{run_id}"
+        answer_message_id = f"msg-{run_id}"
         started_monotonic = loop.time()
         if metrics:
             metrics.incr("agent_runs_total")
@@ -202,6 +187,46 @@ class LiveDSPyCoordinator:
                 )
                 return False
 
+        def pump_stream(
+            stream_factory: Callable[..., Any],
+            *,
+            user_request: str,
+            history: Any | None,
+            context: AgentRunContext,
+        ) -> Coroutine[Any, Any, AgentRunResult]:
+            """Drive a streaming engine and bridge final fields onto the bus.
+
+            ``FinalFieldsReady`` is published from the loop the moment the
+            finish tool executes, so the browser sees the answer before the
+            engine settles. The pump still resolves to the authoritative
+            ``AgentRunResult`` so the coordinator's settlement paths are
+            unchanged.
+            """
+
+            async def run_pump() -> AgentRunResult:
+                result: AgentRunResult | None = None
+                async for update in stream_factory(
+                    user_request=user_request,
+                    history=history,
+                    context=context,
+                ):
+                    assert isinstance(update, AgentStreamUpdate)
+                    if update.kind == "final_fields":
+                        bus.publish_from_loop(
+                            FinalFieldsReady(
+                                answer=update.answer,
+                                process_summary=update.process_summary,
+                            )
+                        )
+                    else:
+                        result = update.result
+                if result is None:
+                    raise RuntimeError("streaming engine ended without a final result")
+                return result
+
+            return run_pump()
+
+        answer_streamed = False
         try:
             if persistence:
                 await persistence.mark_running(run_id=run_id, state_json=reducer.state)
@@ -222,13 +247,24 @@ class LiveDSPyCoordinator:
 
             context = AgentRunContext(thread_id=thread_id, run_id=run_id)
             engine = engine_builder(bus, thread_id=thread_id)
-            engine_task = asyncio.create_task(
-                engine.run(
-                    user_request=last_user_text(input_data),
-                    history=continuation_history,
-                    context=context,
+            stream_factory = getattr(engine, "stream", None)
+            if callable(stream_factory):
+                engine_task = asyncio.create_task(
+                    pump_stream(
+                        stream_factory,
+                        user_request=last_user_text(input_data),
+                        history=continuation_history,
+                        context=context,
+                    )
                 )
-            )
+            else:
+                engine_task = asyncio.create_task(
+                    engine.run(
+                        user_request=last_user_text(input_data),
+                        history=continuation_history,
+                        context=context,
+                    )
+                )
             engine_task.add_done_callback(lambda _task: bus.close_from_loop())
 
             try:
@@ -243,10 +279,13 @@ class LiveDSPyCoordinator:
                         event = await bus.next()
                         if event is DONE:
                             break
+                        if isinstance(event, FinalFieldsReady) and event.answer:
+                            answer_streamed = True
                         agui_events = map_domain_event(
                             event,  # type: ignore[arg-type]
                             tools_message_id=tools_message_id,
                             reducer=reducer,
+                            answer_message_id=answer_message_id,
                         )
                         if persistence and isinstance(
                             event,
@@ -294,16 +333,20 @@ class LiveDSPyCoordinator:
 
             delta = complete_public_state(result)
             if result.status == "completed":
-                message_id = f"msg-{run_id}"
                 yield emit(StateDeltaEvent(delta=delta))
-                yield emit(
-                    TextMessageStartEvent(message_id=message_id, role="assistant")
-                )
-                for chunk in _chunk_text(result.answer or ""):
+                if not answer_streamed:
                     yield emit(
-                        TextMessageContentEvent(message_id=message_id, delta=chunk)
+                        TextMessageStartEvent(
+                            message_id=answer_message_id, role="assistant"
+                        )
                     )
-                yield emit(TextMessageEndEvent(message_id=message_id))
+                    for chunk in chunk_text(result.answer or ""):
+                        yield emit(
+                            TextMessageContentEvent(
+                                message_id=answer_message_id, delta=chunk
+                            )
+                        )
+                    yield emit(TextMessageEndEvent(message_id=answer_message_id))
                 settled = (
                     await _settle_with_retry(
                         lambda: persistence.run_completed(
@@ -311,7 +354,7 @@ class LiveDSPyCoordinator:
                             run_id=run_id,
                             result=result,
                             state_json=reducer.state,
-                            assistant_message_id=message_id,
+                            assistant_message_id=answer_message_id,
                         )
                     )
                     if persistence

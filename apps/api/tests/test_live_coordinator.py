@@ -390,3 +390,97 @@ async def test_two_concurrent_runs_stay_isolated():
     state_b = apply_state(events_b)
     assert state_a["run"]["id"] == "run-a"
     assert state_b["run"]["id"] == "run-b"
+
+
+# --- finish-tool incremental streaming -------------------------------------
+
+
+async def test_engine_stream_delivers_final_fields_before_result():
+    """engine.stream() yields the submit tool's fields, then the result."""
+    engine = scripted_builder([[submit_call("Fresh answer.", "Fresh summary.")]])(
+        RunEventBus(asyncio.get_running_loop()), thread_id="t-stream"
+    )
+    from app.agent.engine import AgentRunContext
+
+    updates = []
+    async for update in engine.stream(
+        user_request="Explain state sync",
+        history=None,
+        context=AgentRunContext(thread_id="t-stream", run_id="r-stream"),
+    ):
+        updates.append(update)
+    assert [u.kind for u in updates] == ["final_fields", "result"]
+    assert updates[0].answer == "Fresh answer."
+    assert updates[0].process_summary == "Fresh summary."
+    assert updates[1].result is not None
+    assert updates[1].result.status == "completed"
+    assert updates[1].result.answer == "Fresh answer."
+
+
+async def test_streaming_coordinator_emits_answer_once_before_run_finished():
+    """The finish-tool answer arrives as ONE text message ahead of settlement."""
+    events = await collect([[submit_call("Answer early.", "Summary early.")]])
+    types = [e["type"] for e in events]
+    starts = [
+        e
+        for e in events
+        if e["type"] == "TEXT_MESSAGE_START" and e["messageId"] == "msg-run-live"
+    ]
+    assert len(starts) == 1
+    assert types.index("TEXT_MESSAGE_END") < types.index("RUN_FINISHED")
+    assert types[-1] == "RUN_FINISHED"
+    # Raw reasoning never crosses the wire.
+    assert all("next_thought" not in json.dumps(e) for e in events)
+    # The synthesis step ends up with the model's own summary.
+    state = apply_state(events)
+    synthesis = next(s for s in state["steps"] if s["id"] == "step-synthesis")
+    assert synthesis["publicSummary"] == "Summary early."
+    assert state["run"]["status"] == "completed"
+
+
+class _RunOnlyEngine:
+    """Fallback engine without incremental delivery (no .stream)."""
+
+    async def run(self, *, user_request, history, context):  # noqa: ANN001, ANN202
+        from app.agent.engine import AgentRunResult
+
+        return AgentRunResult(
+            status="completed",
+            answer="Fallback answer.",
+            process_summary="Fallback summary.",
+            key_decisions=[],
+            caveats=[],
+            termination_reason="submit",
+        )
+
+
+async def test_run_only_engine_falls_back_to_completion_time_answer():
+    """Engines without .stream still emit the answer message at completion."""
+    coordinator = LiveDSPyCoordinator()
+    from ag_ui.core import RunAgentInput
+
+    def builder(bus, *, thread_id="t-test"):  # noqa: ANN001, ANN202
+        return _RunOnlyEngine()
+
+    stream = coordinator.stream(
+        input_data=RunAgentInput.model_validate(run_input()),
+        engine_builder=builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    types = [e["type"] for e in events]
+    starts = [
+        e
+        for e in events
+        if e["type"] == "TEXT_MESSAGE_START" and e["messageId"] == "msg-run-live"
+    ]
+    assert len(starts) == 1
+    assert starts[0] is not None
+    deltas = [i for i, t in enumerate(types) if t == "STATE_DELTA"]
+    assert types.index("TEXT_MESSAGE_START") > deltas[-1]
+    assert types[-1] == "RUN_FINISHED"
+    content = [e for e in events if e["type"] == "TEXT_MESSAGE_CONTENT"]
+    assert "".join(e["delta"] for e in content) == "Fallback answer."

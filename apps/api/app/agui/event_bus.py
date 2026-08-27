@@ -23,6 +23,10 @@ class RunEventBus:
     def publish_from_worker(self, event: DomainEvent) -> None:
         self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
 
+    def publish_from_loop(self, event: DomainEvent) -> None:
+        """Publish from the event loop itself (no cross-thread hop needed)."""
+        self._queue.put_nowait(event)
+
     def close_from_loop(self) -> None:
         """Signal that no more domain events will arrive."""
         self._queue.put_nowait(_EVENT_SOURCE_DONE)

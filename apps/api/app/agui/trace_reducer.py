@@ -277,6 +277,34 @@ class TraceReducer:
 
     # -- completion ----------------------------------------------------------
 
+    def live_synthesis_summary(self, summary: str) -> list[JsonPatchOp]:
+        """Surface the model-written process summary mid-run (finish tool).
+
+        Creates and starts the synthesis step early so the browser sees
+        synthesis running with the summary while the engine settles.
+        complete_run() remains the authoritative overwrite; the same text
+        makes the completion delta idempotent.
+        """
+        if not summary:
+            return []
+        ops: list[JsonPatchOp] = []
+        if "step-synthesis" not in self._step_index:
+            ops += self._add_step(
+                "step-synthesis",
+                phase="synthesis",
+                title="Preparing the response",
+                status="running",
+            )
+        idx = self._step_index["step-synthesis"]
+        if self.state["steps"][idx].get("status") != "running":
+            ops += self._start_step("step-synthesis")
+            idx = self._step_index["step-synthesis"]
+        self.state["steps"][idx]["publicSummary"] = summary
+        ops.append(
+            {"op": "add", "path": f"/steps/{idx}/publicSummary", "value": summary}
+        )
+        return ops
+
     def complete_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
         ops: list[JsonPatchOp] = []
         if "step-research" in self._step_index:
