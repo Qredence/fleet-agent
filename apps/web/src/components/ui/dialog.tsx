@@ -24,6 +24,11 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
+/**
+ * Renders the backdrop behind an open dialog.
+ *
+ * @param className - Additional classes to apply to the backdrop.
+ */
 function DialogOverlay({
   className,
   ...props
@@ -40,6 +45,12 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Renders dialog content in a centered portal with an overlay and optional close button.
+ *
+ * @param showCloseButton - Whether to display the close button.
+ * @returns The dialog content element.
+ */
 function DialogContent({
   className,
   children,
@@ -82,6 +93,11 @@ function DialogContent({
   )
 }
 
+/**
+ * Renders a styled container for dialog headings and supporting content.
+ *
+ * @param className - Additional CSS classes to apply to the container
+ */
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -92,6 +108,11 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * Renders a styled footer for a dialog with optional close button.
+ *
+ * @param showCloseButton - Whether to include an outline close button.
+ */
 function DialogFooter({
   className,
   showCloseButton = false,
@@ -132,6 +153,11 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   )
 }
 
+/**
+ * Renders descriptive text for a dialog.
+ *
+ * @param className - Additional classes to apply to the description
+ */
 function DialogDescription({
   className,
   ...props

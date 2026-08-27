@@ -17,6 +17,16 @@ export interface MessagePairProps extends Omit<
   variant?: "bubble" | "flat";
 }
 
+/**
+ * Renders a user message alongside a progressively displayed assistant response.
+ *
+ * @param userMessage - The message sent by the user
+ * @param words - The assistant response words
+ * @param visibleWords - The number of response words to display
+ * @param streaming - Whether the response is currently streaming
+ * @param variant - The visual style of the user message
+ * @returns The rendered message pair
+ */
 export function MessagePair({
   userMessage,
   words,

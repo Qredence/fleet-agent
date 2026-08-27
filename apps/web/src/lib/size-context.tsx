@@ -108,8 +108,12 @@ const typeScale = {
 
 type TypeScaleRole = keyof typeof typeScale;
 
-/** The type scale resolved for the active ladder step (px per role):
- *  explicit override > surrounding SizeProvider > "default". */
+/**
+ * Resolves typography sizes for the active size variant.
+ *
+ * @param override - Optional size variant that takes precedence over the surrounding provider.
+ * @returns Pixel values for each supported type-scale role.
+ */
 function useTypeScale(
   override?: SizeVariant | null
 ): Record<TypeScaleRole, number> {
@@ -131,23 +135,45 @@ interface SizeContextValue {
 
 const SizeContext = createContext<SizeContextValue | null>(null);
 
-/** Resolve the active size variant: explicit prop > provider > "default". */
+/**
+ * Determines the active size variant.
+ *
+ * @param override - An explicit size variant that takes precedence over the surrounding provider.
+ * @returns The explicit variant, provider variant, or `default` when neither is set.
+ */
 function useSizeVariant(override?: SizeVariant | null): SizeVariant {
   const ctx = useContext(SizeContext);
   return override ?? ctx?.size ?? "default";
 }
 
-/** Resolve size classes: explicit prop > provider > "default". */
+/**
+ * Resolves the size classes for the active size variant.
+ *
+ * @param override - Optional size variant that takes precedence over the provider value.
+ * @returns The control, typography, spacing, and icon classes for the resolved size variant.
+ */
 function useSize(override?: SizeVariant | null): SizeClasses {
   return sizeMap[useSizeVariant(override)];
 }
 
+/**
+ * Provides access to the active size context.
+ *
+ * @returns The active size context.
+ * @throws An error if called outside a `SizeProvider`.
+ */
 function useSizeContext() {
   const ctx = useContext(SizeContext);
   if (!ctx) throw new Error("useSizeContext must be used within a SizeProvider");
   return ctx;
 }
 
+/**
+ * Provides size settings to descendant components.
+ *
+ * @param size - Controlled size variant for the provider region
+ * @param defaultSize - Initial size variant when the provider is uncontrolled
+ */
 function SizeProvider({
   children,
   size,

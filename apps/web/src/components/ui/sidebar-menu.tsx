@@ -91,10 +91,12 @@ const MenuItemContext = createContext<MenuItemContextValue | null>(null);
  *  action flows in the wrapper's row instead of positioning itself. */
 const MenuActionsClusterContext = createContext(false);
 
-/** True while the element sits inside a collapsed sub-tree — clipped away,
- *  so it must be invisible to hover, highlights, and keyboard order. Rows
- *  stay registered either way: unregistering on every toggle would churn the
- *  proximity measurements and blink the overlays. */
+/**
+ * Determines whether an element is inside a collapsed submenu.
+ *
+ * @param el - The element to inspect
+ * @returns `true` if the element is inside a collapsed submenu, `false` otherwise.
+ */
 function rowHidden(el: HTMLElement) {
   return el.closest('[data-sidebar="menu-sub"][data-state="closed"]') !== null;
 }
@@ -104,6 +106,12 @@ function rowHidden(el: HTMLElement) {
  *  moves within its level instead of remounting. */
 let overlayGroupSeq = 0;
 const overlayGroupIds = new WeakMap<Element, number>();
+/**
+ * Gets the stable overlay group identifier associated with an element.
+ *
+ * @param el - The element whose overlay group identifier is requested
+ * @returns The element's overlay group identifier
+ */
 function overlayGroupId(el: Element) {
   let id = overlayGroupIds.get(el);
   if (id === undefined) {
@@ -113,10 +121,24 @@ function overlayGroupId(el: Element) {
   return id;
 }
 
+/**
+ * Orders two elements according to their document position.
+ *
+ * @param a - The first element to compare
+ * @param b - The second element to compare
+ * @returns `-1` if `a` precedes `b`, `1` otherwise
+ */
 function byDomOrder(a: HTMLElement, b: HTMLElement) {
   return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
 }
 
+/**
+ * Compares two element arrays for identical length and order.
+ *
+ * @param a - The first element array
+ * @param b - The second element array
+ * @returns `true` if both arrays contain the same elements in the same order, `false` otherwise.
+ */
 function sameElements(a: HTMLElement[], b: HTMLElement[]) {
   return a.length === b.length && a.every((el, i) => el === b[i]);
 }
@@ -135,6 +157,12 @@ interface MenuScope {
   overlays: ReactNode;
 }
 
+/**
+ * Manages shared interaction state, row registration, keyboard navigation, and visual overlays for a sidebar menu.
+ *
+ * @param containerRef - Reference to the menu container used for event handling and row measurements
+ * @returns The menu scope value, container event handlers, and rendered interaction overlays
+ */
 function useMenuScope(containerRef: RefObject<HTMLElement | null>): MenuScope {
   const {
     activeIndex,
@@ -562,6 +590,13 @@ SidebarMenu.displayName = "SidebarMenu";
 
 export type SidebarMenuItemProps = LiHTMLAttributes<HTMLLIElement>;
 
+/**
+ * Manages registration and interaction state for a sidebar menu row.
+ *
+ * @param rowRef - Reference to the row element.
+ * @param isSubRow - Whether the row belongs to a nested submenu.
+ * @returns Row refs, state, and handlers for synchronizing the row with its menu scope.
+ */
 function useMenuRow(rowRef: RefObject<HTMLLIElement | null>, isSubRow = false) {
   const scope = useContext(MenuScopeContext);
   const registerRow = scope?.registerRow;
@@ -675,6 +710,13 @@ const ROW_GAP = 4;
 const ROW_BADGE_INSET = 8;
 const ROW_ACTION_INSET = 6;
 
+/**
+ * Calculates the right-side padding required for a menu row's badge and actions.
+ *
+ * @param actionCount - The number of actions in the row
+ * @param hasBadge - Whether the row includes a badge
+ * @returns The required right-side padding in pixels
+ */
 function rowGutter(actionCount: number, hasBadge: boolean) {
   if (!actionCount && !hasBadge) return ROW_BASE_PAD;
   const actionsWidth = actionCount
@@ -753,11 +795,15 @@ SidebarMenuSubItem.displayName = "SidebarMenuSubItem";
 
 // ─── Row label (ghost-span weight animation) ─────────────────────────────────
 
-/** Splits leading string children out as the label so it can get the
- *  ghost-span weight treatment; remaining element children (dots, trailing
- *  icons) render as flex siblings after it — outside the text-box-trimmed
- *  span, which would clip an inline SVG, and where `ml-auto` can push a
- *  trailing control to the row's end. */
+/**
+ * Renders a menu row label with stable text width and separate trailing content.
+ *
+ * @param content - The label content and any trailing elements to render.
+ * @param lit - Whether the label uses the foreground color.
+ * @param emphasized - Whether the label uses emphasized text weight.
+ * @param textClass - Additional classes applied to the label.
+ * @returns The rendered label and trailing elements.
+ */
 function MenuRowLabel({
   content,
   lit,

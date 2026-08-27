@@ -54,6 +54,14 @@ interface SidebarSheetProps {
   children: ReactNode;
 }
 
+/**
+ * Renders an animated mobile sidebar sheet with focus management, backdrop dismissal, and exit handling.
+ *
+ * @param side - The side of the viewport where the sheet appears.
+ * @param open - Whether the sheet is open.
+ * @param onClose - Callback invoked after the closing animation completes.
+ * @param children - The sidebar content rendered inside the sheet.
+ */
 function SidebarSheet({ side, open, onClose, children }: SidebarSheetProps) {
   const { widthMobile } = useSidebar();
   // Reduced motion drops the slide (the movement) but keeps the scrim's

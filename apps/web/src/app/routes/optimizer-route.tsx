@@ -5,6 +5,11 @@ import { AgentWorkspace } from '@/components/workspace/agent-workspace'
 import { useThreads } from '@/features/threads/use-threads'
 import { Button } from '@/components/ui/button'
 
+/**
+ * Renders the DSPy Program Optimizer workspace for the current project.
+ *
+ * @returns The optimizer workspace with sample metrics and program architecture data.
+ */
 export function OptimizerRoute() {
   const { projectId } = useParams<{ projectId: string }>()
   const threads = useThreads(projectId)

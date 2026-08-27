@@ -73,6 +73,17 @@ interface UseProximityHoverReturn {
  */
 const measurementAttempts = 3;
 
+/**
+ * Tracks the item nearest to the pointer within a container.
+ *
+ * Supports horizontal, vertical, and two-dimensional proximity selection,
+ * measures registered items, and updates measurements when the container or
+ * items resize.
+ *
+ * @param containerRef - Reference to the container whose registered items are tracked
+ * @param options - Selection axis and optional item-disabled predicate
+ * @returns The active item state, measured rectangles, event handlers, item registration callback, and measurement controls
+ */
 export function useProximityHover<T extends HTMLElement>(
   containerRef: RefObject<T | null>,
   options: UseProximityHoverOptions = {}
@@ -412,8 +423,11 @@ export function useProximityHover<T extends HTMLElement>(
 }
 
 /**
- * Hook for child items to register themselves with the proximity hover system.
- * Call in useEffect with the item's ref and index.
+ * Registers an item with the proximity hover system and unregisters it when the component unmounts or its dependencies change.
+ *
+ * @param registerItem - Callback that registers or unregisters the item element
+ * @param index - Item index
+ * @param ref - Ref for the item element
  */
 export function useRegisterProximityItem(
   registerItem: (index: number, element: HTMLElement | null) => void,

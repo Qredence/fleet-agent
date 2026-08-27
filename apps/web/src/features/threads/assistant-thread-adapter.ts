@@ -63,6 +63,14 @@ export async function waitForThreadHistoryWrites(
   }
 }
 
+/**
+ * Creates a history adapter for loading and persisting a thread's messages.
+ *
+ * @param threadId - The thread whose history is managed
+ * @param suppliedBootstrap - Optional preloaded thread data used instead of fetching bootstrap data
+ * @param options - Optional persistence callbacks
+ * @returns An adapter that loads, appends, and updates thread messages
+ */
 export function buildHistoryAdapter(
   threadId: string,
   suppliedBootstrap?: ThreadBootstrap,

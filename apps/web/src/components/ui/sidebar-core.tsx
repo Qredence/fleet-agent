@@ -107,6 +107,12 @@ const mountedProviders: HTMLElement[] = [];
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
+/**
+ * Accesses the nearest sidebar context.
+ *
+ * @returns The sidebar state and control methods.
+ * @throws When called outside a `SidebarProvider`.
+ */
 export function useSidebar(): SidebarContextValue {
   const ctx = useContext(SidebarContext);
   if (!ctx) throw new Error("useSidebar must be used within a SidebarProvider");
@@ -114,7 +120,12 @@ export function useSidebar(): SidebarContextValue {
 }
 
 // Starts undefined so the server and first client render agree (both treat it
-// as desktop); the media query corrects it in an effect before interaction.
+/**
+ * Determines whether the viewport is narrower than the mobile breakpoint.
+ *
+ * @param breakpoint - The viewport width at which mobile behavior begins, in pixels.
+ * @returns `true` if the viewport is narrower than the breakpoint, `false` otherwise.
+ */
 function useIsMobile(breakpoint: number): boolean {
   const [isMobile, setIsMobile] = useState<boolean | undefined>(undefined);
   useEffect(() => {
@@ -402,6 +413,12 @@ type SlotProps = {
   children?: ReactNode;
 } & Record<string, unknown>;
 
+/**
+ * Combines multiple refs into a single ref callback.
+ *
+ * @param refs - The refs to update when the callback receives a node
+ * @returns A ref callback that assigns the node to each provided ref
+ */
 function composeRefs<T>(...refs: (Ref<T> | undefined)[]): Ref<T> {
   return (node: T | null) => {
     for (const r of refs) {
@@ -411,9 +428,14 @@ function composeRefs<T>(...refs: (Ref<T> | undefined)[]): Ref<T> {
   };
 }
 
-/** Resolves the element to clone: `render` wins, else `asChild`'s single
- *  element child. `content` is what should render inside it — for `asChild`
- *  the child element's own children, otherwise the caller's. */
+/**
+ * Selects the element template and content for polymorphic rendering.
+ *
+ * @param render - An explicit element template that takes precedence over `asChild`.
+ * @param asChild - Whether to use the single valid child element as the template.
+ * @param children - The content or child element to render.
+ * @returns The selected element template and its content, or the original children when no template is available.
+ */
 export function resolveSlotTemplate(
   render: ReactElement | undefined,
   asChild: boolean | undefined,
@@ -434,8 +456,17 @@ export function resolveSlotTemplate(
   return { template: null, content: children };
 }
 
-/** Renders `content` into the template element (merging class/style/handlers,
- *  composing refs) or into the default tag when there is no template. */
+/**
+ * Renders content using a template element or the specified default element type.
+ *
+ * Merges classes, styles, event handlers, and refs when rendering through a template.
+ *
+ * @param template - Element to clone and render, or `null` to use `DefaultTag`
+ * @param DefaultTag - Element type used when no template is provided
+ * @param props - Props to merge into the rendered element
+ * @param content - Content rendered inside the element
+ * @returns The rendered element
+ */
 export function slotElement(
   template: ReactElement<SlotProps> | null,
   DefaultTag: ElementType,
@@ -835,8 +866,11 @@ function ShortcutKbd({ children }: { children: ReactNode }) {
   );
 }
 
-/** The tooltips always show the toggle keystroke, falling back to the
- *  side's default key even when the provider's binding is disabled. */
+/**
+ * Determines the keyboard shortcut displayed for sidebar toggles.
+ *
+ * @returns The configured shortcut or the default shortcut for the sidebar side
+ */
 function useShortcutKey(): string {
   const { side, shortcut } = useSidebar();
   return (

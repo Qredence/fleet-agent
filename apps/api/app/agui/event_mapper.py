@@ -79,12 +79,16 @@ def map_domain_event(
     reducer: TraceReducer,
     answer_message_id: str | None = None,
 ) -> list[BaseEvent]:
-    """Single dispatch point: applies the state delta and wraps the
-    AG-UI events for the domain event's kind.
-
-    Inline data is deliberately not applied to ``AgentWorkspaceState``. It is
-    a bounded transcript projection, while the process panel remains the
-    authoritative AG-UI state view.
+    """
+    Convert a domain event into the corresponding AG-UI events and state updates.
+    
+    Parameters:
+    	event (AnyDomainEvent): The domain event to convert.
+    	tools_message_id (str): The message identifier used for tool-related events.
+    	answer_message_id (str | None): The message identifier used for final answer events, when available.
+    
+    Returns:
+    	list[BaseEvent]: The AG-UI events representing the domain event.
     """
     if isinstance(event, FinalFieldsReady):
         return map_final_fields_event(
@@ -127,6 +131,17 @@ def map_tool_event(
     tools_message_id: str,
     state_delta_ops: list[JsonPatchOp],
 ) -> list[BaseEvent]:
+    """
+    Convert a tool lifecycle event into AG-UI events, including any associated state updates.
+    
+    Parameters:
+    	event: The tool start, completion, or failure event to convert.
+    	tools_message_id: The message identifier associated with the tool call.
+    	state_delta_ops: State operations to include in the resulting events.
+    
+    Returns:
+    	list[BaseEvent]: The AG-UI events representing the tool event and any state changes.
+    """
     events: list[BaseEvent] = []
 
     if isinstance(event, ToolStarted):
@@ -169,12 +184,16 @@ def map_final_fields_event(
     answer_message_id: str | None,
     reducer: TraceReducer,
 ) -> list[BaseEvent]:
-    """Stream the finish tool's answer as one text message, then the summary.
-
-    The answer becomes a complete TextMessage trio (the coordinator suppresses
-    its completion-time re-emission when it saw this); the process summary
-    lands on the synthesis step via a state delta so the panel shows synthesis
-    running with the model's own summary before the run settles.
+    """
+    Convert final answer and process summary fields into AG-UI events.
+    
+    Parameters:
+    	event (FinalFieldsReady): Final answer and process summary data to convert.
+    	answer_message_id (str | None): Message identifier for the streamed assistant answer.
+    	reducer (TraceReducer): Reducer used to apply the process summary.
+    
+    Returns:
+    	list[BaseEvent]: Events for the assistant answer and synthesis summary.
     """
     events: list[BaseEvent] = []
 

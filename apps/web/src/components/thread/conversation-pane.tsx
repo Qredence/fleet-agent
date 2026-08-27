@@ -15,9 +15,12 @@ interface ConversationPaneProps {
 }
 
 /**
- * Center conversation pane: assistant-ui Thread over the AG-UI runtime.
- * Shows user messages and final assistant text; `showThinking: false` keeps
- * reasoning out of the transcript (see agent-runtime-provider).
+ * Renders the central conversation area with sidebar and process-panel controls.
+ *
+ * Custom content is rendered when provided; otherwise, the default conversation thread uses the workspace context.
+ *
+ * @param workspaceContext - Context supplied to the default conversation thread.
+ * @param children - Optional content rendered instead of the default conversation thread.
  */
 export function ConversationPane({
   onSidebarToggle,

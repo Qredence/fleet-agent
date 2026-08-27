@@ -28,11 +28,12 @@ import { surfaceClasses } from '@/lib/surface-classes'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
 /**
- * Three-pane workspace shell.
+ * Renders the responsive agent workspace for a project conversation.
  *
- * ≥1200px: sidebar + conversation + process panel, all resizable.
- * 768–1199px: sidebar + conversation; process panel becomes a Sheet.
- * <768px: conversation only; both side panels become Sheets.
+ * @param projectId - The identifier of the current project.
+ * @param threadId - The identifier of the current conversation thread.
+ * @param threadTitle - The title of the current conversation.
+ * @param customMain - Optional custom content for the main conversation area.
  */
 export function AgentWorkspace({
   projectId,
@@ -77,7 +78,11 @@ export function AgentWorkspace({
   )
 }
 
-/** Shared toggle wiring for the conversation header buttons. */
+/**
+ * Provides conversation header actions for toggling the sidebar and process panel.
+ *
+ * @returns Toggle handlers and the process panel's active state.
+ */
 function usePaneActions() {
   const isCompact = useIsCompact()
   const isMobile = useIsMobile()
@@ -106,6 +111,13 @@ function usePaneActions() {
   }
 }
 
+/**
+ * Renders the desktop workspace with project navigation, conversation content, and agent process views.
+ *
+ * @param threadTitle - The title displayed for the current conversation.
+ * @param workspaceContext - Context describing the current agent, project, and thread.
+ * @param customMain - Optional custom content rendered in the conversation pane.
+ */
 function DesktopWorkspace({
   threadTitle = 'New conversation',
   workspaceContext,
@@ -246,6 +258,13 @@ function DesktopWorkspace({
   )
 }
 
+/**
+ * Renders the mobile workspace with conversation content and sheet-based project and process panels.
+ *
+ * @param threadTitle - The title displayed for the current thread.
+ * @param workspaceContext - Context describing the current agent, project, and thread.
+ * @param customMain - Optional custom content rendered in the conversation pane.
+ */
 function MobileWorkspace({
   threadTitle = 'New conversation',
   workspaceContext,

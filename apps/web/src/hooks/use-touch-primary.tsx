@@ -7,6 +7,11 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * Detects whether the current device has touch input and uses a coarse primary pointer.
+ *
+ * @returns `true` when touch input is available and the primary pointer is coarse, `false` otherwise.
+ */
 export function useTouchPrimary() {
   const [isTouchPrimary, setIsTouchPrimary] = useState(false);
 

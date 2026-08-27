@@ -169,6 +169,13 @@ function ReasoningFade({
   );
 }
 
+/**
+ * Renders a collapsible trigger for the reasoning content.
+ *
+ * @param active - Whether reasoning is currently being generated.
+ * @param duration - Elapsed reasoning duration in seconds.
+ * @returns A collapsible trigger with a status label and disclosure icon.
+ */
 function ReasoningTrigger({
   active,
   duration,

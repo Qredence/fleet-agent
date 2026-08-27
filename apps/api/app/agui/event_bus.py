@@ -21,10 +21,15 @@ class RunEventBus:
         self.cancel_token = RunCancelToken()
 
     def publish_from_worker(self, event: DomainEvent) -> None:
+        """Queue an event for delivery from a worker thread."""
         self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
 
     def publish_from_loop(self, event: DomainEvent) -> None:
-        """Publish from the event loop itself (no cross-thread hop needed)."""
+        """Publishes an event directly from the event loop.
+        
+        Parameters:
+        	event (DomainEvent): The event to publish.
+        """
         self._queue.put_nowait(event)
 
     def close_from_loop(self) -> None:

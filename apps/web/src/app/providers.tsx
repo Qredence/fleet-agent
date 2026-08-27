@@ -4,6 +4,12 @@ import { useEffect, type ReactNode } from 'react'
 import { queryClient } from '@/lib/query-client'
 import { applyTheme, useWorkspaceStore } from '@/state/workspace-store'
 
+/**
+ * Provides application-wide data fetching and theme management to child components.
+ *
+ * @param children - The components rendered within the providers
+ * @returns The children wrapped with the query client provider
+ */
 export function AppProviders({ children }: { children: ReactNode }) {
   const theme = useWorkspaceStore((s) => s.theme)
 

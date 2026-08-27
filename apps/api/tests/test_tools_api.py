@@ -4,6 +4,15 @@ from tests.conftest import make_test_app
 
 
 async def get_catalog(app):
+    """
+    Request the tools catalog from the test application.
+    
+    Parameters:
+    	app: ASGI application to serve the request.
+    
+    Returns:
+    	Response: HTTP response from the `/api/tools` endpoint.
+    """
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:

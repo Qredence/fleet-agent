@@ -20,6 +20,12 @@ import { useShape } from "@/lib/shape-context";
 
 const TooltipPortalContainerContext = createContext<HTMLElement | null>(null);
 
+/**
+ * Provides a DOM element for rendering descendant tooltips through a portal.
+ *
+ * @param value - The portal container element, or `null` to use no container.
+ * @param children - The descendant content that receives the portal container.
+ */
 function TooltipPortalContainer({
   value,
   children,
@@ -49,6 +55,14 @@ interface TooltipProviderProps {
   timeout?: number;
 }
 
+/**
+ * Configures shared tooltip timing for descendant tooltips.
+ *
+ * @param delayDuration - The delay before a tooltip opens.
+ * @param skipDelayDuration - The delay before opening a tooltip after another tooltip closes.
+ * @param delay - Fallback delay before a tooltip opens.
+ * @param timeout - Fallback delay before opening a tooltip after another tooltip closes.
+ */
 function TooltipProvider({
   children,
   delayDuration,
@@ -75,7 +89,11 @@ function TooltipProvider({
 
 // ---------------------------------------------------------------------------
 // Primitive components
-// ---------------------------------------------------------------------------
+/**
+ * Provides the root context for a tooltip and its associated trigger and content.
+ *
+ * @param props - Configuration and state for the tooltip root.
+ */
 
 function TooltipRoot({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
@@ -85,6 +103,15 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+/**
+ * Renders positioned, animated tooltip content with an arrow.
+ *
+ * @param side - The side of the trigger where the tooltip is placed.
+ * @param sideOffset - The distance between the tooltip and the trigger.
+ * @param align - The alignment of the tooltip relative to the trigger.
+ * @param alignOffset - The alignment offset from the trigger.
+ * @returns The tooltip content element.
+ */
 function TooltipContent({
   className,
   side = "top",
@@ -141,6 +168,12 @@ interface CustomTooltipProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+/**
+ * Determines the initial animation offset for a tooltip based on its side.
+ *
+ * @param side - The side where the tooltip is positioned
+ * @returns The directional offset used for the tooltip's entrance animation
+ */
 function getSlideOffset(side: TooltipSide) {
   switch (side) {
     case "top":
@@ -154,6 +187,12 @@ function getSlideOffset(side: TooltipSide) {
   }
 }
 
+/**
+ * Creates a tooltip root with optional custom content and cursor-following behavior.
+ *
+ * @param props - Tooltip root and custom tooltip properties.
+ * @returns A configured tooltip root.
+ */
 function Tooltip(props: TooltipPrimitive.Root.Props & CustomTooltipProps) {
   // If invoked as <Tooltip content="...">children</Tooltip>
   if ("content" in props && props.content !== undefined) {
@@ -191,6 +230,16 @@ function Tooltip(props: TooltipPrimitive.Root.Props & CustomTooltipProps) {
   return <TooltipRoot {...props} />;
 }
 
+/**
+ * Renders an animated tooltip around a trigger element.
+ *
+ * @param content - The content displayed in the tooltip.
+ * @param side - The side of the trigger where the tooltip appears.
+ * @param sideOffset - The distance between the tooltip and its trigger.
+ * @param forceOpen - Controls visibility when specified.
+ * @param followCursor - Moves the tooltip along the specified cursor axis.
+ * @param onOpenChange - Called when the tooltip visibility changes.
+ */
 function CustomTooltipWrapper({
   content,
   children,

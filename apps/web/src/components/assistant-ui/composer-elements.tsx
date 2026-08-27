@@ -138,6 +138,11 @@ interface ComposerPreferencesContextValue {
 const ComposerPreferencesContext =
   createContext<ComposerPreferencesContextValue | null>(null);
 
+/**
+ * Provides composer preferences and their update functions to descendant components.
+ *
+ * @param children - The components that can access the composer preferences context
+ */
 export function ComposerPreferencesProvider({
   children,
 }: PropsWithChildren) {
@@ -164,6 +169,12 @@ export function ComposerPreferencesProvider({
   );
 }
 
+/**
+ * Provides access to composer preferences and their setters.
+ *
+ * @returns The current composer preferences context
+ * @throws Error if used outside a `ComposerPreferencesProvider`
+ */
 function useComposerPreferences(): ComposerPreferencesContextValue {
   const value = useContext(ComposerPreferencesContext);
   if (!value) {
@@ -325,11 +336,23 @@ export const ComposerAccessPicker: FC = () => {
   );
 };
 
+/**
+ * Estimates the number of thousands of units represented by a character count.
+ *
+ * @param characters - The number of characters to estimate
+ * @returns `0` for zero or fewer characters; otherwise, the character count divided into 4,000-character increments, with a minimum of `1`
+ */
 function estimateThousands(characters: number): number {
   if (characters <= 0) return 0;
   return Math.max(1, Math.ceil(characters / 4000));
 }
 
+/**
+ * Counts visible text characters in strings and structured content.
+ *
+ * @param value - The value to inspect, including strings, arrays, or content objects
+ * @returns The number of visible text characters, excluding image, file, audio, and data content
+ */
 function visibleTextCharacters(value: unknown): number {
   if (typeof value === "string") return value.length;
   if (Array.isArray(value)) {
@@ -390,6 +413,11 @@ const slashAdapterCommands = SLASH_COMMANDS.map((command) => ({
   execute: () => undefined,
 }));
 
+/**
+ * Renders the icon associated with a slash command or mention trigger item.
+ *
+ * @param item - The trigger item whose icon should be rendered
+ */
 function TriggerItemIcon({ item }: { item: Unstable_TriggerItem }) {
   if (item.type === "command") {
     const command = SLASH_COMMANDS.find((entry) => entry.name === item.id);
@@ -399,6 +427,11 @@ function TriggerItemIcon({ item }: { item: Unstable_TriggerItem }) {
   return <AtSignIcon className="size-4 shrink-0 text-muted-foreground" />;
 }
 
+/**
+ * Renders trigger items with their icons, labels, descriptions, and keyboard hints.
+ *
+ * @param items - The trigger items to display.
+ */
 function TriggerItems({ items }: { items: readonly Unstable_TriggerItem[] }) {
   if (!items.length) {
     return (

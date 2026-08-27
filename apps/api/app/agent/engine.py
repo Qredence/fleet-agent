@@ -46,7 +46,18 @@ class AgentEngine(Protocol):
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
-    ) -> AgentRunResult: ...
+    ) -> AgentRunResult: """
+        Execute an agent run for the user's request and conversation history.
+        
+        Parameters:
+        	user_request (str): The request to process.
+        	history (Any | None): Previous conversation history, if available.
+        	context (AgentRunContext): Thread and run identifiers for the execution.
+        
+        Returns:
+        	AgentRunResult: The completed or failed agent run result.
+        """
+        ...
 
 
 @dataclass(frozen=True)
@@ -146,6 +157,16 @@ class DspyReActV2Engine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
+        """
+        Execute an agent run and convert its prediction into a public result.
+        
+        Parameters:
+        	user_request (str): The user's request to process.
+        	history (Any | None): Optional prior conversation history.
+        
+        Returns:
+        	AgentRunResult: The completed or failed agent run result.
+        """
         del context  # run identity is consumed by the bridge (PR 6)
         prediction = await asyncio.to_thread(self._run_sync, user_request, history)
         return _map_result(prediction)
@@ -157,19 +178,26 @@ class DspyReActV2Engine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AsyncIterator[AgentStreamUpdate]:
-        """Deliver final fields at submit time, then the settled result.
-
-        Wraps the per-run submit tool so the public answer/process_summary are
-        bridged to the event loop the moment the finish tool executes inside
-        the worker thread — before ReActV2 settles the prediction. The hook is
-        deliberately best-effort: a closed loop must not turn delivery into a
-        submit failure (ReActV2 would then fall through to forced submit).
+        """Stream submission fields when available, followed by the settled agent result.
+        
+        Yields:
+            AgentStreamUpdate: A submit-time update containing public final fields or a
+                final update containing the completed run result.
+        
+        Raises:
+            BaseException: If agent execution fails.
         """
         del context  # run identity is consumed by the bridge (PR 6)
         loop = asyncio.get_running_loop()
         updates: asyncio.Queue[AgentStreamUpdate | _StreamFailed] = asyncio.Queue()
 
         def on_agent_ready(agent: dspy.ReActV2) -> None:
+            """
+            Configure the agent's submission tool to publish final fields to the stream.
+            
+            Parameters:
+                agent (dspy.ReActV2): Agent whose submission tool should be monitored.
+            """
             submit = agent.tools.get("submit")
             if submit is None:
                 return
@@ -195,6 +223,11 @@ class DspyReActV2Engine:
             submit.func = submit_hook
 
         async def produce() -> None:
+            """
+            Run the agent execution and enqueue its final stream update.
+            
+            Agent execution failures are enqueued for stream consumers before being propagated.
+            """
             try:
                 prediction = await asyncio.to_thread(
                     self._run_sync,
@@ -230,6 +263,17 @@ class DspyReActV2Engine:
         *,
         on_agent_ready: Callable[[dspy.ReActV2], None] | None = None,
     ) -> dspy.Prediction:
+        """
+        Execute the configured agent for a user request and conversation history.
+        
+        Parameters:
+        	user_request (str): The user's request to process.
+        	history (Any | None): Optional conversation history.
+        	on_agent_ready (Callable[[dspy.ReActV2], None] | None): Optional callback invoked after the agent is created.
+        
+        Returns:
+        	dspy.Prediction: The agent's prediction.
+        """
         try:
             agent = self._agent_factory()
             if on_agent_ready is not None:

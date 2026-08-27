@@ -78,6 +78,9 @@ const THREAD_PREVIEW_COUNT = 5
 const PROJECT_ACTION_REVEAL =
   'pointer-events-none opacity-0 transition-opacity duration-80 group-hover/group-header:pointer-events-auto group-hover/group-header:opacity-100 group-focus-within/group-header:pointer-events-auto group-focus-within/group-header:opacity-100 has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100'
 
+/**
+ * Renders the application sidebar with workspace controls, project search, navigation links, project groups, and footer actions.
+ */
 export function ProjectSidebar() {
   const projects = useProjects()
   const [createOpen, setCreateOpen] = useState(false)
@@ -265,6 +268,9 @@ export function ProjectSidebar() {
   )
 }
 
+/**
+ * Provides a menu for selecting the workspace theme.
+ */
 function ThemeDropdownMenu() {
   const theme = useWorkspaceStore((s) => s.theme)
   const setTheme = useWorkspaceStore((s) => s.setTheme)
@@ -316,6 +322,9 @@ function ThemeDropdownMenu() {
   )
 }
 
+/**
+ * Provides a menu item for creating a thread in the active project and navigating to it.
+ */
 function NewThreadMenuItem() {
   const { projectId } = useParams<{ projectId?: string }>()
   const navigate = useNavigate()
@@ -349,6 +358,12 @@ function NewThreadMenuItem() {
   )
 }
 
+/**
+ * Displays a project section with its threads and project actions.
+ *
+ * @param project - The project whose threads and actions are displayed
+ * @param defaultOpen - Whether the section is initially expanded
+ */
 function ProjectSection({
   project,
   defaultOpen,
@@ -521,6 +536,13 @@ function ProjectSection({
   )
 }
 
+/**
+ * Renders a project actions menu with options to rename or delete the project.
+ *
+ * @param name - The project name used to label the actions control
+ * @param onRename - Callback invoked when Rename is selected
+ * @param onDelete - Callback invoked when Delete is selected
+ */
 function ProjectDropdownAction({
   name,
   onRename,
@@ -556,6 +578,12 @@ function ProjectDropdownAction({
   )
 }
 
+/**
+ * Renders a dialog for creating a project and navigates to the new project after creation.
+ *
+ * @param open - Whether the dialog is open
+ * @param onOpenChange - Called when the dialog's open state changes
+ */
 function CreateProjectDialog({
   open,
   onOpenChange,
@@ -581,6 +609,13 @@ function CreateProjectDialog({
   )
 }
 
+/**
+ * Provides a dialog for creating or renaming a project.
+ *
+ * @param initialName - The initial project name shown when the dialog opens
+ * @param onSubmit - Submits the trimmed project name
+ * @param onSuccess - Handles the successful submission result
+ */
 function ProjectNameDialog<TResult>({
   open,
   onOpenChange,

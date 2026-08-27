@@ -45,6 +45,12 @@ interface ProcessHeaderProps {
   compact?: boolean
 }
 
+/**
+ * Renders a menu item for opening the current file in a new tab.
+ *
+ * @param canOpen - Whether the current file can be opened
+ * @param onOpen - Callback invoked when the file is opened
+ */
 function ProcessOpenMenuItem({
   canOpen,
   onOpen,
@@ -64,6 +70,12 @@ function ProcessOpenMenuItem({
   )
 }
 
+/**
+ * Renders the process panel header with the active file path and available actions.
+ *
+ * @param activeFilePath - The currently selected file path.
+ * @param compact - Whether to place secondary actions in an overflow menu.
+ */
 function ProcessHeader({
   activeFilePath,
   onClose,
@@ -207,6 +219,12 @@ function ProcessHeader({
   )
 }
 
+/**
+ * Displays a centered idle-state message with an accompanying icon.
+ *
+ * @param icon - The icon to display above the message
+ * @param message - The message to display
+ */
 function IdleState({ icon, message }: { icon: ReactNode; message: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
@@ -217,9 +235,10 @@ function IdleState({ icon, message }: { icon: ReactNode; message: string }) {
 }
 
 /**
- * Right-side process panel. Renders ONLY the AG-UI agent state
- * (useAgUiState) — an intentional, user-safe trace of steps, tool calls,
- * sources, and artifacts. Never parses messages; never sees chain-of-thought.
+ * Renders the process panel with activity, sources, and artifacts views for the current agent workspace state.
+ *
+ * @param onClose - Closes the process panel.
+ * @param compact - Uses compact panel styling and controls when `true`.
  */
 export function ProcessPanel({
   onClose,

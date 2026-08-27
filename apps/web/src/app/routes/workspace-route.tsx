@@ -19,8 +19,9 @@ import {
 } from '@/features/threads/threads-api'
 
 /**
- * Workspace route. URL owns the active project/thread; the runtime provider
- * remounts (keyed by threadId) so every thread gets a clean adapter instance.
+ * Manages the project workspace route and active conversation state.
+ *
+ * @returns The workspace view, a loading or error state, or a redirect for an unknown thread.
  */
 export function WorkspaceRoute() {
   const { projectId, threadId } = useParams<{

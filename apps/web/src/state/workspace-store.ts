@@ -34,6 +34,11 @@ interface WorkspaceState {
   setSelectedArtifactId: (artifactId: string | null) => void
 }
 
+/**
+ * Applies the selected theme to the document root.
+ *
+ * @param theme - The theme mode to apply.
+ */
 export function applyTheme(theme: ThemeMode) {
   const root = document.documentElement
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches

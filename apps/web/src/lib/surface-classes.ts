@@ -42,6 +42,13 @@ export const SURFACE_HOVER_SHADOW: Record<number, string> = {
   8: "hover:shadow-surface-8",
 };
 
+/**
+ * Generates background and shadow classes for the specified surface levels.
+ *
+ * @param bgLevel - The background surface level, clamped and rounded to a value from 1 through 8.
+ * @param shadowLevel - The shadow surface level, clamped and rounded to a value from 1 through 8.
+ * @returns The corresponding background and shadow CSS classes.
+ */
 export function surfaceClasses(bgLevel: number, shadowLevel: number = bgLevel): string {
   // Round after clamping so a fractional level can't index out of the lookup
   // tables (which would render "undefined undefined").
@@ -50,9 +57,13 @@ export function surfaceClasses(bgLevel: number, shadowLevel: number = bgLevel): 
   return `${SURFACE_BG[bg]} ${SURFACE_SHADOW[shadow]}`;
 }
 
-/** The hover half of `surfaceClasses`: the level a surface rises to while the
- *  pointer is on it. Same literal-lookup reason as above — `hover:bg-surface-`
- *  plus a template expression generates nothing. */
+/**
+ * Builds the hover-state surface classes for the specified background and shadow levels.
+ *
+ * @param bgLevel - Background level, clamped and rounded to an integer from 1 through 8
+ * @param shadowLevel - Shadow level, clamped and rounded to an integer from 1 through 8
+ * @returns The corresponding hover background and shadow CSS classes
+ */
 export function surfaceHoverClasses(
   bgLevel: number,
   shadowLevel: number = bgLevel

@@ -7,6 +7,11 @@ interface ProjectNavTabsProps {
   className?: string
 }
 
+/**
+ * Renders navigation tabs for the sections of the current project.
+ *
+ * @param className - Additional CSS classes for the navigation container
+ */
 export function ProjectNavTabs({ className }: ProjectNavTabsProps) {
   const { projectId, threadId } = useParams<{
     projectId?: string

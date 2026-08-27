@@ -67,6 +67,12 @@ const sampleTree: FileNode[] = [
   { name: 'SUPPORT.md', path: 'SUPPORT.md', type: 'file', status: 'modified', icon: 'text' },
 ]
 
+/**
+ * Renders a searchable, expandable file tree with selectable files.
+ *
+ * @param selectedPath - The path of the currently selected file or directory.
+ * @param onSelectPath - Callback invoked with the path when a file is selected.
+ */
 export function FileExplorer({
   selectedPath = 'README.md',
   onSelectPath,

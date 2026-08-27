@@ -13,6 +13,11 @@ class ToolCatalogResponse(BaseModel):
 
 @router.get("/tools", response_model=ToolCatalogResponse)
 async def list_tools(request: Request) -> ToolCatalogResponse:
-    """Browser-safe catalog of the tools registered with the DSPy engine."""
+    """
+    Builds a browser-safe catalog of tools registered with the DSPy engine.
+    
+    Returns:
+        ToolCatalogResponse: The catalog of registered tools.
+    """
     settings: Settings = request.app.state.settings
     return ToolCatalogResponse(tools=tool_catalog_entries(settings))

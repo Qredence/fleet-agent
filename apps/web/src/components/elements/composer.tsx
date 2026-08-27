@@ -75,11 +75,24 @@ const ATTACHMENT_ICONS: Record<
 
 const BARS = Array.from({ length: 14 }, (_, i) => i);
 
+/**
+ * Calculates the waveform bar height for a given bar position and animation tick.
+ *
+ * @param bar - The waveform bar index
+ * @param tick - The animation tick
+ * @returns The calculated bar height
+ */
 function barHeight(bar: number, tick: number): number {
   return 5 + Math.abs(Math.sin(bar * 1.35 + tick * 0.55)) * 13;
 }
 
-/** Commands whose name starts with the slash query, or none when not typing one. */
+/**
+ * Finds commands matching the slash-prefixed query in the input.
+ *
+ * @param value - The current composer input.
+ * @param commands - The commands available for matching.
+ * @returns Commands whose names start with the case-insensitive query, or an empty array when the input is not a slash query.
+ */
 export function useSlashMatches(
   value: string,
   commands: readonly ComposerCommand[] | undefined,
@@ -107,11 +120,21 @@ export function useMentionMatches(
   }, [people, value]);
 }
 
-/** Replaces the trailing @mention with the chosen name. */
+/**
+ * Replaces the trailing `@mention` token with the selected name and a trailing space.
+ *
+ * @returns The updated text.
+ */
 export function applyMention(value: string, name: string): string {
   return value.replace(/@[\w]*$/, `@${name} `);
 }
 
+/**
+ * Renders the outer container for a message composer.
+ *
+ * @param className - Additional CSS classes for the container
+ * @returns The composer container element
+ */
 export function Composer({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
@@ -122,6 +145,11 @@ export function Composer({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
+/**
+ * Renders the composer's main surface with optional drag-active styling.
+ *
+ * @param dragActive - Whether to indicate that content is being dragged over the composer.
+ */
 export function ComposerBar({
   dragActive = false,
   className,
@@ -142,6 +170,12 @@ export function ComposerBar({
   );
 }
 
+/**
+ * Renders an animated popup menu aligned to the start or end of its container.
+ *
+ * @param open - Whether the menu is visible and interactive.
+ * @param align - The edge used to align the menu.
+ */
 export function ComposerMenu({
   open,
   align = "start",
@@ -169,6 +203,11 @@ export function ComposerMenu({
   );
 }
 
+/**
+ * Renders a selectable button within a composer menu.
+ *
+ * @param active - Whether the menu item is currently highlighted.
+ */
 export function ComposerMenuItem({
   active = false,
   className,
@@ -189,6 +228,12 @@ export function ComposerMenuItem({
   );
 }
 
+/**
+ * Renders a slash-command option in the composer menu.
+ *
+ * @param command - The command name, description, and icon to display
+ * @param active - Whether the command is currently active
+ */
 export function ComposerCommandItem({
   command,
   active,
@@ -213,6 +258,12 @@ export function ComposerCommandItem({
   );
 }
 
+/**
+ * Renders a selectable person entry in the composer menu.
+ *
+ * @param person - The person and role displayed in the menu item
+ * @param active - Whether the menu item is currently active
+ */
 export function ComposerPersonItem({
   person,
   active,
@@ -232,6 +283,9 @@ export function ComposerPersonItem({
   );
 }
 
+/**
+ * Groups composer attachment elements in a wrapping layout.
+ */
 export function ComposerAttachments({
   className,
   ...props
@@ -245,6 +299,12 @@ export function ComposerAttachments({
   );
 }
 
+/**
+ * Displays an attachment with its metadata and current upload state.
+ *
+ * @param attachment - The attachment details and upload state to display
+ * @param onRemove - Callback invoked with the attachment name when removal is requested
+ */
 export function ComposerAttachmentChip({
   attachment,
   onRemove,
@@ -311,6 +371,14 @@ export function ComposerAttachmentChip({
   );
 }
 
+/**
+ * Provides a composer input that submits when Enter is pressed.
+ *
+ * Submission is skipped during IME composition or when the key event has been
+ * prevented by the provided `onKeyDown` handler.
+ *
+ * @param onSubmit - Callback invoked when the input is submitted
+ */
 export function ComposerInput({
   onSubmit,
   onKeyDown,
@@ -335,6 +403,12 @@ export function ComposerInput({
   );
 }
 
+/**
+ * Displays voice recording activity, elapsed time, or transcription status.
+ *
+ * @param recording - Whether voice recording is active
+ * @param seconds - Elapsed recording time in seconds
+ */
 export function ComposerVoice({
   recording,
   seconds,
@@ -382,6 +456,11 @@ export function ComposerVoice({
   );
 }
 
+/**
+ * Provides a layout container for composer toolbar controls.
+ *
+ * @param className - Additional CSS classes for the toolbar.
+ */
 export function ComposerToolbar({
   className,
   ...props
@@ -395,6 +474,9 @@ export function ComposerToolbar({
   );
 }
 
+/**
+ * Provides a layout container for composer action controls.
+ */
 export function ComposerActions({
   className,
   ...props
@@ -408,6 +490,11 @@ export function ComposerActions({
   );
 }
 
+/**
+ * Renders a button for adding an attachment to the composer.
+ *
+ * The button is disabled when no click handler is provided.
+ */
 export function ComposerAttachButton({
   className,
   ...props
@@ -430,6 +517,12 @@ export function ComposerAttachButton({
   );
 }
 
+/**
+ * Renders a button that displays the selected model and its expanded state.
+ *
+ * @param model - The model name displayed by the button
+ * @param open - Whether the associated model menu is expanded
+ */
 export function ComposerModelTrigger({
   model,
   open,
@@ -456,6 +549,12 @@ export function ComposerModelTrigger({
   );
 }
 
+/**
+ * Renders a selectable model option in the composer menu.
+ *
+ * @param entry - The model and metadata displayed in the menu item
+ * @param selected - Whether the model is currently selected
+ */
 export function ComposerModelItem({
   entry,
   selected,
@@ -479,6 +578,11 @@ export function ComposerModelItem({
   );
 }
 
+/**
+ * Displays context usage with a progress indicator and detailed usage breakdown.
+ *
+ * @param usage - Context usage totals and optional display metadata
+ */
 export function ComposerContext({
   usage,
   className,
@@ -605,6 +709,11 @@ export function ComposerContext({
   );
 }
 
+/**
+ * Renders a button that starts or stops voice recording.
+ *
+ * @param active - Whether voice recording is currently active.
+ */
 export function ComposerVoiceButton({
   active,
   className,
@@ -635,6 +744,12 @@ export function ComposerVoiceButton({
   );
 }
 
+/**
+ * Renders a send button that switches to a stop control while a response is streaming.
+ *
+ * @param streaming - Whether the composer is currently streaming a response
+ * @param idle - Whether the composer is idle
+ */
 export function ComposerSend({
   streaming,
   idle,

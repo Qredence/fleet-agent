@@ -45,12 +45,13 @@ const feedbackAdapter: FeedbackAdapter = {
 }
 
 /**
- * AG-UI runtime for the workspace: one HttpAgent to the FastAPI SSE endpoint.
+ * Provides the AG-UI runtime for a workspace conversation.
  *
- * `showThinking: false` is deliberate — the ProcessPanel renders the
- * intentional user-safe trace from agent state; reasoning blocks stay hidden.
- * When `threadId` is set, the history adapter restores persisted AG-UI
- * messages and the supplied bootstrap state seeds the process panel.
+ * @param threadId - The persisted conversation identifier.
+ * @param bootstrap - Initial state used to restore the conversation.
+ * @param onUserMessagePersisted - Callback invoked after a user message is persisted.
+ * @param children - Content rendered within the runtime provider.
+ * @returns The runtime provider containing the workspace content.
  */
 export function AgentRuntimeProvider({
   threadId,

@@ -26,10 +26,21 @@ const TOOL_META: Record<string, { icon: typeof Search; type: string }> = {
   get_current_time: { icon: Clock, type: 'Utility' },
 }
 
+/**
+ * Retrieves display metadata for a tool name.
+ *
+ * @param name - The tool name used to look up its metadata
+ * @returns The tool's icon and category, or generic registered-tool metadata when no match exists
+ */
 function toolMeta(name: string) {
   return TOOL_META[name] ?? { icon: Wrench, type: 'Registered Tool' }
 }
 
+/**
+ * Renders a catalog card with a tool's metadata, description, status, capabilities, and timeout.
+ *
+ * @param tool - The tool entry to display.
+ */
 function ToolCard({ tool }: { tool: ToolCatalogEntry }) {
   const { icon: Icon, type } = toolMeta(tool.name)
   return (
@@ -77,6 +88,9 @@ function ToolCard({ tool }: { tool: ToolCatalogEntry }) {
   )
 }
 
+/**
+ * Renders the DSPy Tools Catalog for the current project.
+ */
 export function ToolsRoute() {
   const { projectId } = useParams<{ projectId: string }>()
   const threads = useThreads(projectId)

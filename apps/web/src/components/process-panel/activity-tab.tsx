@@ -11,9 +11,10 @@ import { ToolExecutionCard } from '@/components/process-panel/tool-execution-car
 import type { AgentWorkspaceState } from '@/contracts/generated'
 
 /**
- * Activity tab: run summary, step timeline, tools, decisions, metrics,
- * termination details — everything from the AG-UI agent state, never parsed
- * out of conversation messages.
+ * Renders the agent run's status, duration, process steps, decisions, tool calls, metrics, termination details, and caveats.
+ *
+ * @param state - The current agent workspace state
+ * @param isRunning - Whether the agent run is active
  */
 export function ActivityTab({
   state,

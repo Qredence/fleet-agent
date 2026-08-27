@@ -64,18 +64,34 @@ interface ShapeContextValue {
 
 const ShapeContext = createContext<ShapeContextValue | null>(null);
 
+/**
+ * Provides the active shape classes for the current shape context.
+ *
+ * @returns The active shape classes, or pill shape classes when no provider is present.
+ */
 function useShape(): ShapeClasses {
   const ctx = useContext(ShapeContext);
   if (!ctx) return shapeMap.pill;
   return ctx.classes;
 }
 
+/**
+ * Retrieves the active shape context.
+ *
+ * @returns The current shape variant, setter, and associated classes.
+ * @throws An error if called outside a `ShapeProvider`.
+ */
 function useShapeContext() {
   const ctx = useContext(ShapeContext);
   if (!ctx) throw new Error("useShapeContext must be used within a ShapeProvider");
   return ctx;
 }
 
+/**
+ * Provides shape configuration and controls to descendant components.
+ *
+ * @param defaultShape - The initial shape variant, defaulting to `"pill"`.
+ */
 function ShapeProvider({
   children,
   defaultShape = "pill",

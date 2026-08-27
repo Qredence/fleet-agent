@@ -36,6 +36,11 @@ const sampleConnectors = [
   },
 ]
 
+/**
+ * Renders the preview hub for project connectors and MCP integrations.
+ *
+ * @returns The connectors hub interface with sample connector data and preview controls.
+ */
 export function ConnectorsRoute() {
   const { projectId } = useParams<{ projectId: string }>()
   const threads = useThreads(projectId)
