@@ -8,6 +8,11 @@ import { createContext, useContext, type ReactNode } from 'react'
  */
 const AgUiRuntimePresenceContext = createContext(false)
 
+/**
+ * Marks descendant components as having an AG-UI runtime available.
+ *
+ * @param children - The components rendered within the provider
+ */
 export function AgUiRuntimePresenceProvider({
   children,
 }: {
@@ -20,6 +25,11 @@ export function AgUiRuntimePresenceProvider({
   )
 }
 
+/**
+ * Determines whether an AG-UI runtime is available to the consumer.
+ *
+ * @returns `true` if an AG-UI runtime is mounted above the consumer, `false` otherwise.
+ */
 export function useHasAgUiRuntime(): boolean {
   return useContext(AgUiRuntimePresenceContext)
 }

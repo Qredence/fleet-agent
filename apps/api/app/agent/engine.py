@@ -83,6 +83,11 @@ class _StreamFailed:
     __slots__ = ("error",)
 
     def __init__(self, error: BaseException) -> None:
+        """Store an exception raised by the stream producer.
+        
+        Parameters:
+            error (BaseException): The exception to propagate to stream consumers.
+        """
         self.error = error
 
 
@@ -179,13 +184,13 @@ class DspyReActV2Engine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AsyncIterator[AgentStreamUpdate]:
-        """Stream submission fields when available, followed by the settled agent
-            result.
-
+        """
+        Stream public submission fields when available, followed by the settled agent result.
+        
         Yields:
-            AgentStreamUpdate: A submit-time update containing public final fields or a
-                final update containing the completed run result.
-
+            AgentStreamUpdate: A submission update with public final fields or a result update
+                containing the completed run result.
+        
         Raises:
             BaseException: If agent execution fails.
         """
@@ -206,6 +211,15 @@ class DspyReActV2Engine:
             original = submit.func
 
             def submit_hook(**kwargs: Any) -> Any:
+                """
+                Bridge submitted answer fields to the stream and return the original submission result.
+                
+                Parameters:
+                	**kwargs (Any): Submission fields, including the answer and process summary.
+                
+                Returns:
+                	Any: The result of the original submission handler.
+                """
                 value = original(**kwargs)
                 final = AgentStreamUpdate(
                     kind="final_fields",

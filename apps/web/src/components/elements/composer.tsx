@@ -91,7 +91,7 @@ function barHeight(bar: number, tick: number): number {
  *
  * @param value - The current composer input.
  * @param commands - The commands available for matching.
- * @returns Commands whose names start with the case-insensitive query, or an empty array when the input is not a slash query.
+ * @returns Commands whose names start with the query, or an empty array when the input is not slash-prefixed.
  */
 export function useSlashMatches(
   value: string,
@@ -104,7 +104,13 @@ export function useSlashMatches(
   }, [commands, value]);
 }
 
-/** People matching a trailing @mention, or none when the caret is not in one. */
+/**
+ * Finds people whose names match the trailing `@mention` query.
+ *
+ * @param value - The current input value.
+ * @param people - The people available for matching.
+ * @returns People matching the trailing mention, or an empty array when no mention is active.
+ */
 export function useMentionMatches(
   value: string,
   people: readonly ComposerPerson[] | undefined,
@@ -146,9 +152,9 @@ export function Composer({ className, ...props }: ComponentProps<"div">) {
 }
 
 /**
- * Renders the composer's main surface with optional drag-active styling.
+ * Renders the composer's main surface with optional drag-over styling.
  *
- * @param dragActive - Whether to indicate that content is being dragged over the composer.
+ * @param dragActive - Whether content is currently being dragged over the composer.
  */
 export function ComposerBar({
   dragActive = false,
@@ -579,7 +585,7 @@ export function ComposerModelItem({
 }
 
 /**
- * Displays context usage with a progress indicator and detailed usage breakdown.
+ * Displays context usage as a progress indicator with a detailed breakdown.
  *
  * @param usage - Context usage totals and optional display metadata
  */

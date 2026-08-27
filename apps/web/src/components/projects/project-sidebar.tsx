@@ -612,9 +612,9 @@ function CreateProjectDialog({
 /**
  * Provides a dialog for creating or renaming a project.
  *
- * @param initialName - The initial project name shown when the dialog opens
- * @param onSubmit - Submits the trimmed project name
- * @param onSuccess - Handles the successful submission result
+ * @param initialName - The project name displayed when the dialog opens
+ * @param onSubmit - Handles submission of the trimmed project name
+ * @param onSuccess - Handles the result after a successful submission
  */
 function ProjectNameDialog<TResult>({
   open,

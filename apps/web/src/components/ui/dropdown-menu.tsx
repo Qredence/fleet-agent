@@ -13,6 +13,9 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
+/**
+ * Renders the control that opens and closes the dropdown menu.
+ */
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
@@ -62,6 +65,9 @@ function DropdownMenuContent({
   )
 }
 
+/**
+ * Groups related dropdown menu items.
+ */
 function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
 }
@@ -92,10 +98,10 @@ function DropdownMenuLabel({
 }
 
 /**
- * Renders a styled dropdown menu item.
+ * Renders a styled dropdown menu item with optional indentation and destructive styling.
  *
- * @param inset - Adds indentation for the item content.
- * @param variant - Sets the item appearance to the default or destructive style.
+ * @param inset - Indents the item content.
+ * @param variant - Controls whether the item uses default or destructive styling.
  * @returns The styled dropdown menu item.
  */
 function DropdownMenuItem({
@@ -121,6 +127,11 @@ function DropdownMenuItem({
   )
 }
 
+/**
+ * Groups a dropdown menu's trigger and nested content into a submenu.
+ *
+ * @param props - Properties for the submenu root.
+ */
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />
 }

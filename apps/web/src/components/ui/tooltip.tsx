@@ -188,9 +188,9 @@ function getSlideOffset(side: TooltipSide) {
 }
 
 /**
- * Creates a tooltip root with optional custom content and cursor-following behavior.
+ * Creates a tooltip with optional custom content and cursor-following behavior.
  *
- * @param props - Tooltip root and custom tooltip properties.
+ * @param props - Tooltip root properties and optional custom tooltip configuration.
  * @returns A configured tooltip root.
  */
 function Tooltip(props: TooltipPrimitive.Root.Props & CustomTooltipProps) {

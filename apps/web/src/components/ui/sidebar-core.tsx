@@ -429,12 +429,12 @@ function composeRefs<T>(...refs: (Ref<T> | undefined)[]): Ref<T> {
 }
 
 /**
- * Selects the element template and content for polymorphic rendering.
+ * Selects a polymorphic rendering template and its content.
  *
  * @param render - An explicit element template that takes precedence over `asChild`.
- * @param asChild - Whether to use the single valid child element as the template.
+ * @param asChild - Whether to use the first valid child element as the template.
  * @param children - The content or child element to render.
- * @returns The selected element template and its content, or the original children when no template is available.
+ * @returns The selected template and content, or the original children when no template is available.
  */
 export function resolveSlotTemplate(
   render: ReactElement | undefined,
@@ -867,9 +867,9 @@ function ShortcutKbd({ children }: { children: ReactNode }) {
 }
 
 /**
- * Determines the keyboard shortcut displayed for sidebar toggles.
+ * Resolves the keyboard shortcut used for sidebar toggles.
  *
- * @returns The configured shortcut or the default shortcut for the sidebar side
+ * @returns The configured shortcut, or the default shortcut for the sidebar side
  */
 function useShortcutKey(): string {
   const { side, shortcut } = useSidebar();

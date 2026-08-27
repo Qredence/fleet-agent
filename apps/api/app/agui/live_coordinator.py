@@ -157,6 +157,12 @@ class LiveDSPyCoordinator:
                 return []
 
         async def settle_cancelled() -> bool:
+            """
+            Settle a cancelled agent run and record its terminal state.
+            
+            Returns:
+                bool: `True` if persistence succeeds or is unavailable, `False` if persistence fails after retries or the run was already settled.
+            """
             nonlocal terminal_settled
             async with settlement_lock:
                 if terminal_settled:
@@ -192,11 +198,10 @@ class LiveDSPyCoordinator:
 
         async def settle_cancelled_bounded() -> bool:
             """
-            Complete cancellation settlement within a bounded, shielded interval.
-
+            Settles cancellation within a bounded interval.
+            
             Returns:
-                bool: `True` if cancellation settlement completes successfully, `False`
-                    if it times out or fails.
+            	bool: `True` if settlement succeeds within the timeout, `False` if it times out or reports failure.
             """
 
             task = asyncio.create_task(settle_cancelled())
@@ -222,30 +227,29 @@ class LiveDSPyCoordinator:
             history: Any | None,
             context: AgentRunContext,
         ) -> Coroutine[Any, Any, AgentRunResult]:
-            """Consume a streaming engine and publish final answer fields as soon as
-                they become available.
-
+            """
+            Consume streaming engine updates and publish final answer fields when available.
+            
             Parameters:
-                stream_factory: Callable that produces agent stream updates.
+                stream_factory: Factory that produces agent stream updates.
                 user_request: The user's request.
                 history: Prior conversation history, if available.
                 context: Context for the agent run.
-
+            
             Returns:
-                The authoritative agent run result.
-
+                The completed agent run result.
+            
             Raises:
                 RuntimeError: If the stream ends without a final result.
             """
 
             async def run_pump() -> AgentRunResult:
                 """
-                Consume the streaming engine updates and provide the completed agent run
-                    result.
-
+                Consume streaming engine updates and provide the completed agent run result.
+                
                 Raises:
                     RuntimeError: If the stream ends without a final result.
-
+                
                 Returns:
                     AgentRunResult: The completed agent run result.
                 """

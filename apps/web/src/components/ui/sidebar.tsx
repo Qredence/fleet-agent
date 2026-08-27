@@ -55,12 +55,10 @@ interface SidebarSheetProps {
 }
 
 /**
- * Renders an animated mobile sidebar sheet with focus management, backdrop dismissal, and exit handling.
+ * Renders an animated mobile sidebar sheet with focus management and dismissal handling.
  *
- * @param side - The side of the viewport where the sheet appears.
- * @param open - Whether the sheet is open.
+ * @param side - The viewport edge where the sheet appears.
  * @param onClose - Callback invoked after the closing animation completes.
- * @param children - The sidebar content rendered inside the sheet.
  */
 function SidebarSheet({ side, open, onClose, children }: SidebarSheetProps) {
   const { widthMobile } = useSidebar();

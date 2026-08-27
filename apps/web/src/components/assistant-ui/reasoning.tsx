@@ -131,6 +131,12 @@ function ReasoningRoot({
   );
 }
 
+/**
+ * Renders a gradient overlay at the top or bottom of reasoning content.
+ *
+ * @param side - The edge where the fade appears.
+ * @returns The gradient overlay element.
+ */
 function ReasoningFade({
   side = "bottom",
   className,
@@ -170,11 +176,11 @@ function ReasoningFade({
 }
 
 /**
- * Renders a collapsible trigger for the reasoning content.
+ * Renders a collapsible trigger for reasoning content with a status label and disclosure icon.
  *
  * @param active - Whether reasoning is currently being generated.
  * @param duration - Elapsed reasoning duration in seconds.
- * @returns A collapsible trigger with a status label and disclosure icon.
+ * @returns A collapsible trigger displaying the current reasoning status.
  */
 function ReasoningTrigger({
   active,

@@ -16,6 +16,12 @@ _EVENT_SOURCE_DONE = object()
 
 class RunEventBus:
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        """
+        Initialize an event bus for the specified event loop.
+        
+        Parameters:
+            loop (asyncio.AbstractEventLoop): Event loop used for thread-safe event publishing.
+        """
         self._loop = loop
         self._queue: asyncio.Queue[DomainEvent | object] = asyncio.Queue()
         self.cancel_token = RunCancelToken()

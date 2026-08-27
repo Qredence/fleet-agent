@@ -72,7 +72,7 @@ function ProcessOpenMenuItem({
 }
 
 /**
- * Renders the process panel header with the active file path and available actions.
+ * Displays the process panel title, active file path, and file actions.
  *
  * @param activeFilePath - The currently selected file path.
  * @param compact - Whether to place secondary actions in an overflow menu.
@@ -325,9 +325,11 @@ function ProcessPanelTabs({
 }
 
 /**
- * Renders children with the AG-UI agent state when a runtime is mounted
- * (WorkspaceRoute), and the fallback when it is not (preview routes such as
- * /tools, /optimizer, /connectors, where useAgUiState would throw).
+ * Renders agent-state content when an AG-UI runtime is available, or fallback content otherwise.
+ *
+ * @param children - Renders the agent workspace state and running status
+ * @param fallback - Content to render when no AG-UI runtime is available
+ * @returns The runtime-dependent content
  */
 function RuntimeAgentStateGate({
   children,
@@ -346,6 +348,11 @@ function RuntimeAgentStateGate({
   )
 }
 
+/**
+ * Provides the current agent workspace state and running status to child content.
+ *
+ * @param children - Renders content using the available agent state and running status
+ */
 function RuntimeAgentStateSubscription({
   children,
 }: {
@@ -360,15 +367,12 @@ function RuntimeAgentStateSubscription({
 }
 
 /**
- * Renders the process panel with activity, sources, and artifacts views for the current agent workspace state.
+ * Displays activity, sources, and artifacts for the current workspace.
  *
- * Renders ONLY the AG-UI agent state (useAgUiState) — an intentional,
- * user-safe trace of steps, tool calls, sources, and artifacts. Never parses
- * messages; never sees chain-of-thought. Without an AG-UI runtime (preview
- * routes) it degrades to idle-state tabs.
+ * Uses idle-state tabs when no agent runtime is available.
  *
  * @param onClose - Closes the process panel.
- * @param compact - Uses compact panel styling and controls when `true`.
+ * @param compact - Applies compact panel styling and controls when `true`.
  */
 export function ProcessPanel({
   onClose,

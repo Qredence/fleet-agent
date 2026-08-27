@@ -337,10 +337,10 @@ export const ComposerAccessPicker: FC = () => {
 };
 
 /**
- * Estimates the number of thousands of units represented by a character count.
+ * Estimates character usage in thousands using 4,000-character increments.
  *
  * @param characters - The number of characters to estimate
- * @returns `0` for zero or fewer characters; otherwise, the character count divided into 4,000-character increments, with a minimum of `1`
+ * @returns `0` for zero or fewer characters; otherwise, the estimated number of increments, with a minimum of `1`
  */
 function estimateThousands(characters: number): number {
   if (characters <= 0) return 0;

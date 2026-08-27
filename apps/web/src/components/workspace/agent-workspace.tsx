@@ -125,11 +125,11 @@ function ProcessPanelAutoOpen() {
 }
 
 /**
- * Renders the desktop workspace with project navigation, conversation content, and agent process views.
+ * Renders the desktop workspace with project navigation, conversation content, and process controls.
  *
  * @param threadTitle - The title displayed for the current conversation.
  * @param workspaceContext - Context describing the current agent, project, and thread.
- * @param customMain - Optional custom content rendered in the conversation pane.
+ * @param customMain - Optional custom content rendered within the conversation pane.
  */
 function DesktopWorkspace({
   threadTitle = 'New conversation',

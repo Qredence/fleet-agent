@@ -20,6 +20,9 @@ function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
+/**
+ * Closes the dialog when activated.
+ */
 function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
@@ -140,6 +143,11 @@ function DialogFooter({
   )
 }
 
+/**
+ * Renders a styled heading for dialog content.
+ *
+ * @param className - Additional classes to apply to the title
+ */
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title

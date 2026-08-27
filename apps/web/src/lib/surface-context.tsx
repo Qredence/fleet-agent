@@ -14,9 +14,9 @@ export function useSurface(): number {
 }
 
 /**
- * Provides a clamped surface level to descendant components.
+ * Provides a surface level to descendant components, clamped to the inclusive range 1–8.
  *
- * @param value - The surface level, clamped to the range 1–8
+ * @param value - The surface level to provide
  * @param children - The descendant content that receives the surface level
  */
 export function SurfaceProvider({

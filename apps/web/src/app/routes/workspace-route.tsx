@@ -19,7 +19,7 @@ import {
 } from '@/features/threads/threads-api'
 
 /**
- * Manages the project workspace route and active conversation state.
+ * Manages the project workspace route and active conversation state, including thread loading, title resolution, and unknown-thread redirects.
  *
  * @returns The workspace view, a loading or error state, or a redirect for an unknown thread.
  */

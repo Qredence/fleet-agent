@@ -13,8 +13,7 @@ interface ProcessStepCardProps {
 }
 
 /**
- * Collapsed: one line with status, title, duration and the public summary.
- * Expanded: summary, tools used and evidence for the step.
+ * Displays a collapsible process step with its status, title, duration, summary, tools, and evidence.
  */
 export function ProcessStepCard({
   step,
