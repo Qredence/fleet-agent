@@ -228,17 +228,20 @@ const AttachmentUI: FC = () => {
           </AttachmentPreviewDialog>
           {isComposer && <AttachmentRemove />}
         </AttachmentPrimitive.Root>
-        {(isUploading || isError) && (
-          <span
-            className="sr-only"
-            role={isError ? "alert" : "status"}
-            aria-live="polite"
-          >
-            {isError
-              ? `${attachmentName || "Attachment"}: ${errorMessage}`
-              : `${attachmentName || "Attachment"} is uploading.`}
-          </span>
-        )}
+        {/* Always-mounted live regions: a live region inserted together
+            with its content is frequently missed by screen readers, and
+            role="alert" already implies aria-live="assertive" — an explicit
+            polite value would conflict with it. */}
+        <span className="sr-only" role="status" aria-live="polite">
+          {isUploading
+            ? `${attachmentName || "Attachment"} is uploading.`
+            : ""}
+        </span>
+        <span className="sr-only" role="alert">
+          {isError
+            ? `${attachmentName || "Attachment"}: ${errorMessage}`
+            : ""}
+        </span>
         <TooltipContent side="top">
           <AttachmentPrimitive.Name />
           {errorMessage && (

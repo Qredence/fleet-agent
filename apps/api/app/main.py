@@ -15,6 +15,7 @@ from app.api.metrics import router as metrics_router
 from app.api.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.api.projects import router as projects_router
 from app.api.threads import router as threads_router
+from app.api.tools import router as tools_router
 from app.persistence.db import build_engine, build_sessionmaker
 from app.persistence.repositories import RunsRepository
 from app.services.artifact_storage import LocalArtifactStorage
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_router)
     app.include_router(projects_router)
     app.include_router(threads_router)
+    app.include_router(tools_router)
     app.include_router(artifacts_router)
     app.include_router(metrics_router)
 

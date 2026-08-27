@@ -521,23 +521,31 @@ const AssistantActionBar: FC = () => {
         </AuiIf>
       </ActionBarPrimitive.Copy>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7 text-muted-foreground hover:text-foreground"
-        aria-label="Good response"
+      <ActionBarPrimitive.FeedbackPositive
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground hover:text-foreground data-[submitted]:text-foreground"
+            aria-label="Good response"
+          />
+        }
       >
         <ThumbsUp className="size-3.5" />
-      </Button>
+      </ActionBarPrimitive.FeedbackPositive>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7 text-muted-foreground hover:text-foreground"
-        aria-label="Bad response"
+      <ActionBarPrimitive.FeedbackNegative
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground hover:text-foreground data-[submitted]:text-foreground"
+            aria-label="Bad response"
+          />
+        }
       >
         <ThumbsDown className="size-3.5" />
-      </Button>
+      </ActionBarPrimitive.FeedbackNegative>
 
       <ActionBarPrimitive.Reload
         render={

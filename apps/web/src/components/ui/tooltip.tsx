@@ -52,8 +52,8 @@ interface TooltipProviderProps {
 function TooltipProvider({
   children,
   delayDuration,
-  skipDelayDuration = 300,
-  delay = 0,
+  skipDelayDuration,
+  delay,
   timeout,
   ...props
 }: TooltipProviderProps & TooltipPrimitive.Provider.Props) {

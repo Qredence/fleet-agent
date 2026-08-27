@@ -66,7 +66,7 @@ export function ConnectorsRoute() {
                   Preview — the connectors below show sample data and are not yet connected to the backend.
                 </p>
               </div>
-              <Button className="gap-2 bg-primary text-primary-foreground">
+              <Button className="gap-2 bg-primary text-primary-foreground" disabled title="Preview — coming soon">
                 <Plus className="size-4" />
                 Add Connector
               </Button>
@@ -99,7 +99,7 @@ export function ConnectorsRoute() {
                       <span className="text-muted-foreground font-mono">{connector.latency}</span>
                       <div className="text-[11px] text-muted-foreground">{connector.toolsCount} tools exposed</div>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled title="Preview — coming soon">
                       Configure
                     </Button>
                   </div>

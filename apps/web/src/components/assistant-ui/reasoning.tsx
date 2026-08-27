@@ -180,9 +180,9 @@ function ReasoningTrigger({
 }) {
   const label = active
     ? "Thinking..."
-    : duration
-    ? `Worked for ${duration}s`
-    : "Worked for 42s";
+    : typeof duration === "number"
+      ? `Worked for ${duration}s`
+      : "Thought process";
 
   return (
     <CollapsibleTrigger

@@ -1300,7 +1300,11 @@ const SidebarGroup = forwardRef<HTMLDivElement, SidebarGroupProps>(
             </div>
             <motion.div
               id={contentId}
-              aria-hidden={open ? undefined : true}
+              // inert (not aria-hidden): the collapsed content must also
+              // leave the tab order and ignore pointer events, not just the
+              // a11y tree — aria-hidden on focusable content is an a11y
+              // violation.
+              inert={!open}
               className={cn(
                 open && settled ? "overflow-visible" : "overflow-hidden",
                 !measured && !open && "h-0"

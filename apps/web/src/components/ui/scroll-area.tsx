@@ -68,7 +68,6 @@ const ScrollArea = forwardRef<
                 orientation === "both" && "overflow-auto",
                 viewportClassName
               )}
-              tabIndex={0}
             >
               {children}
             </div>

@@ -18,6 +18,7 @@ from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agent.tools.web import WebToolBundle, build_web_tool_bundle
+from app.agent.tools_catalog import tool_catalog_by_name
 from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import EngineBuilder
 from app.services.artifact_storage import ArtifactStorage
@@ -122,18 +123,19 @@ def make_engine_builder(
         ]
         callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
+        # Metadata comes from the shared catalog (also served by GET /api/tools)
+        # so the public page can never drift from what runs actually use.
+        catalog = tool_catalog_by_name(settings)
         registry = ToolRegistry(
             [
                 (
                     tool,
                     ToolMetadata(
-                        name=tool.__name__,
-                        read_only=tool is not report_tool,
-                        idempotent=tool is not get_current_time,
-                        parallelizable=(
-                            tool is not report_tool and tool is not get_current_time
-                        ),
-                        timeout_seconds=settings.reasoning_task_timeout_seconds,
+                        name=catalog[tool.__name__].name,
+                        read_only=catalog[tool.__name__].read_only,
+                        idempotent=catalog[tool.__name__].idempotent,
+                        parallelizable=catalog[tool.__name__].parallelizable,
+                        timeout_seconds=catalog[tool.__name__].timeout_seconds,
                     ),
                 )
                 for tool in tools

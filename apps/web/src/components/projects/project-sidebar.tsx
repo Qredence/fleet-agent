@@ -232,7 +232,14 @@ export function ProjectSidebar() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton icon={Settings}>Settings</SidebarMenuButton>
+              <SidebarMenuButton
+                icon={Settings}
+                disabled
+                title="Preview — coming soon"
+                className="disabled:opacity-50 disabled:pointer-events-none"
+              >
+                Settings
+              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <ThemeDropdownMenu />
@@ -400,7 +407,13 @@ function ProjectSection({
             role="button"
             tabIndex={0}
             aria-label={`Project: ${name}`}
+            aria-expanded={open}
             onClick={() => setOpen(!open)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              setOpen(!open)
+            }}
             className="min-w-0 flex-1 cursor-pointer select-none truncate pr-[62px]"
           >
             <span>{name}</span>

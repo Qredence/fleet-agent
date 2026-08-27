@@ -293,7 +293,7 @@ class TraceReducer:
                 "step-synthesis",
                 phase="synthesis",
                 title="Preparing the response",
-                status="running",
+                status="pending",
             )
         idx = self._step_index["step-synthesis"]
         if self.state["steps"][idx].get("status") != "running":

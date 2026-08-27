@@ -94,7 +94,9 @@ export function FileExplorer({
     }
 
     const isDir = node.type === 'directory'
-    const isOpen = openDirs[node.path] ?? false
+    // An active filter expands every surviving directory so a nested match
+    // is actually reachable.
+    const isOpen = filter ? true : (openDirs[node.path] ?? false)
     const isSelected = selectedPath === node.path
 
     return (

@@ -20,6 +20,7 @@ const buttonVariants = cva(
     "group relative isolate inline-flex items-center justify-center outline-none cursor-pointer",
     "transition-colors duration-80",
     "disabled:opacity-50 disabled:pointer-events-none",
+    "aria-disabled:opacity-50 aria-disabled:pointer-events-none",
     "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
   ],
   {
@@ -159,6 +160,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             className?: string;
             style?: React.CSSProperties;
             ref?: React.Ref<HTMLButtonElement>;
+            disabled?: boolean;
+            "aria-disabled"?: boolean;
           }>)
         : null;
     const label = asChildElement ? asChildElement.props.children : children;
@@ -268,16 +271,27 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className
     );
 
+    const isDisabled = disabled || loading;
+
     if (render && isValidElement(render)) {
       const renderEl = render as ReactElement<{
         className?: string;
         style?: React.CSSProperties;
         children?: ReactNode;
+        disabled?: boolean;
+        "aria-disabled"?: boolean;
+        ref?: React.Ref<HTMLButtonElement>;
       }>;
+      const isAnchor = renderEl.type === "a";
       return cloneElement(
         renderEl,
         {
           ...props,
+          ref,
+          // Anchors have no native disabled state; the effective disabled
+          // state is conveyed via aria-disabled (styled by the variants).
+          disabled: isAnchor ? undefined : isDisabled || undefined,
+          "aria-disabled": isDisabled || undefined,
           className: cn(rootClassName, renderEl.props.className),
           style: { ...style, ...renderEl.props.style },
         },
@@ -287,11 +301,14 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (asChildElement) {
       const childProps = asChildElement.props;
+      const isAnchor = asChildElement.type === "a";
       return cloneElement(
         asChildElement,
         {
           ...props,
           ref,
+          disabled: isAnchor ? undefined : isDisabled || undefined,
+          "aria-disabled": isDisabled || undefined,
           className: cn(rootClassName, childProps.className),
           style: { ...style, ...childProps.style },
         },

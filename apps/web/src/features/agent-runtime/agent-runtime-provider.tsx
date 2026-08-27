@@ -2,6 +2,7 @@ import { HttpAgent } from '@ag-ui/client'
 import {
   AssistantRuntimeProvider,
   CompositeAttachmentAdapter,
+  type FeedbackAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react'
@@ -31,6 +32,17 @@ const attachmentAdapter = new CompositeAttachmentAdapter([
   new SimpleImageAttachmentAdapter(),
   new SimpleTextAttachmentAdapter(),
 ])
+
+// Message feedback is tracked in memory only: the backend has no feedback
+// endpoint yet, so thumbs state lives for the current session and resets on
+// reload. Swap in a persistent adapter when feedback storage lands.
+const feedbackByMessageId = new Map<string, 'positive' | 'negative'>()
+
+const feedbackAdapter: FeedbackAdapter = {
+  submit: ({ message, type }) => {
+    feedbackByMessageId.set(message.id, type)
+  },
+}
 
 /**
  * AG-UI runtime for the workspace: one HttpAgent to the FastAPI SSE endpoint.
@@ -87,6 +99,7 @@ export function AgentRuntimeProvider({
   const adapters = useMemo(
     () => ({
       attachments: attachmentAdapter,
+      feedback: feedbackAdapter,
       ...(threadId
         ? {
             history: buildHistoryAdapter(threadId, bootstrap, {

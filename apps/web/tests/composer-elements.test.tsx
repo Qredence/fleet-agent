@@ -111,7 +111,11 @@ describe('composer preferences', () => {
     expect(accessTrigger).toHaveTextContent('Read-only')
     expect(screen.getByText(/not sent to the agent/i)).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    expect(screen.queryByText(/not sent to the agent/i)).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/not sent to the agent/i),
+      ).not.toBeInTheDocument()
+    })
     expect(accessTrigger).toHaveFocus()
   })
 })
@@ -266,13 +270,17 @@ describe('composer attachments', () => {
       new File(['hello'], 'broken.txt', { type: 'text/plain' }),
     )
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'broken.txt is uploading.',
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'broken.txt is uploading.',
+      ),
     )
     finishUpload()
     await uploadPromise
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'broken.txt: Local attachment processing failed',
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'broken.txt: Local attachment processing failed',
+      ),
     )
     expect(
       screen.getByRole('button', { name: 'Document attachment, upload failed' }),

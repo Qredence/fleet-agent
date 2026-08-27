@@ -74,16 +74,23 @@ function SidebarSheet({ side, open, onClose, children }: SidebarSheetProps) {
   const [closing, setClosing] = useState(false);
   const visible = open && !closing;
 
-  const finishClose = useCallback(() => {
-    setClosing(false);
-    onClose();
-  }, [onClose]);
-
+  // Closes the sheet itself initiates (exit animation landed) already ran
+  // their exit; without this guard the parent-driven `open=false` that
+  // follows would restart the exit and flash the panel.
+  const selfClosing = useRef(false);
   // A parent-driven close (trigger, shortcut, route change) gets the same
   // exit as a primitive-driven one.
   const wasOpen = useRef(open);
+
+  const finishClose = useCallback(() => {
+    setClosing(false);
+    selfClosing.current = true;
+    onClose();
+  }, [onClose]);
+
   useEffect(() => {
-    if (wasOpen.current && !open) setClosing(true);
+    if (wasOpen.current && !open && !selfClosing.current) setClosing(true);
+    if (!open) selfClosing.current = false;
     wasOpen.current = open;
   }, [open]);
 

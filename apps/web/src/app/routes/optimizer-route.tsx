@@ -35,7 +35,7 @@ export function OptimizerRoute() {
                   Preview — the metrics and program below show sample data and are not yet connected to the backend.
                 </p>
               </div>
-              <Button className="gap-2 bg-primary text-primary-foreground">
+              <Button className="gap-2 bg-primary text-primary-foreground" disabled title="Preview — coming soon">
                 <Play className="size-4" />
                 Run GEPA Optimization
               </Button>

@@ -45,6 +45,30 @@ function stubApi() {
         agentState: null,
       }
     }
+    if (path === '/api/tools' && !init?.method) {
+      return {
+        tools: [
+          {
+            name: 'search_docs',
+            description:
+              'Search the bundled documentation corpus for a short query.',
+            read_only: true,
+            idempotent: true,
+            parallelizable: true,
+            timeout_seconds: 30,
+          },
+          {
+            name: 'write_report',
+            description:
+              'Write a short markdown report and return it as a downloadable artifact.',
+            read_only: false,
+            idempotent: true,
+            parallelizable: false,
+            timeout_seconds: 60,
+          },
+        ],
+      }
+    }
     return []
   })
   return mock
@@ -111,8 +135,8 @@ describe('ProjectNavTabs & Workspace Secondary Views', () => {
     )
 
     expect(await screen.findByRole('main', { name: /tools catalog/i })).toBeInTheDocument()
-    expect(screen.getByText('search_docs')).toBeInTheDocument()
-    expect(screen.getByText('write_report')).toBeInTheDocument()
+    expect(await screen.findByText('search_docs')).toBeInTheDocument()
+    expect(await screen.findByText('write_report')).toBeInTheDocument()
   })
 
   it('renders the Connectors hub route', async () => {

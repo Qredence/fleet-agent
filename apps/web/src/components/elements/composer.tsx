@@ -371,7 +371,7 @@ export function ComposerVoice({
       </div>
       {recording ? (
         <span className={cn(mono, "text-foreground/40 tabular-nums")}>
-          0:{String(seconds).padStart(2, "0")}
+          {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
         </span>
       ) : (
         <ShimmerLabel className="text-foreground/55 relative text-[13px]">
