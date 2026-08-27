@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fleet Agent — Architecture</title>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    securityLevel: 'loose',
+    themeVariables: {
+      darkMode: true,
+      fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+      fontSize: '13px',
+      primaryColor: '#1e293b',
+      primaryBorderColor: '#38bdf8',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#64748b',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#111827',
+      clusterBkg: '#0b1220',
+      clusterBorder: '#334155',
+      edgeLabelBackground: '#0f172a',
+      actorBkg: '#1e293b',
+      actorBorder: '#38bdf8',
+      actorTextColor: '#e2e8f0',
+      signalColor: '#94a3b8',
+      signalTextColor: '#e2e8f0',
+      labelBoxBkgColor: '#0f172a',
+      labelBoxBorderColor: '#475569',
+      labelTextColor: '#e2e8f0',
+      noteBkgColor: '#1a2333',
+      noteBorderColor: '#475569',
+      noteTextColor: '#e2e8f0'
+    }
+  });
+</script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #0f172a;
+    --panel-border: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #34d399;
+    --accent3: #fbbf24;
+    --accent4: #f472b6;
+    --code-bg: #0b1220;
+    --code-border: #1e293b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    line-height: 1.5;
+  }
+  header {
+    padding: 28px 32px;
+    border-bottom: 1px solid var(--panel-border);
+    background: linear-gradient(135deg, #0f172a 0%, #0b1220 100%);
+  }
+  header h1 { margin: 0 0 4px; font-size: 24px; color: #fff; letter-spacing: -0.02em; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .badge {
+    display: inline-block; padding: 2px 8px; margin-right: 8px;
+    border-radius: 999px; font-size: 11px; border: 1px solid var(--panel-border);
+    color: var(--muted); background: #0f172a;
+  }
+  nav {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(11,18,32,0.92); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 10px 32px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  nav a {
+    color: var(--muted); text-decoration: none; font-size: 12px;
+    padding: 6px 12px; border-radius: 8px; border: 1px solid transparent;
+    transition: all .15s ease;
+  }
+  nav a:hover { color: var(--text); border-color: var(--panel-border); background: var(--panel); }
+  nav a.active { color: var(--accent); border-color: var(--accent); background: rgba(56,189,248,0.08); }
+  main { padding: 24px 32px 64px; max-width: 1240px; margin: 0 auto; }
+  section { margin-bottom: 48px; scroll-margin-top: 64px; }
+  h2 {
+    font-size: 19px; color: #fff; margin: 0 0 4px; letter-spacing: -0.01em;
+  }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .diagram {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 18px; overflow-x: auto; margin: 16px 0;
+  }
+  .grid { display: grid; gap: 24px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 18px;
+  }
+  .card h3 {
+    margin: 0 0 10px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .card li { margin: 6px 0; }
+  .card li b { color: var(--text); font-weight: 600; }
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+  code, .mono { font-family: ui-monospace, Menlo, monospace; }
+  pre.code {
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    border-radius: 10px; padding: 14px; overflow-x: auto; font-size: 12px; color: var(--muted);
+  }
+  footer { padding: 24px 32px; border-top: 1px solid var(--panel-border); color: var(--muted); font-size: 12px; }
+  @media (max-width: 720px) { main, header, nav { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fleet Agent — Architecture</h1>
+  <p>
+    <span class="badge">DSPy 3.3.1</span>
+    <span class="badge">FastAPI</span>
+    <span class="badge">React 19 + Vite</span>
+    <span class="badge">PostgreSQL 17</span>
+    <span class="badge">assistant-ui 0.15</span>
+    <span class="badge">AG-UI</span>
+  </p>
+  <p>An experimental agent workbench. Multi-step DSPy work that is inspectable and recoverable — a direct answer plus a persistent agent workspace.</p>
+</header>
+
+<nav>
+  <a href="#context">System Context</a>
+  <a href="#components">Component Diagram</a>
+  <a href="#runflow">Agent Run Flow</a>
+  <a href="#state">Public State Contract</a>
+  <a href="#deploy">Runtime &amp; Persistence</a>
+</nav>
+
+<main>
+
+<!-- ================= CONTEXT ================= -->
+<section id="context">
+  <h2>1 · System Context</h2>
+  <p class="sub">The browser is the only client. It consumes ordinary conversation data plus AG-UI <code>AgentWorkspaceState</code> snapshots and deltas. DSPy internals stay server-side.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    USER["👤 User\nbrowser operator"] --> UI["React workspace\napps/web"]
+
+    subgraph FRONT["Frontend · React 19"]
+        UI --> CHAT["assistant-ui\nconversation + inline run activity"]
+        UI --> PP["AG-UI process panel\nSources · Artifacts · Explorer"]
+    end
+
+    subgraph API["Backend · FastAPI (apps/api)"]
+        ROUTES["REST + SSE routes"] --> COORD["Run coordinator\nAgentEngine boundary"]
+        COORD --> PUBLIC["Public-state reducer\nAgentWorkspaceState"]
+    end
+
+    CHAT -->|"REST · SSE (SSE /api/agent)"| ROUTES
+    PP -->|"REST · SSE"| ROUTES
+
+    subgraph ENG["DSPy engine layer"]
+        PUBLIC --> DSPY["dspy.ReActV2 / staged strategy"]
+        DSPY --> TOOLS["typed tools"]
+    end
+
+    TOOLS -->|"search · report"| DOCS["documentation corpus"]
+    TOOLS -->|"optional web"| TAV["Tavily web_search / fetch_page"]
+    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(via LiteLLM / dspy.LM)"]
+
+    subgraph DATA["Persistence"]
+        PUBLIC --> PG[("PostgreSQL 17")]
+        TOOLS --> ART("[artifacts 📄]")
+    end
+
+    classDef nf fill:#1e293b,stroke:#38bdf8,color:#e2e8f0;
+</pre>
+  </div>
+</section>
+
+<!-- ================= COMPONENTS ================= -->
+<section id="components">
+  <h2>2 · Component Diagram</h2>
+  <p class="sub">Server internals behind AgentEngine: agent lifecycle, AG-UI event mapping, persistence, and services.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    subgraph API["FastAPI app (create_app)"]
+        SW["RequestId &amp; SecurityHeaders middleware\nCORS (exact origins only)"]
+        R1["/api/agent · POST → SSE"]
+        R2["/api/projects · /api/threads"]
+        R3["/api/tools · /api/artifacts · /api/metrics"]
+    end
+
+    subgraph AGENTSVC["app.agent"]
+        E["AgentEngine (Protocol)\nDspyReActV2Engine | StagedDspyEngine"]
+        SIG["AgentSignature fields:\nanswer · process_summary · key_decisions · caveats"]
+        F["factory &amp; EngineBuilder\nruns create run-scoped engines"]
+        TC["ToolRegistry + catalog\n(search_docs · write_report · get_current_time · web_*)"]
+        CB["AgUiRunCallback\n(DSPy → domain events)"]
+    end
+
+    subgraph AGUI["app.agui"]
+        BC["RunEventBus"]
+        LC["LiveCoordinator\nexactly-once terminal settlement"]
+        RC["RunCoordinator\nfixture replay"]
+        EMP["EventMapper\ndomain → AG-UI"]
+        TR["TraceReducer\nJsonPatch STATE_DELTA"]
+    end
+
+    subgraph PERS["app.persistence"]
+        MOD["models: projects · threads · messages\nruns · run_states · dspy_histories\nsources · source_occurrences · artifacts"]
+        MIG["Alembic migrations"]
+        REPO["repositories"]
+    end
+
+    subgraph SVC["app.services"]
+        ART("artifact_storage")
+        RPI("run_persistence")
+        RUNI("run_input · source_identity")
+        METR("metrics registry")
+        HIST("history_safety · mock_run")
+    end
+
+    R1 --> SW
+    R2 --> SW
+    R3 --> SW
+    SW --> LC
+    SW --> RC
+    LC --> E
+    RC --> MOD
+    E --> F
+    E --> SIG
+    F --> TC
+    E --> CB
+    CB --> BC
+    BC --> EMP
+    EMP --> TR
+    EMP --> LC
+    LC --> PERS
+    PERS --> MOD
+    MOD --> MIG
+    MOD --> REPO
+    ART --> E
+    RPI --> LC
+    METR --> LC
+
+    classDef ffastapi fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef fagent fill:#0f172a,stroke:#34d399,color:#e2e8f0;
+    classDef fagui fill:#0f172a,stroke:#fbbf24,color:#e2e8f0;
+    classDef fpers fill:#0f172a,stroke:#f472b6,color:#e2e8f0;
+    classDef fsvc fill:#0f172a,stroke:#a78bfa,color:#e2e8f0;
+    class R1,R2,R3,SW ffastapi
+    class E,SIG,F,TC,CB fagent
+    class BC,LC,RC,EMP,TR fagui
+    class MOD,MIG,REPO fpers
+    class ART,RPI,RUNI,METR,HIST fsvc
+</pre>
+  </div>
+</section>
+
+<!-- ================= RUN FLOW ================= -->
+<section id="runflow">
+  <h2>3 · Agent Run Flow</h2>
+  <p class="sub">What happens when a user sends a request in engine mode: coordination, streaming, and safe settlement.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as Browser (assistant-ui)
+    participant A as /api/agent (FastAPI)
+    participant LC as LiveCoordinator
+    participant E as AgentEngine (DSPy)
+    participant LM as Model (LiteLLM)
+    participant P as PostgreSQL
+
+    U->>A: POST /api/agent (AG-UI RunAgentInput, Accept: SSE)
+    A->>LC: gate via run_semaphore (max_concurrent_runs)
+    LC->>LC: create RunEventBus + engine (EngineBuilder)
+    LC->>E: await run(user_request, history, context)
+    E->>LM: DSPy ReActV2 / staged loop (max_iters, JSONAdapter)
+    E-->>LC: AgentStreamUpdate / AgentRunResult
+    E-->LC: callbacks (ToolStart/End, LmStart, ...)
+    LC->>P: persist run, run_state, sources, artifacts
+    LC->>A: map domain → AG-UI events (StateDelta, Tool*, Text*)
+    A-->>U: SSE stream (STREAM, STATE_DELTA, DONE/RUN_ERROR)
+    Note over A,U: history (raw next_thought) stays server-side
+</pre>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Fixtures mode</h3>
+      <ul>
+        <li>Deterministic, provider-free.</li>
+        <li>Replays canonical AG-UI event streams from <code>packages/contracts/fixtures</code>.</li>
+        <li>Enabled by default (<code>agent_mode=fixtures</code>); keeps dev &amp; CI reproducible.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Engine mode</h3>
+      <ul>
+        <li>Live DSPy bridge (ReActV2 / optional staged strategy).</li>
+        <li>Requires an explicitly configured provider key.</li>
+        <li>Run-scoped semaphore cap + hard time/budget bounds.</li>
+        <li>Exactly-once terminal settlement (RUN_FINISHED / RUN_ERROR).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= STATE ================= -->
+<section id="state">
+  <h2>4 · Public State Contract</h2>
+  <p class="sub">Source of truth: <code>packages/contracts/agent-workspace-state.schema.json</code> (v1). Payloads include <code>schemaVersion</code>; generated TS &amp; Python models come from the schema, never handwritten.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    SC["AgentWorkspaceState\nschemaVersion · threadId · run\nsteps · decisions · toolCalls\nsources · artifacts · metrics"] --> TS["generated TS type\napps/web/src/contracts/generated.ts"]
+    SC --> PYM["generated Python model\napps/api/app/contracts"]
+
+    subgraph SYNC["AG-UI synchronization"]
+        SN["STATE_SNAPSHOT\n(one versioned bootstrap)"] --> UI
+        DL["STATE_DELTA\n(JsonPatch trace-reduced)"] --> UI
+    end
+    UI["Browser process panel\nuseAgUiState&lt;AgentWorkspaceState&gt;()"]
+
+    classDef ctr fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    class SC ctr
+</pre>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>What is exposed (safe)</h3>
+      <ul>
+        <li>Run status, active step, tool-call activity.</li>
+        <li>Sources discovered, decisions, caveats, metrics.</li>
+        <li>Sanitized, size-capped artifacts with controlled download URLs.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What never crosses (boundary)</h3>
+      <ul>
+        <li>Raw <code>next_thought</code>, <code>dspy.History</code>, provider prompts.</li>
+        <li>Raw tool arguments, stack traces, credentials, unsanitized responses.</li>
+        <li>Raw history stays server-side for continuation.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DEPLOY ================= -->
+<section id="deploy">
+  <h2>5 · Runtime &amp; Persistence</h2>
+  <p class="sub">Topology defined by <code>compose.yaml</code> (local Postgres) and monorepo scripts.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    subgraph DEV["Local dev (pnpm + uv)"]
+        W["dev:web — Vite :5173"]
+        A["dev:api — fastapi dev :8000"]
+    end
+    PG[("PostgreSQL 17\ncompose.yaml · :5432")] --> VOL[("volume: postgres-data")]
+    W -->|"REST + SSE\n(exact CORS origins)"| A
+    A -->|"asyncpg"| PG
+
+    subgraph TOOLING["Validation"]
+        WEBT["web: lint · test ·\ntsc build · contracts:sync"]
+        APIT["api: ruff · mypy · pytest\nalembic upgrade head"]
+        CI[".circleci"]
+    end
+    A --> APIT
+    W --> WEBT
+    APIT --> CI
+    WEBT --> CI
+
+    classDef dd fill:#0f172a,stroke:#34d399,color:#e2e8f0;
+    classDef pg fill:#0f172a,stroke:#fbbf24,color:#e2e8f0;
+    classDef c fill:#0f172a,stroke:#94a3b8,color:#e2e8f0;
+    class W,A dd
+    class PG pg
+    class WEBT,APIT,CI c
+</pre>
+  </div>
+
+  <div class="card">
+    <h3>Key invariants</h3>
+    <ul>
+      <li><b>URL owns state</b> — active project &amp; thread live in the URL (<code>/projects/:id/threads/:id</code>).</li>
+      <li><b>No mirrored agent state</b> — process panel reads AG-UI state directly, never reconstructed from chat.</li>
+      <li><b>One versioned bootstrap</b> — thread restoration fetches a versioned snapshot before mounting the runtime; fallback uses raw <code>fetchBootstrap</code>.</li>
+      <li><b>Scoped DSPy</b> — <code>dspy.context(...)</code> only, never global <code>dspy.configure</code>.</li>
+      <li><b>Alembic migrations</b> for persistence; engine runs require an existing thread.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Generated from the Fleet Agent codebase. React 19 + Vite · FastAPI + DSPy 3.3.1 · PostgreSQL 17 · AG-UI and assistant-ui 0.15.
+</footer>
+
+</body>
+</html>

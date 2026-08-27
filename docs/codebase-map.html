@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fleet Agent — Codebase Map</title>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark', securityLevel: 'loose',
+    themeVariables: {
+      darkMode: true,
+      fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+      fontSize: '13px',
+      primaryColor: '#1e293b', primaryBorderColor: '#38bdf8', primaryTextColor: '#e2e8f0',
+      lineColor: '#64748b', secondaryColor: '#0f172a', tertiaryColor: '#111827',
+      clusterBkg: '#0b1220', clusterBorder: '#334155', edgeLabelBackground: '#0f172a'
+    }
+  });
+</script>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel-border:#1e293b; --text:#e2e8f0;
+    --muted:#94a3b8; --accent:#38bdf8; --accent2:#34d399; --accent3:#fbbf24;
+    --accent4:#f472b6; --accent5:#a78bfa; --code-bg:#0b1220; --code-border:#1e293b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;line-height:1.5}
+  header{padding:28px 32px;border-bottom:1px solid var(--panel-border);
+    background:linear-gradient(135deg,#0f172a 0%,#0b1220 100%)}
+  header h1{margin:0 0 4px;font-size:24px;color:#fff;letter-spacing:-0.02em}
+  header p{margin:0;color:var(--muted);font-size:13px}
+  .badge{display:inline-block;padding:2px 8px;margin-right:8px;border-radius:999px;
+    font-size:11px;border:1px solid var(--panel-border);color:var(--muted);background:#0f172a}
+  nav{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.92);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--panel-border);
+    padding:10px 32px;display:flex;gap:8px;flex-wrap:wrap}
+  nav a{color:var(--muted);text-decoration:none;font-size:12px;padding:6px 12px;
+    border-radius:8px;border:1px solid transparent;transition:all .15s ease}
+  nav a:hover{color:var(--text);border-color:var(--panel-border);background:var(--panel)}
+  nav a.active{color:var(--accent);border-color:var(--accent);background:rgba(56,189,248,.08)}
+  main{padding:24px 32px 64px;max-width:1240px;margin:0 auto}
+  section{margin-bottom:48px;scroll-margin-top:64px}
+  h2{font-size:19px;color:#fff;margin:0 0 4px;letter-spacing:-0.01em}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  .diagram{background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:14px;padding:18px;overflow-x:auto;margin:16px 0}
+  .grid{display:grid;gap:24px}.grid-2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .grid-3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;padding:18px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}
+  .card ul{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px}
+  .card li{margin:6px 0}.card li b{color:var(--text);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--panel-border)}
+  th{color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+  td.mono{font-family:ui-monospace,Menlo,monospace}
+  .bar{height:8px;border-radius:4px;background:var(--panel-border);overflow:hidden;min-width:40px}
+  .bar>span{display:block;height:100%;border-radius:4px}
+  .pylocs{background:var(--accent5)}.tslocs{background:var(--accent2)}
+  footer{padding:24px 32px;border-top:1px solid var(--panel-border);color:var(--muted);font-size:12px}
+  @media(max-width:720px){main,header,nav{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Fleet Agent — Codebase Map</h1>
+  <p>
+    <span class="badge">pnpm + uv monorepo</span>
+    <span class="badge">244 tracked files</span>
+    <span class="badge">apps/api · apps/web · packages/contracts</span>
+    <span class="badge">~9.3k Python LOC + ~17.8k TS LOC</span>
+  </p>
+  <p>Where the code lives, what each area owns, and how the pieces connect.</p>
+</header>
+
+<nav>
+  <a href="#overview">Repo Overview</a>
+  <a href="#backend">Backend Packages</a>
+  <a href="#depgraph">Dependency Graph</a>
+  <a href="#frontend">Frontend Areas</a>
+  <a href="#codegen">Contract / Codegen</a>
+  <a href="#tests">Tests & Tooling</a>
+</nav>
+
+<main>
+
+<!-- ==== OVERVIEW ==== -->
+<section id="overview">
+  <h2>1 · Repository Overview</h2>
+  <p class="sub">Three workspaces under one pnpm workspace; Python backend managed with uv.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    subgraph ROOT["fleet-agent (pnpm workspace)"]
+      subgraph APIS["apps/api · Python 3.13 + uv · FastAPI + DSPy"]
+        MAINS["app/\nmain.py · settings.py"]
+        AGENT["app/agent — DSPy engines, tools"]
+        AGUI["app/agui — AG-UI coordination"]
+        ROUTES["app/api — REST + SSE routers"]
+        PERS["app/persistence — DB, models, migrations"]
+        SVC["app/services — artifact, run, metrics"]
+        CONTR["app/contracts — domain, state, error codes"]
+        TESTS["tests/ — 25 test files"]
+      end
+      subgraph WEBS["apps/web · Vite + React 19 + TS"]
+        SRC["src/"]
+        COMP["components/ — 60+ components"]
+        FEAT["features/ — agent-runtime, threads, projects, tools, artifacts"]
+        LIB["lib/ — api-client, surfaces, context"]
+        APP["app/ — router + routes"]
+        STATE["state/ — workspace store"]
+        WEBTESTS["tests/ — 14 test files"]
+      end
+      subgraph PKGS["packages/contracts"]
+        SCHEMA["agent-workspace-state.schema.json"]
+        FIX["fixtures/ · canonical AG-UI streams"]
+      end
+    end
+    ROOT --> GEN["generated models"]
+    SCHEMA --> CONTR
+    SCHEMA --> SRC
+
+    classDef d fill:#0f172a,stroke:#34d399,color:#e2e8f0;
+    class ROOT,APIS,WEBS,PKGS d
+</pre>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card"><h3>apps/api</h3><ul><li>FastAPI backend, DSPy 3.3.1 engine.</li><li>40 core Python modules across 6 packages + main/settings.</li><li>~9,300 lines of Python source.</li></ul></div>
+    <div class="card"><h3>apps/web</h3><ul><li>React 19 + Vite + assistant-ui 0.15.</li><li>60+ components, 8 feature modules, UI kit.</li><li>~17,800 lines of TS/TSX.</li></ul></div>
+    <div class="card"><h3>packages/contracts</h3><ul><li>Single source of truth <code>AgentWorkspaceState</code> schema.</li><li>Deterministic AG-UI fixture streams.</li><li>Regenerates TS + Python models.</li></ul></div>
+  </div>
+</section>
+
+<!-- ==== BACKEND ==== -->
+<section id="backend">
+  <h2>2 · Backend Packages (apps/api/app)</h2>
+  <p class="sub">Six focused packages plus entry points. Sizes are tracked source lines (excludes <code>__init__.py</code> and migrations).</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    subgraph MAIN["entry"]
+        M["main.py · create_app()  (90)"]
+        SET["settings.py · Settings  (153)"]
+    end
+
+    subgraph API["app/api  · HTTP routers"]
+        AAG["agent.py · POST /api/agent → SSE  (178)"]
+        THR["threads.py · bootstrap, history, head  (456)"]
+        PRJ["projects.py  (102)"]
+        ART["artifacts.py · download  (53)"]
+        TOOL["tools.py · catalog  (—)"]
+        MET["metrics.py  (—)"]
+        HL["health.py  (—)"]
+        MD["middleware.py · CORS / security headers  (74)"]
+    end
+
+    subgraph AGENT["app/agent · DSPy layer"]
+        ENG["engine.py · AgentEngine / ReActV2  (297)"]
+        STG["staged.py · staged strategy  (1132)"]
+        FAC["factory.py · EngineBuilder  (187)"]
+        SIG["signature.py · AgentSignature  (41)"]
+        CB["callbacks.py · AgUiRunCallback  (237)"]
+        INS["instrumented.py  (161)"]
+        TR["tool_registry.py  (266)"]
+        TC["tools_catalog.py  (145)"]
+        TD["tools/ · docs · report · corpus · web  (610)"]
+    end
+
+    subgraph AGUI["app/agui · coordination"]
+        LC["live_coordinator.py  (543)"]
+        RC["run_coordinator.py · fixture replay  (116)"]
+        EM["event_mapper.py  (218)"]
+        TRED["trace_reducer.py · JSON Patch  (597)"]
+        EB["event_bus.py  (44)"]
+        CT["cancel_token.py  (32)"]
+    end
+
+    subgraph PERS["app/persistence"]
+        REPO["repositories.py  (900)"]
+        MODL["models.py · 9 tables  (238)"]
+        DB["db.py · engine/session  (—)"]
+    end
+
+    subgraph SVC["app/services"]
+        RPI["run_persistence.py  (714)"]
+        ARTI["artifact_storage.py  (77)"]
+        HS["history_safety.py  (219)"]
+        MRUN["mock_run.py  (73)"]
+        RIN["run_input.py  (—)"]
+        SID["source_identity.py  (37)"]
+        ME["metrics.py  (55)"]
+    end
+
+    subgraph CTR["app/contracts · generated/domain"]
+        AS["agent_state.py · AgentWorkspaceState  (196)"]
+        DOM["domain.py · domain events  (142)"]
+        EC["error_codes.py · public error codes  (—)"]
+    end
+
+    M --> AGENT; M --> AGUI; M --> API; M --> PERS; M --> SVC; M --> CTR; M --> SET
+    API --> AGENT; API --> CTR; API --> PERS; API --> SVC; API --> SET
+    AGENT --> AGUI; AGENT --> CTR
+    AGUI --> SVC; AGUI --> CTR; AGUI --> AGENT
+    SVC --> PERS; SVC --> CTR
+    PERS --> CTR
+
+    classDef d1 fill:#0f172a,stroke:#f472b6,color:#e2e8f0;
+    classDef d2 fill:#0f172a,stroke:#34d399,color:#e2e8f0;
+    classDef d3 fill:#0f172a,stroke:#fbbf24,color:#e2e8f0;
+    classDef d4 fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef d5 fill:#0f172a,stroke:#a78bfa,color:#e2e8f0;
+    classDef d6 fill:#0f172a,stroke:#f9a8d4,color:#e2e8f0;
+    class MAIN d1; class API d2; class AGENT d3; class AGUI d4; class PERS d5; class SVC d6; class CTR d2
+</pre>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card"><h3>app/api</h3><ul><li>Thin REST/SSE routers.</li><li>No DSPy knowledge — talks to <code>AgentEngine</code> boundary only.</li></ul></div>
+    <div class="card"><h3>app/agent</h3><ul><li>Houses DSPy engines (ReActV2, staged) + factory + typed tools.</li><li>Raw <code>dspy.History</code> stays here/API-side.</li></ul></div>
+    <div class="card"><h3>app/agui</h3><ul><li>Maps domain events → AG-UI; trace diffs; live + fixture coordinators.</li><li>SCSS-free; enforces exactly-once terminal events.</li></ul></div>
+  </div>
+</section>
+
+<!-- ==== DEP GRAPH ==== -->
+<section id="depgraph">
+  <h2>3 · Backend Dependency Graph</h2>
+  <p class="sub">Package-level imports (extracted from source). Edges show which package depends on which.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    MAIN["app:main\n(app entry)"]
+    SET["app:settings"]
+    API["app:api\n(routers)"]
+    AGENT["app:agent\n(DSPy engines, tools)"]
+    AGUI["app:agui\n(coordinators)"]
+    PERS["app:persistence"]
+    SVC["app:services"]
+    CTR["app:contracts"]
+    TOOLS["app:agent/tools"]
+    GEN["generated/\ncontracts"]
+
+    MAIN --> API
+    MAIN --> AGENT
+    MAIN --> AGUI
+    MAIN --> PERS
+    MAIN --> SVC
+    MAIN --> CTR
+    MAIN --> SET
+
+    API --> AGENT
+    API --> AGUI
+    API --> PERS
+    API --> SVC
+    API --> CTR
+    API --> SET
+
+    AGENT --> AGUI
+    AGENT --> CTR
+    AGENT --> TOOLS
+
+    AGUI --> SVC
+    AGUI --> CTR
+    AGUI --> AGENT
+
+    SVC --> CTR
+    SVC --> PERS
+
+    PERS --> CTR
+    PERS --> SET
+
+    TOOLS --> CTR
+    TOOLS --> SVC
+    TOOLS --> AGUI
+
+    CTR --> GEN
+
+    classDef dpg fill:#111827,stroke:#38bdf8,color:#e2e8f0;
+    class MAIN,SET,API,AGENT,AGUI,PERS,SVC,CTR,TOOLS,GEN dpg
+</pre>
+  </div>
+
+  <p class="sub">Direction of flow: app entry → routers → agent/agui → services/persistence/contracts. The deepest, most reusable nodes are <code>contracts</code> (imported almost everywhere) and <code>services</code>.</p>
+</section>
+
+<!-- ==== FRONTEND ==== -->
+<section id="frontend">
+  <h2>4 · Frontend Areas (apps/web/src)</h2>
+  <p class="sub">Components, features, and state flow. Sizes are source lines per module.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    ENTRY["main.tsx + App.tsx"]
+    APP["app/\napp-router · providers · routes\n(workspace · connectors · optimizer · tools)"]
+
+    subgraph FEAT["features/"]
+        RT["agent-runtime/\nagent-runtime-provider · ag-ui-presence · inline-agent-data-ui"]
+        TH["threads/\nassistant-thread-adapter · threads-api · use-threads"]
+        PR["projects/\nprojects-api · use-projects"]
+        TL["tools/\ntools-api · use-tools"]
+        AR["artifacts/\nartifact-data-ui · artifact-markdown"]
+    end
+
+    subgraph COMP["components/"]
+        AS["assistant-ui/ · thread, composer, tool*, image..."]
+        EL["elements/ · composer, message-pair, sources, tool-call..."]
+        PP["process-panel/ · process-panel, tabs, run cards..."]
+        WS["workspace/agent-workspace · projects/project-sidebar · thread/conversation-pane"]
+        UIKIT["ui/ · shadcn Base-UI kit (sidebar, button, card...)"]
+    end
+
+    subgraph ST["state + lib"]
+        STORE["state/workspace-store.ts · Zustand UI prefs"]
+        LIB["lib/ · api-client, surfaces, context, springs, ranges"]
+    end
+
+    ENTRY --> APP
+    APP --> WS
+    WS --> PP
+    WS --> EL
+    PP --> EL
+    AS --> EL
+    RT --> TH
+    TH --> STORE
+    COMP --> FEAT
+    FEAT --> LIB
+    ST --> LIB
+
+    classDef f1 fill:#0f172a,stroke:#34d399,color:#e2e8f0;
+    classDef f2 fill:#0f172a,stroke:#fbbf24,color:#e2e8f0;
+    classDef f3 fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    class ENTRY,APP f1; class FEAT,COMP f2; class ST f3
+</pre>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card"><h3>components/</h3><ul><li><b>assistant-ui/</b> — conversation primitives, thread, inline run activity.</li><li><b>elements/ + process-panel/</b> — tool calls, sources, artifacts, file exploration.</li><li><b>ui/</b> — reusable Base-UI &amp; Fluid Functionalism kit.</li></ul></div>
+    <div class="card"><h3>features/</h3><ul><li><b>agent-runtime</b> — provider + AG-UI presence; owns runtime wiring.</li><li><b>threads / projects</b> — data-fetching hooks + persistence sync.</li><li><b>tools / artifacts</b> — API clients and renderers.</li></ul></div>
+    <div class="card"><h3>state & lib</h3><ul><li>Zustand store holds <b>UI prefs only</b> — never agent process state.</li><li>Process state read via <code>useAgUiState&lt;AgentWorkspaceState&gt;()</code>.</li><li>lib provides API client, surface system, shared contexts.</li></ul></div>
+  </div>
+
+  <table>
+    <thead><tr><th>module</th><th>role</th><th>lines</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">agent-runtime/agent-runtime-provider.tsx</td><td>AG-UI runtime + bootstrap restore</td><td>149</td></tr>
+      <tr><td class="mono">threads/assistant-thread-adapter.ts</td><td>adapter + history head sync</td><td>264</td></tr>
+      <tr><td class="mono">threads/threads-api.ts</td><td>REST client for threads/bootstrap</td><td>154</td></tr>
+      <tr><td class="mono">workspace/agent-workspace.tsx</td><td>layout: sidebar + conversation + process panel</td><td>324</td></tr>
+      <tr><td class="mono">process-panel/process-panel.tsx</td><td>process projection UI</td><td>221</td></tr>
+      <tr><td class="mono">state/workspace-store.ts</td><td>Zustand UI-preference store</td><td>114</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==== CODEGEN ==== -->
+<section id="codegen">
+  <h2>5 · Contract & Codegen Workflow</h2>
+  <p class="sub">The schema is the single source of truth; generated models are never hand-edited.</p>
+
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    SCHEMA["packages/contracts/\nagent-workspace-state.schema.json  (v1)"]
+    FIX["packages/contracts/fixtures/\nsuccessful-run · tool-error-run · forced-submit-run"]
+
+    subgraph TS["→ TypeScript"]
+        TSG["contracts:sync (json2ts)"]
+        GENERATEDTS["apps/web/src/contracts/generated.ts"]
+    end
+
+    subgraph PY["→ Python"]
+        PYG["datamodel-code-generator"]
+        GENPY["apps/api/app/contracts/agent_state.py"]
+    end
+
+    FRT["contracts-freshness tests\n(web) · fixtures tests (api)"]
+
+    SCHEMA --> TSG
+    SCHEMA --> PYG
+    TSG --> GENERATEDTS
+    PYG --> GENPY
+    FIX --> FRT
+    GENERATEDTS --> FRT
+    GENPY --> FRT
+
+    classDef cg fill:#0f172a,stroke:#fbbf24,color:#e2e8f0;
+    class SCHEMA,FIX,TSG,PYG,GENERATEDTS,GENPY,FRT cg
+</pre>
+  </div>
+</section>
+
+<!-- ==== TESTS ==== -->
+<section id="tests">
+  <h2>6 · Tests & Tooling</h2>
+  <p class="sub">39 test files across the API and web, plus CI and contract-enforcing checks.</p>
+
+  <table>
+    <thead><tr><th>area</th><th>coverage</th><th>command</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">app/api/tests (25 files)</td><td>agent endpoint, DSPy engine, live coordinator, run/event/trace, staged, persistence, tools, hardening, history-safety</td><td class="mono">uv run pytest</td></tr>
+      <tr><td class="mono">app/web/tests (14 files)</td><td>agent-workspace, runtime restore, process-panel, thread-adapter, artifacts, contracts-freshness, projects/threads</td><td class="mono">pnpm --filter web test</td></tr>
+      <tr><td class="mono">static checks</td><td>ruff format+lint, mypy</td><td class="mono">uv run ruff ... · mypy app</td></tr>
+      <tr><td class="mono">contract freshness</td><td>schema ↔ generated model parity</td><td class="mono">web contracts-freshness.test</td></tr>
+      <tr><td class="mono">CI</td><td>.circleci · lint, test, typecheck, build</td><td class="mono">CircleCI</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid grid-3">
+    <div class="card"><h3>e2e-fixtures.sh</h3><ul><li>Deterministic browser flow via fixtures.</li></ul></div>
+    <div class="card"><h3>e2e-engine.sh</h3><ul><li>Live provider flow requiring a configured key.</li></ul></div>
+    <div class="card"><h3>scripts/load_sse.py</h3><ul><li>Development helper to load SSE output.</li></ul></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Generated from the Fleet Agent source tree. Backend Python (DSPy 3.3.1) + Frontend TS/React 19 + contract-driven shared state.
+</footer>
+
+</body>
+</html>
