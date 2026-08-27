@@ -100,7 +100,7 @@ export function ConnectorsRoute() {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="text-right text-xs">
+                    <div className="text-end text-xs">
                       <span className="text-muted-foreground font-mono">{connector.latency}</span>
                       <div className="text-[11px] text-muted-foreground">{connector.toolsCount} tools exposed</div>
                     </div>

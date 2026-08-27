@@ -54,7 +54,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   useWorkspaceStore.setState({
     selectedArtifactId: null,
-    processPanelTab: 'activity',
+    processPanelTab: 'sources',
   })
 })
 

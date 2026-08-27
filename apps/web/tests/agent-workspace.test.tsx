@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
 import { AgentRuntimeProvider } from '@/features/agent-runtime/agent-runtime-provider'
@@ -26,7 +26,7 @@ function renderWorkspace(ui: ReactElement = <AgentWorkspace />) {
 const storeDefaults = {
   sidebarCollapsed: false,
   processPanelOpen: true,
-  processPanelTab: 'activity',
+  processPanelTab: 'sources',
   sidebarSheetOpen: false,
   processSheetOpen: false,
 } as const
@@ -70,15 +70,7 @@ describe('AgentWorkspace — wide desktop', () => {
     ).toBeInTheDocument()
   })
 
-  it('exposes the selected file through an honest process header', async () => {
-    const user = userEvent.setup()
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
-
+  it('keeps the process header minimal', () => {
     renderWorkspace(
       <AgentWorkspace
         projectId="project_1"
@@ -89,25 +81,11 @@ describe('AgentWorkspace — wide desktop', () => {
 
     expect(screen.getByRole('heading', { name: 'Process' })).toBeInTheDocument()
     expect(
-      screen.getByLabelText('fleet-agent, README.md'),
+      screen.getByRole('button', { name: /close process panel/i }),
     ).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /copy path README\.md/i }))
-    expect(writeText).toHaveBeenCalledWith('README.md')
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'README.md copied to clipboard.',
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Open README.md' }))
-    expect(open).toHaveBeenCalledWith('/README.md', '_blank')
-
-    await user.click(screen.getByRole('tab', { name: 'Artifacts' }))
-    await user.click(await screen.findByRole('button', { name: /^PLAN\.md/ }))
-    expect(
-      screen.getByRole('button', { name: 'Open unavailable for this file' }),
-    ).toBeDisabled()
-
-    open.mockRestore()
+    expect(screen.queryByRole('button', { name: /copy path/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Open/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('fleet-agent, README.md')).not.toBeInTheDocument()
   })
 
   it('hides the process panel via its close button and reopens via header toggle', async () => {
@@ -218,14 +196,9 @@ describe('AgentWorkspace — mobile', () => {
     )
     await screen.findByRole('dialog', { name: /^process$/i })
 
-    const moreActions = screen.getByRole('button', {
-      name: 'More process actions',
-    })
-    expect(moreActions).toBeInTheDocument()
-    await user.click(moreActions)
     expect(
-      await screen.findByRole('menuitem', { name: /^Copy path$/i }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'More process actions' }),
+    ).not.toBeInTheDocument()
 
     await user.click(
       screen.getByRole('button', { name: /close process panel/i }),
@@ -241,7 +214,7 @@ describe('AgentWorkspace — mobile', () => {
 describe('AgentWorkspace — compact sheet', () => {
   beforeEach(() => mockViewport({ compact: true }))
 
-  it('keeps process actions in an overflow menu', async () => {
+  it('shows tabs with no header overflow actions', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -250,17 +223,16 @@ describe('AgentWorkspace — compact sheet', () => {
     )
     await screen.findByRole('dialog', { name: /^process$/i })
 
+    expect(screen.getByRole('tab', { name: 'Sources' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Artifacts' })).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /copy path/i }),
     ).not.toBeInTheDocument()
-    await user.click(
-      screen.getByRole('button', { name: 'More process actions' }),
-    )
     expect(
-      await screen.findByRole('menuitem', { name: /^Copy path$/i }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /open/i }),
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('menuitem', { name: /Open in new tab/i }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'More process actions' }),
+    ).not.toBeInTheDocument()
   })
 })

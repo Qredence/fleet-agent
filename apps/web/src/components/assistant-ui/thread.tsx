@@ -9,6 +9,7 @@ import { File } from "@/components/assistant-ui/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/follow-up-suggestions";
 import { Image } from "@/components/assistant-ui/image";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { RunActivityInline } from "@/components/process-panel/run-activity-inline";
 import {
   Reasoning,
   ReasoningContent,
@@ -116,13 +117,13 @@ const ThreadHistorySkeleton: FC = () => (
     className="animate-in fade-in fill-mode-both flex flex-col gap-y-6 [animation-delay:150ms] [animation-duration:200ms]"
   >
     <span className="sr-only">Loading conversation</span>
-    <Skeleton className="ml-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
+    <Skeleton className="ms-auto h-9 w-2/5 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton className="h-4 w-11/12 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-4/5 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-3/5 motion-reduce:animate-none" />
     </div>
-    <Skeleton className="ml-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
+    <Skeleton className="ms-auto h-9 w-1/3 rounded-xl motion-reduce:animate-none" />
     <div className="flex flex-col gap-y-2">
       <Skeleton className="h-4 w-10/12 motion-reduce:animate-none" />
       <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
@@ -185,7 +186,7 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className="mb-8 flex flex-col gap-y-4 empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
@@ -194,7 +195,7 @@ const ThreadRoot: FC<{
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer bg-surface-1 flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
+              "aui-thread-viewport-footer bg-surface-1 flex flex-col gap-4 overflow-visible pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
               !isEmpty &&
                 "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
             )}
@@ -483,6 +484,7 @@ const AssistantMessage: FC = () => {
           }}
         </MessagePrimitive.GroupedParts>
         <MessageError />
+        <RunActivityInline />
       </div>
 
       <div

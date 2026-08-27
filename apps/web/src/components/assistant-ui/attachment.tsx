@@ -84,7 +84,7 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
       src={src}
       alt="Attachment preview"
       className={cn(
-        "block h-auto max-h-[80vh] w-auto max-w-full rounded-sm object-contain transition-opacity duration-300 motion-reduce:transition-none",
+        "block h-auto max-h-[80vh] w-auto max-w-full rounded-sm object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 transition-opacity duration-300 motion-reduce:transition-none",
         isLoaded
           ? "aui-attachment-preview-image-loaded opacity-100"
           : "aui-attachment-preview-image-loading opacity-0",
@@ -262,7 +262,7 @@ const AttachmentRemove: FC = () => {
         <button
           type="button"
           aria-label={`Remove ${attachmentName || "attachment"}`}
-          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-full bg-black/50! text-white hover:bg-black/70! flex items-center justify-center active:scale-95 transition-transform"
+          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-full bg-black/50! text-white hover:bg-black/70! flex items-center justify-center active:scale-[0.96] transition-transform"
         />
       }
     >

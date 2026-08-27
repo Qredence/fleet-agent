@@ -135,8 +135,10 @@ describe('ProjectNavTabs & Workspace Secondary Views', () => {
     )
 
     expect(await screen.findByRole('main', { name: /tools catalog/i })).toBeInTheDocument()
-    expect(await screen.findByText('search_docs')).toBeInTheDocument()
-    expect(await screen.findByText('write_report')).toBeInTheDocument()
+    // The FF CardTitle renders the title twice (an aria-hidden ghost span
+    // reserves the semibold width), so assert via findAllByText.
+    expect((await screen.findAllByText('search_docs')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('write_report')).length).toBeGreaterThan(0)
   })
 
   it('renders the Connectors hub route', async () => {

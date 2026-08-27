@@ -117,19 +117,21 @@ export function FileExplorer({
             }
           }}
           className={cn(
-            'flex items-center gap-1.5 px-2 py-1 text-xs font-mono rounded-md transition-colors text-left select-none',
+            'flex items-center gap-1.5 px-2 py-1 text-xs font-mono rounded-md transition-colors text-start select-none',
             isSelected
               ? 'bg-muted text-foreground font-semibold'
               : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
           )}
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          style={{ paddingInlineStart: `${depth * 12 + 8}px` }}
         >
           {isDir ? (
-            isOpen ? (
-              <ChevronDown className="size-3 shrink-0 text-muted-foreground/70" />
-            ) : (
-              <ChevronRight className="size-3 shrink-0 text-muted-foreground/70" />
-            )
+            <span className="inline-flex size-3 shrink-0 rtl:-scale-x-100">
+              {isOpen ? (
+                <ChevronDown className="size-3 text-muted-foreground/70" />
+              ) : (
+                <ChevronRight className="size-3 text-muted-foreground/70" />
+              )}
+            </span>
           ) : (
             <span className="w-3" />
           )}
@@ -171,14 +173,14 @@ export function FileExplorer({
   }
 
   return (
-    <div className="flex h-full flex-col p-2 space-y-2 border-l border-border/60 bg-sidebar/30">
+    <div className="flex h-full flex-col p-2 space-y-2 border-s border-border/60 bg-sidebar/30">
       <div className="relative">
-        <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Search className="size-3.5 absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Filter files..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="h-7 text-xs pl-8 pr-2 bg-background/50 border-border/60 rounded-md placeholder:text-muted-foreground/60"
+          className="h-7 text-xs ps-8 pe-2 bg-background/50 border-border/60 rounded-md placeholder:text-muted-foreground/60"
         />
       </div>
 

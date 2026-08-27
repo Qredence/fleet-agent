@@ -132,6 +132,51 @@ describe('inline assistant-ui agent surfaces', () => {
     expect(screen.getByText('Research report')).toBeInTheDocument()
   })
 
+  it('drops result-less stale searching markers and settles the rest outside a live run', async () => {
+    render(
+      <Runtime
+        message={{
+          role: 'assistant',
+          content: [
+            {
+              type: 'data',
+              name: 'web-search',
+              data: {
+                schemaVersion: 1,
+                query: 'stale empty search',
+                results: [],
+                visibleResults: 0,
+                searching: true,
+                cycle: 0,
+              },
+            },
+            {
+              type: 'data',
+              name: 'web-search',
+              data: {
+                schemaVersion: 1,
+                query: 'settled search',
+                results: [
+                  { title: 'Settled doc', domain: 'settled.dev' },
+                  { title: 'Another doc', domain: 'example.org' },
+                ],
+                visibleResults: 2,
+                searching: true,
+                cycle: 1,
+              },
+            },
+          ],
+          status: { type: 'complete', reason: 'stop' },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('settled search')).toBeInTheDocument()
+    expect(screen.queryByText('stale empty search')).not.toBeInTheDocument()
+    expect(screen.queryByText('Searching')).not.toBeInTheDocument()
+    expect(screen.getByText('Read 2 sources')).toBeInTheDocument()
+  })
+
   it('does not render unversioned data payloads', async () => {
     render(
       <Runtime

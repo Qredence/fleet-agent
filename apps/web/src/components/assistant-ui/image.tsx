@@ -208,7 +208,7 @@ function ImagePreview({
           src={src}
           alt={alt}
           className={cn(
-            "block h-auto w-full object-contain",
+            "block h-auto w-full object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10",
             !loaded && "invisible",
             className,
           )}
@@ -310,7 +310,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
               data-slot="image-zoom-content"
               src={src}
               alt={alt}
-              className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain duration-200"
+              className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain outline outline-1 -outline-offset-1 outline-white/10 duration-200"
               onClick={(e) => {
                 e.stopPropagation();
                 handleClose();

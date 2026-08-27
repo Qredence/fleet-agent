@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Wrench,
@@ -17,6 +18,19 @@ import {
 import { useTools } from '@/features/tools/use-tools'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardGroup,
+  CardHeader,
+  CardMedia,
+  CardTitle,
+} from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { useIsMobile } from '@/hooks/use-media-query'
 
 const TOOL_META: Record<string, { icon: typeof Search; type: string }> = {
   search_docs: { icon: Search, type: 'Built-in Knowledge' },
@@ -40,31 +54,31 @@ function toolMeta(name: string) {
  * Renders a catalog card with a tool's metadata, description, status, capabilities, and timeout.
  *
  * @param tool - The tool entry to display.
+ * @param index - Position inside the CardGroup, injected by the group so the
+ *   proximity highlight and divider geometry line up.
  */
-function ToolCard({ tool }: { tool: ToolCatalogEntry }) {
+function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
   const { icon: Icon, type } = toolMeta(tool.name)
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-3 hover:border-primary/50 transition-colors">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-foreground">
-            <Icon className="size-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold font-mono">{tool.name}</h2>
-            <span className="text-xs text-muted-foreground">{type}</span>
-          </div>
-        </div>
-        <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1">
-          <Check className="size-3" /> Active
-        </Badge>
-      </div>
+    <Card index={index}>
+      <CardHeader>
+        <CardMedia icon={Icon} />
+        <CardTitle className="font-mono">{tool.name}</CardTitle>
+        <CardDescription className="text-xs">{type}</CardDescription>
+        <CardAction>
+          <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1">
+            <Check className="size-3" /> Active
+          </Badge>
+        </CardAction>
+      </CardHeader>
 
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        {tool.description}
-      </p>
+      <CardContent>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {tool.description}
+        </p>
+      </CardContent>
 
-      <div className="flex flex-wrap gap-1.5 pt-1">
+      <CardFooter className="gap-1.5">
         {tool.read_only && (
           <Badge variant="secondary" className="text-[10px] font-normal">
             Read-Only
@@ -83,8 +97,8 @@ function ToolCard({ tool }: { tool: ToolCatalogEntry }) {
         <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
           ⏱ {tool.timeout_seconds}s
         </Badge>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   )
 }
 
@@ -96,6 +110,13 @@ export function ToolsRoute() {
   const threads = useThreads(projectId)
   const thread = threads.data?.[0]
   const tools = useTools()
+  const isMobile = useIsMobile()
+  const [readOnlyOnly, setReadOnlyOnly] = useState(false)
+
+  const visibleTools =
+    readOnlyOnly && tools.data
+      ? tools.data.filter((tool) => tool.read_only)
+      : tools.data
 
   return (
     <AgentWorkspace
@@ -108,14 +129,22 @@ export function ToolsRoute() {
           className="flex h-full min-w-0 flex-1 flex-col bg-background"
         >
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="border-b pb-4">
-              <h1 className="text-xl font-semibold flex items-center gap-2">
-                <Wrench className="size-5 text-sky-400" />
-                DSPy Tools Catalog
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Inspect registered tools, parameter schemas, and execution policies available to the DSPy engine.
-              </p>
+            <div className="flex items-start justify-between gap-4 border-b pb-4">
+              <div>
+                <h1 className="text-xl font-semibold flex items-center gap-2">
+                  <Wrench className="size-5 text-sky-400" />
+                  DSPy Tools Catalog
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Inspect registered tools, parameter schemas, and execution policies available to the DSPy engine.
+                </p>
+              </div>
+              <Switch
+                label="Read-only tools"
+                checked={readOnlyOnly}
+                onToggle={() => setReadOnlyOnly((value) => !value)}
+                disabled={!tools.data}
+              />
             </div>
 
             {tools.isPending && (
@@ -141,17 +170,19 @@ export function ToolsRoute() {
                 </Button>
               </div>
             )}
-            {tools.data && tools.data.length === 0 && (
+            {visibleTools && visibleTools.length === 0 && (
               <p className="text-sm text-muted-foreground" role="status">
-                No tools are registered with the DSPy engine.
+                {readOnlyOnly
+                  ? 'No read-only tools are registered with the DSPy engine.'
+                  : 'No tools are registered with the DSPy engine.'}
               </p>
             )}
-            {tools.data && tools.data.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {tools.data.map((tool) => (
+            {visibleTools && visibleTools.length > 0 && (
+              <CardGroup columns={isMobile ? 1 : 2} separated border="outlined">
+                {visibleTools.map((tool) => (
                   <ToolCard key={tool.name} tool={tool} />
                 ))}
-              </div>
+              </CardGroup>
             )}
           </div>
         </main>

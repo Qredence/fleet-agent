@@ -116,12 +116,12 @@ export function ProjectSidebar() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-full min-w-0 gap-2 px-2 text-left text-sm font-semibold [&>span.relative]:w-full [&>span.relative]:min-w-0 [&>span.relative>span]:flex [&>span.relative>span]:min-w-0 [&>span.relative>span]:flex-1 [&>span.relative>span]:items-center"
+                    className="h-8 w-full min-w-0 gap-2 px-2 text-start text-sm font-semibold [&>span.relative]:w-full [&>span.relative]:min-w-0 [&>span.relative>span]:flex [&>span.relative>span]:min-w-0 [&>span.relative>span]:flex-1 [&>span.relative>span]:items-center"
                   />
                 }
               >
-                <span className="min-w-0 flex-1 truncate text-left">Fleet Agent</span>
-                <ChevronsUpDown className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-start">Fleet Agent</span>
+                <ChevronsUpDown className="ms-auto size-3.5 shrink-0 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
@@ -133,12 +133,12 @@ export function ProjectSidebar() {
           </div>
 
           <div className="relative">
-            <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Search className="size-3.5 absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <SidebarInput
               placeholder="Search…"
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-8"
+              className="ps-8"
             />
           </div>
 
@@ -350,7 +350,7 @@ function NewThreadMenuItem() {
         className="justify-between"
       >
         <span>New</span>
-        <kbd className="pointer-events-none ml-auto text-[10px] text-muted-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
+        <kbd className="pointer-events-none ms-auto text-[10px] text-muted-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
           ⇧⌘O
         </kbd>
       </SidebarMenuButton>
@@ -429,20 +429,20 @@ function ProjectSection({
               event.preventDefault()
               setOpen(!open)
             }}
-            className="min-w-0 flex-1 cursor-pointer select-none truncate pr-[62px]"
+            className="min-w-0 flex-1 cursor-pointer select-none truncate pe-[62px]"
           >
             <span>{name}</span>
           </SidebarGroupLabel>
 
           {threads.data && (
-            <SidebarMenuBadge className="mr-1 text-[10px]">
+            <SidebarMenuBadge className="me-1 text-[10px]">
               {all.length}
             </SidebarMenuBadge>
           )}
         </div>
 
         <SidebarGroupActions
-          className={`${PROJECT_ACTION_REVEAL} right-1.5 top-0`}
+          className={`${PROJECT_ACTION_REVEAL} end-1.5 top-0`}
         >
           <SidebarGroupAction
             aria-label={`New thread in: ${name}`}

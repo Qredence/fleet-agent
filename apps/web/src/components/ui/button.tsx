@@ -18,7 +18,7 @@ import { useSizeVariant } from "@/lib/size-context";
 const buttonVariants = cva(
   [
     "group relative isolate inline-flex items-center justify-center outline-none cursor-pointer",
-    "transition-colors duration-80",
+    "transition-[color,background-color,border-color,transform] [transition-duration:80ms,80ms,80ms,150ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96] motion-reduce:transition-none",
     "disabled:opacity-50 disabled:pointer-events-none",
     "aria-disabled:opacity-50 aria-disabled:pointer-events-none",
     "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",

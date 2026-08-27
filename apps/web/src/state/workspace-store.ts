@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type ProcessPanelTab = 'activity' | 'sources' | 'artifacts'
+export type ProcessPanelTab = 'sources' | 'artifacts'
 export type ThemeMode = 'dark' | 'light' | 'system'
 
 interface WorkspaceState {
@@ -14,9 +14,6 @@ interface WorkspaceState {
   processPanelOpen: boolean
   processPanelTab: ProcessPanelTab
 
-  /** The panel auto-opens on the first tool call exactly once per user. */
-  processPanelAutoOpened: boolean
-
   /** Mobile/compact sheet visibility (transient, never persisted). */
   sidebarSheetOpen: boolean
   processSheetOpen: boolean
@@ -28,10 +25,32 @@ interface WorkspaceState {
   setSidebarCollapsed: (collapsed: boolean) => void
   setProcessPanelOpen: (open: boolean) => void
   setProcessPanelTab: (tab: ProcessPanelTab) => void
-  setProcessPanelAutoOpened: (autoOpened: boolean) => void
   setSidebarSheetOpen: (open: boolean) => void
   setProcessSheetOpen: (open: boolean) => void
   setSelectedArtifactId: (artifactId: string | null) => void
+}
+
+/**
+ * Temporarily disables every CSS transition on the page so a theme flip
+ * commits instantly instead of smearing across all animated color, border and
+ * shadow transitions at once.
+ */
+function suppressTransitionsDuringThemeFlip() {
+  if (typeof document === 'undefined') return
+
+  const style = document.createElement('style')
+  style.append(
+    document.createTextNode('*,*::before,*::after{transition:none !important}'),
+  )
+  document.head.append(style)
+
+  // Force a reflow so the new colors commit while transitions are disabled.
+  void (document.body ?? document.documentElement).offsetHeight
+
+  // Remove on the next frame so restored transitions cannot catch the flip.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => style.remove())
+  })
 }
 
 /**
@@ -40,6 +59,8 @@ interface WorkspaceState {
  * @param theme - The theme mode to apply.
  */
 export function applyTheme(theme: ThemeMode) {
+  suppressTransitionsDuringThemeFlip()
+
   const root = document.documentElement
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   const isDark = theme === 'dark' || (theme === 'system' && systemDark)
@@ -57,8 +78,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       theme: 'dark',
       sidebarCollapsed: false,
       processPanelOpen: true,
-      processPanelTab: 'activity',
-      processPanelAutoOpened: false,
+      processPanelTab: 'sources',
       sidebarSheetOpen: false,
       processSheetOpen: false,
       selectedArtifactId: null,
@@ -70,8 +90,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setProcessPanelOpen: (processPanelOpen) => set({ processPanelOpen }),
       setProcessPanelTab: (processPanelTab) => set({ processPanelTab }),
-      setProcessPanelAutoOpened: (processPanelAutoOpened) =>
-        set({ processPanelAutoOpened }),
       setSidebarSheetOpen: (sidebarSheetOpen) => set({ sidebarSheetOpen }),
       setProcessSheetOpen: (processSheetOpen) => set({ processSheetOpen }),
       setSelectedArtifactId: (selectedArtifactId) => set({ selectedArtifactId }),
@@ -83,7 +101,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         processPanelOpen: state.processPanelOpen,
         processPanelTab: state.processPanelTab,
-        processPanelAutoOpened: state.processPanelAutoOpened,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) {

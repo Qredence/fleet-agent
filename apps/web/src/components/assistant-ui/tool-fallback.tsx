@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 
 const ANIMATION_DURATION = 200;
 
-const pressable = "active:scale-[0.98]";
+const pressable = "active:scale-[0.96]";
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -146,7 +146,7 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-tool-fallback-trigger group/trigger text-muted-foreground hover:text-foreground flex w-fit origin-left rtl:origin-right items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.96]",
         className,
       )}
       {...props}
@@ -203,13 +203,9 @@ function ToolFallbackContent({
     <CollapsibleContent
       data-slot="tool-fallback-content"
       className={cn(
-        "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
-        "data-closed:animate-collapsible-up",
-        "data-open:animate-collapsible-down",
-        "data-closed:fill-mode-forwards",
+        "aui-tool-fallback-content relative h-(--collapsible-panel-height) overflow-hidden text-sm outline-none",
+        "group/collapsible-content transition-[height] duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
         "data-closed:pointer-events-none",
-        "[--tw-duration:var(--animation-duration)]",
         className,
       )}
       {...props}

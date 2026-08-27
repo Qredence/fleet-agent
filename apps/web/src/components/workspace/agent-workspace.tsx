@@ -1,10 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 
-import { useAgUiState } from '@assistant-ui/react-ag-ui'
-
 import { ProcessPanel } from '@/components/process-panel/process-panel'
-import { useAutoOpenProcessPanel } from '@/components/process-panel/use-auto-open-process-panel'
 import { ProjectSidebar } from '@/components/projects/project-sidebar'
 import { ConversationPane } from '@/components/thread/conversation-pane'
 import type { ComposerWorkspaceContext } from '@/components/assistant-ui/composer-elements'
@@ -19,8 +16,6 @@ import {
   SheetDescription,
   SheetTitle,
 } from '@/components/ui/sheet'
-import type { AgentWorkspaceState } from '@/contracts/generated'
-import { useHasAgUiRuntime } from '@/features/agent-runtime/ag-ui-presence'
 import { useProjects } from '@/features/projects/use-projects'
 import { useIsCompact, useIsMobile } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
@@ -113,19 +108,7 @@ function usePaneActions() {
 }
 
 /**
- * Subscribes to the AG-UI agent state to auto-open the desktop process panel
- * on the first tool call. Only mounted under an AG-UI runtime: preview routes
- * (tools, optimizer, connectors) render the workspace without
- * AgentRuntimeProvider, where `useAgUiState` would throw.
- */
-function ProcessPanelAutoOpen() {
-  const agentState = useAgUiState<AgentWorkspaceState>()
-  useAutoOpenProcessPanel(agentState?.run.toolCallCount ?? 0)
-  return null
-}
-
-/**
- * Renders the desktop workspace with project navigation, conversation content, and process controls.
+ * Renders the desktop workspace with project navigation, conversation content, and agent process views.
  *
  * @param threadTitle - The title displayed for the current conversation.
  * @param workspaceContext - Context describing the current agent, project, and thread.
@@ -141,7 +124,6 @@ function DesktopWorkspace({
   customMain?: ReactNode
 }) {
   const isCompact = useIsCompact()
-  const hasRuntime = useHasAgUiRuntime()
   const sidebarCollapsed = useWorkspaceStore((s) => s.sidebarCollapsed)
   const setSidebarCollapsed = useWorkspaceStore((s) => s.setSidebarCollapsed)
   const processPanelOpen = useWorkspaceStore((s) => s.processPanelOpen)
@@ -177,7 +159,6 @@ function DesktopWorkspace({
   return (
     <SurfaceProvider value={1}>
       <div className="flex h-dvh bg-surface-1 text-foreground">
-      {hasRuntime && <ProcessPanelAutoOpen />}
       {isCompact && (
         <Sheet open={processSheetOpen} onOpenChange={setProcessSheetOpen}>
           <SheetContent

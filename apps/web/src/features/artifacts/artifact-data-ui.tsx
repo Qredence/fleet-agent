@@ -44,7 +44,7 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
         setTab('artifacts')
         select(data.id)
       }}
-      className="mt-2 block w-full max-w-sm rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="mt-2 block w-full max-w-sm rounded-2xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArtifactCard
         title={data.name}

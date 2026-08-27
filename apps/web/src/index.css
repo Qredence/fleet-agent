@@ -68,22 +68,6 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-  @keyframes collapsible-down {
-  from {
-    height: 0;
-        }
-  to {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
-        }
-    }
-  @keyframes collapsible-up {
-  from {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
-        }
-  to {
-    height: 0;
-        }
-    }
   @keyframes spinner-move {
   to {
     stroke-dashoffset: -100;

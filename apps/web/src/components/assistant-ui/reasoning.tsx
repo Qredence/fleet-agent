@@ -201,7 +201,7 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-muted/40 border border-border/40 transition-[color,scale,background-color] active:scale-[0.98] mb-2 select-none",
+        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-muted/40 border border-border/40 transition-[color,scale,background-color] active:scale-[0.96] mb-2 select-none",
         className,
       )}
       {...props}
@@ -246,13 +246,9 @@ function ReasoningContent({
     <CollapsibleContent
       data-slot="reasoning-content"
       className={cn(
-        "aui-reasoning-content text-muted-foreground relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
-        "data-closed:animate-collapsible-up",
-        "data-open:animate-collapsible-down",
-        "data-closed:fill-mode-forwards",
+        "aui-reasoning-content text-muted-foreground relative h-(--collapsible-panel-height) overflow-hidden text-sm outline-none",
+        "group/collapsible-content transition-[height] duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none",
         "data-closed:pointer-events-none",
-        "[--tw-duration:var(--animation-duration)]",
         className,
       )}
       {...props}

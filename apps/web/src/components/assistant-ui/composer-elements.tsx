@@ -448,7 +448,7 @@ function TriggerItems({ items }: { items: readonly Unstable_TriggerItem[] }) {
           key={item.id}
           item={item}
           index={index}
-          className="group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-xs outline-none transition-colors hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+          className="group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-start text-xs outline-none transition-colors hover:bg-accent data-highlighted:bg-accent data-highlighted:text-accent-foreground"
         >
           <TriggerItemIcon item={item} />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">

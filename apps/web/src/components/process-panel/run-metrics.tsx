@@ -1,6 +1,8 @@
-import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { AlertTriangleIcon, CheckIcon } from 'lucide-react'
 
 import { formatDuration } from '@/components/process-panel/status-chip'
+import { mono } from '@/lib/surfaces'
+import { cn } from '@/lib/utils'
 import type { RunMetrics } from '@/contracts/generated'
 
 /** Token usage and counters for a finished (or in-flight) run. */
@@ -15,7 +17,10 @@ export function RunMetricsLine({ metrics }: { metrics: RunMetrics }) {
   ].filter(Boolean)
 
   return (
-    <p aria-label="run metrics" className="text-xs text-muted-foreground">
+    <p
+      aria-label="run metrics"
+      className={cn(mono, 'text-foreground/30 tabular-nums')}
+    >
       {parts.join(' · ')}
     </p>
   )
@@ -32,7 +37,7 @@ const TERMINATION_LABELS: Record<string, string> = {
   cancelled: 'Run cancelled',
 }
 
-/** Surfaces how a run ended — prominently for problems, quietly for submit. */
+/** Surfaces how a run ended — prominent for problems, quiet for submit. */
 export function TerminationNotice({
   terminationReason,
   errorCode,
@@ -49,26 +54,34 @@ export function TerminationNotice({
   return (
     <div
       role={isProblem ? 'alert' : 'status'}
-      className={
+      className={cn(
+        'flex items-start gap-2 text-xs',
         isProblem
-          ? 'flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive'
-          : 'flex items-start gap-2 rounded-lg border p-2.5 text-xs text-muted-foreground'
-      }
+          ? 'text-red-600 dark:text-red-400'
+          : 'text-foreground/45',
+      )}
     >
       {isProblem ? (
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+        <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
       ) : (
-        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" />
+        <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
       )}
-      <div>
+      <div className="min-w-0">
         <p className="font-medium">
           {(terminationReason &&
             (TERMINATION_LABELS[terminationReason] ?? terminationReason)) ??
             'Run failed'}
         </p>
         {errorCode && (
-          <p className="mt-0.5">
-            <code>{errorCode}</code>
+          <p className="mt-1">
+            <code
+              className={cn(
+                mono,
+                'bg-foreground/[0.06] text-foreground/70 rounded-md px-1.5 py-0.5',
+              )}
+            >
+              {errorCode}
+            </code>
           </p>
         )}
       </div>

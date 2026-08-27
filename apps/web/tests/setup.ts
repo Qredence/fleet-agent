@@ -16,14 +16,14 @@ Element.prototype.scrollIntoView ??= () => {}
 /**
  * Controllable matchMedia stub.
  *
- * mockViewport({ mobile: true })      → (max-width: 767px) matches
+ * mockViewport({ mobile: true })      → (max-width: 780px) matches
  * mockViewport({ compact: true })     → (max-width: 1199px) matches
  * mockViewport()                      → wide desktop (no query matches)
  */
 export function mockViewport({ mobile = false, compact = false } = {}) {
   window.matchMedia = ((query: string) =>
     ({
-      matches: query.includes('767px') ? mobile : query.includes('1199px') ? compact : false,
+      matches: query.includes('780px') ? mobile : query.includes('1199px') ? compact : false,
       media: query,
       onchange: null,
       addEventListener: () => {},

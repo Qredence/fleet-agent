@@ -612,7 +612,7 @@ export function ComposerContext({
     >
       <div
         className={cn(
-          "absolute end-0 bottom-full z-10 mb-2 flex w-64 max-w-[calc(100vw-2rem)] origin-bottom-right flex-col gap-3.5 rounded-2xl border border-border/60 p-4",
+          "absolute end-0 bottom-full z-10 mb-2 flex min-w-64 max-w-[calc(100vw-2rem)] origin-bottom-right flex-col gap-3.5 rounded-2xl border border-border/60 p-4",
           surfaceClasses(3, 3),
           "transition-[opacity,scale] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
           "pointer-events-none scale-[0.97] opacity-0",

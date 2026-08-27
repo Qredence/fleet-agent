@@ -161,7 +161,7 @@ describe('ProjectSidebar (live)', () => {
       'group-focus-within/group-header:opacity-100',
     )
     expect(actions?.className).toContain('has-[[data-state=open]]:opacity-100')
-    expect(projectLabel).toHaveClass('pr-[62px]')
+    expect(projectLabel).toHaveClass('pe-[62px]')
 
     await user.hover(projectLabel)
     await user.click(
@@ -178,7 +178,7 @@ describe('ProjectSidebar (live)', () => {
     const trigger = await screen.findByRole('button', { name: 'Fleet Agent' })
     expect(trigger).toHaveClass('w-full', 'min-w-0')
     expect(trigger.querySelector('span.min-w-0.flex-1')).toBeInTheDocument()
-    expect(trigger.querySelector('svg')).toHaveClass('ml-auto', 'shrink-0')
+    expect(trigger.querySelector('svg')).toHaveClass('ms-auto', 'shrink-0')
   })
 
   it('navigates to a thread on click', async () => {
