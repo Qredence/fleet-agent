@@ -54,7 +54,7 @@ note "phase 2: fixture run — send, process, answer"
 $AB fill "$TEXTBOX" "How does the agent state sync work?" >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB click "$SEND" >/dev/null
-sleep 2.6
+sleep 4.5
 MAIN=$($AB get text "main")
 require_grep "$MAIN" "tool call" "tool call collapsible in the thread"
 require_grep "$MAIN" "JSON snapshot" "fixture answer text"

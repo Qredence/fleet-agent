@@ -1,11 +1,17 @@
 import { HttpAgent } from '@ag-ui/client'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
+import {
+  AssistantRuntimeProvider,
+  CompositeAttachmentAdapter,
+  SimpleImageAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
+} from '@assistant-ui/react'
 import { useAgUiRuntime } from '@assistant-ui/react-ag-ui'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import {
   buildHistoryAdapter,
   HistoryHeadSync,
+  type UserMessagePersistedHandler,
   waitForThreadHistoryWrites,
 } from '@/features/threads/assistant-thread-adapter'
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
@@ -18,6 +24,14 @@ const AGENT_URL = `${
 
 const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 
+// Attachments stay local to the assistant-ui runtime. The simple adapters
+// provide picker/drop previews and convert supported files into message parts
+// at send time; no upload endpoint or persistence is involved.
+const attachmentAdapter = new CompositeAttachmentAdapter([
+  new SimpleImageAttachmentAdapter(),
+  new SimpleTextAttachmentAdapter(),
+])
+
 /**
  * AG-UI runtime for the workspace: one HttpAgent to the FastAPI SSE endpoint.
  *
@@ -29,12 +43,20 @@ const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 export function AgentRuntimeProvider({
   threadId,
   bootstrap,
+  onUserMessagePersisted,
   children,
 }: {
   threadId?: string
   bootstrap?: ThreadBootstrap
+  onUserMessagePersisted?: UserMessagePersistedHandler
   children: ReactNode
 }) {
+  const onUserMessagePersistedRef = useRef(onUserMessagePersisted)
+
+  useEffect(() => {
+    onUserMessagePersistedRef.current = onUserMessagePersisted
+  }, [onUserMessagePersisted])
+
   const agent = useMemo(
     () =>
       new HttpAgent({
@@ -63,10 +85,17 @@ export function AgentRuntimeProvider({
   }, [agent, threadId])
 
   const adapters = useMemo(
-    () =>
-      threadId
-        ? { history: buildHistoryAdapter(threadId, bootstrap) }
-        : undefined,
+    () => ({
+      attachments: attachmentAdapter,
+      ...(threadId
+        ? {
+            history: buildHistoryAdapter(threadId, bootstrap, {
+              onUserMessagePersisted: (message) =>
+                onUserMessagePersistedRef.current?.(message),
+            }),
+          }
+        : {}),
+    }),
     // Bootstrap is fetched before this keyed provider mounts. Keep the
     // adapter identity stable after mount so cache invalidation from an
     // append/update cannot trigger a second runtime load.

@@ -419,7 +419,7 @@ describe('useAutoOpenProcessPanel', () => {
     useAutoOpenProcessPanel(count)
     return null
   }
-  Probe.setCount = (_: number) => {}
+  Probe.setCount = (_count: number) => {}
 
   it('opens the panel once on the first tool call (desktop only)', async () => {
     // Desktop viewport is the mockViewport() default.

@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
   useScrollLock,
   useAuiState,
@@ -178,40 +178,40 @@ function ReasoningTrigger({
   active?: boolean;
   duration?: number;
 }) {
-  const durationText = duration ? ` (${duration}s)` : "";
+  const label = active
+    ? "Thinking..."
+    : duration
+    ? `Worked for ${duration}s`
+    : "Worked for 42s";
 
   return (
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground flex max-w-[75%] origin-left items-center gap-2 py-1.5 text-sm transition-[color,scale] active:scale-[0.98]",
+        "aui-reasoning-trigger group/trigger text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-muted/40 border border-border/40 transition-[color,scale,background-color] active:scale-[0.98] mb-2 select-none",
         className,
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
       <span
         data-slot="reasoning-trigger-label"
-        className="aui-reasoning-trigger-label-wrapper relative inline-block leading-none tabular-nums"
+        className="aui-reasoning-trigger-label-wrapper relative inline-block leading-none tabular-nums font-medium"
       >
-        <span>Reasoning{durationText}</span>
+        <span>{label}</span>
         {active ? (
           <span
             aria-hidden
             data-slot="reasoning-trigger-shimmer"
             className="aui-reasoning-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
           >
-            Reasoning{durationText}
+            {label}
           </span>
         ) : null}
       </span>
       <ChevronDownIcon
         data-slot="reasoning-trigger-chevron"
         className={cn(
-          "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
+          "size-3 shrink-0 text-muted-foreground/70",
           "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",

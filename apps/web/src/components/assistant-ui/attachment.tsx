@@ -35,7 +35,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const useFileSrc = (file: File | undefined) => {
@@ -140,6 +140,7 @@ const AttachmentUI: FC = () => {
   const isComposer = aui.attachment.source !== "message";
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
+  const attachmentName = useAuiState((s) => s.attachment.name);
   const typeLabel = useAuiState((s) => {
     const type = s.attachment.type;
     switch (type) {
@@ -227,6 +228,17 @@ const AttachmentUI: FC = () => {
           </AttachmentPreviewDialog>
           {isComposer && <AttachmentRemove />}
         </AttachmentPrimitive.Root>
+        {(isUploading || isError) && (
+          <span
+            className="sr-only"
+            role={isError ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {isError
+              ? `${attachmentName || "Attachment"}: ${errorMessage}`
+              : `${attachmentName || "Attachment"} is uploading.`}
+          </span>
+        )}
         <TooltipContent side="top">
           <AttachmentPrimitive.Name />
           {errorMessage && (
@@ -239,17 +251,19 @@ const AttachmentUI: FC = () => {
 };
 
 const AttachmentRemove: FC = () => {
+  const attachmentName = useAuiState((s) => s.attachment.name);
+
   return (
     <AttachmentPrimitive.Remove
       render={
-        <TooltipIconButton
-          tooltip="Remove file"
-          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-full bg-black/50! text-white after:absolute after:-inset-1.5 hover:bg-black/70! hover:text-white! active:scale-[0.96] motion-reduce:transition-none"
-          side="top"
+        <button
+          type="button"
+          aria-label={`Remove ${attachmentName || "attachment"}`}
+          className="aui-attachment-tile-remove absolute end-1 top-1 size-5 rounded-full bg-black/50! text-white hover:bg-black/70! flex items-center justify-center active:scale-95 transition-transform"
         />
       }
     >
-      <XIcon className="aui-attachment-remove-icon size-3 stroke-[2.5]" />
+      <XIcon className="size-3 stroke-[2.5]" />
     </AttachmentPrimitive.Remove>
   );
 };
@@ -266,7 +280,7 @@ export const UserMessageAttachments: FC = () => {
 
 export const ComposerAttachments: FC = () => {
   return (
-    <div className="aui-composer-attachments flex w-full flex-row items-center gap-2 overflow-x-auto empty:hidden">
+    <div className="aui-composer-attachments flex max-w-full min-w-0 w-full flex-row items-center gap-2 overflow-x-auto empty:hidden">
       <ComposerPrimitive.Attachments>
         {() => <AttachmentUI />}
       </ComposerPrimitive.Attachments>
@@ -278,17 +292,16 @@ export const ComposerAddAttachment: FC = () => {
   return (
     <ComposerPrimitive.AddAttachment
       render={
-        <TooltipIconButton
-          tooltip="Add Attachment"
-          side="bottom"
+        <Button
+          type="button"
           variant="ghost"
           size="icon"
-          className="aui-composer-add-attachment text-muted-foreground hover:text-foreground hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30 size-7 rounded-full active:scale-[0.96] motion-reduce:transition-none"
-          aria-label="Add Attachment"
+          className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+          aria-label="Add attachment"
         />
       }
     >
-      <PlusIcon className="aui-attachment-add-icon size-4" />
+      <PlusIcon className="size-4" />
     </ComposerPrimitive.AddAttachment>
   );
 };

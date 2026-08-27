@@ -1,5 +1,13 @@
-import { Activity, FileBox, FolderSearch, X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import {
+  Activity,
+  Copy,
+  ExternalLink,
+  FileBox,
+  FolderSearch,
+  MoreHorizontal,
+  X,
+} from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { useAuiState } from '@assistant-ui/react'
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
@@ -7,9 +15,17 @@ import { useAgUiState } from '@assistant-ui/react-ag-ui'
 import { ActivityTab } from '@/components/process-panel/activity-tab'
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
+import { FileExplorer } from '@/components/process-panel/file-explorer'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AgentWorkspaceState } from '@/contracts/generated'
+import { surfaceClasses } from '@/lib/surface-classes'
 import {
   useWorkspaceStore,
   type ProcessPanelTab,
@@ -20,6 +36,176 @@ const TABS: { value: ProcessPanelTab; label: string }[] = [
   { value: 'sources', label: 'Sources' },
   { value: 'artifacts', label: 'Artifacts' },
 ]
+
+type CopyFeedback = 'idle' | 'copied' | 'error'
+
+interface ProcessHeaderProps {
+  activeFilePath: string
+  onClose: () => void
+  compact?: boolean
+}
+
+function ProcessOpenMenuItem({
+  canOpen,
+  onOpen,
+}: {
+  canOpen: boolean
+  onOpen: () => void
+}) {
+  return (
+    <DropdownMenuItem
+      disabled={!canOpen}
+      onClick={canOpen ? onOpen : undefined}
+      title={canOpen ? undefined : 'Open is available only for README.md.'}
+    >
+      <ExternalLink className="size-3.5" />
+      {canOpen ? 'Open in new tab' : 'Open unavailable for this file'}
+    </DropdownMenuItem>
+  )
+}
+
+function ProcessHeader({
+  activeFilePath,
+  onClose,
+  compact = false,
+}: ProcessHeaderProps) {
+  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback>('idle')
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  )
+  const canOpen = activeFilePath === 'README.md'
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    }
+  }, [])
+
+  const handleCopyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(activeFilePath)
+      setCopyFeedback('copied')
+    } catch {
+      setCopyFeedback('error')
+    }
+
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current)
+    feedbackTimer.current = setTimeout(() => setCopyFeedback('idle'), 1800)
+  }
+
+  const copyLabel =
+    copyFeedback === 'copied'
+      ? 'Copied'
+      : copyFeedback === 'error'
+        ? 'Copy failed'
+        : 'Copy path'
+  const feedbackMessage =
+    copyFeedback === 'copied'
+      ? `${activeFilePath} copied to clipboard.`
+      : copyFeedback === 'error'
+        ? `Could not copy ${activeFilePath}.`
+        : ''
+
+  const openReadme = () => {
+    if (canOpen) window.open('/README.md', '_blank')
+  }
+
+  return (
+    <header className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <h2
+          id="process-heading"
+          className="shrink-0 text-sm font-semibold text-foreground"
+        >
+          Process
+        </h2>
+        <div
+          className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+          aria-label={`fleet-agent, ${activeFilePath}`}
+        >
+          <span aria-hidden="true">fleet-agent</span>
+          <span aria-hidden="true">&gt;</span>
+          <span
+            className="min-w-0 truncate font-medium text-foreground"
+            title={activeFilePath}
+          >
+            {activeFilePath}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        {!compact && (
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => void handleCopyPath()}
+              aria-label={`Copy path ${activeFilePath}`}
+            >
+              <span>{copyLabel}</span>
+              <Copy className="size-3" />
+            </Button>
+
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 gap-1 bg-foreground px-2.5 text-xs text-background disabled:pointer-events-auto disabled:cursor-not-allowed"
+              onClick={openReadme}
+              disabled={!canOpen}
+              aria-label={
+                canOpen ? 'Open README.md' : 'Open unavailable for this file'
+              }
+              title={
+                canOpen ? undefined : 'Open is available only for README.md.'
+              }
+            >
+              <span>Open</span>
+            </Button>
+          </div>
+        )}
+
+        {compact && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="inline-flex size-7 items-center justify-center rounded-[20px] outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
+                  aria-label="More process actions"
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 text-xs">
+              <DropdownMenuItem onClick={() => void handleCopyPath()}>
+                <Copy className="size-3.5" />
+                {copyLabel}
+              </DropdownMenuItem>
+              <ProcessOpenMenuItem canOpen={canOpen} onOpen={openReadme} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="Close process panel"
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+
+      <span className="sr-only" role="status" aria-live="polite">
+        {feedbackMessage}
+      </span>
+    </header>
+  )
+}
 
 function IdleState({ icon, message }: { icon: ReactNode; message: string }) {
   return (
@@ -34,41 +220,42 @@ function IdleState({ icon, message }: { icon: ReactNode; message: string }) {
  * Right-side process panel. Renders ONLY the AG-UI agent state
  * (useAgUiState) — an intentional, user-safe trace of steps, tool calls,
  * sources, and artifacts. Never parses messages; never sees chain-of-thought.
- *
- * The auto-open-on-first-tool-call behavior lives in AgentWorkspace (this
- * panel is unmounted while closed).
  */
-export function ProcessPanel({ onClose }: { onClose: () => void }) {
+export function ProcessPanel({
+  onClose,
+  compact = false,
+}: {
+  onClose: () => void
+  compact?: boolean
+}) {
   const tab = useWorkspaceStore((state) => state.processPanelTab)
   const setTab = useWorkspaceStore((state) => state.setProcessPanelTab)
 
   const agentState = useAgUiState<AgentWorkspaceState>()
   const isRunning = useAuiState((state) => state.thread.isRunning)
   const selectedArtifactId = useWorkspaceStore((s) => s.selectedArtifactId)
+  const [activeFilePath, setActiveFilePath] = useState('README.md')
 
   return (
     <aside
-      aria-label="Process"
-      className="flex h-full min-h-0 flex-col bg-background"
+      aria-labelledby="process-heading"
+      className={`flex h-full min-h-0 flex-col ${surfaceClasses(
+        compact ? 3 : 2,
+        compact ? 3 : 2,
+      )}`}
     >
-      <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
-        <h2 className="text-sm font-semibold">Process</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Close process panel"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </Button>
-      </header>
+      <ProcessHeader
+        activeFilePath={activeFilePath}
+        onClose={onClose}
+        compact={compact}
+      />
 
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as ProcessPanelTab)}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <TabsList className="mx-4 mt-3 shrink-0">
+        <TabsList className="mx-4 mt-2 shrink-0">
           {TABS.map(({ value, label }) => (
             <TabsTrigger key={value} value={value}>
               {label}
@@ -86,6 +273,7 @@ export function ProcessPanel({ onClose }: { onClose: () => void }) {
             />
           )}
         </TabsContent>
+
         <TabsContent value="sources" className="min-h-0 flex-1">
           {agentState ? (
             <SourcesTab
@@ -101,18 +289,28 @@ export function ProcessPanel({ onClose }: { onClose: () => void }) {
             />
           )}
         </TabsContent>
+
         <TabsContent value="artifacts" className="min-h-0 flex-1">
-          {agentState ? (
-            <ArtifactsTab
-              artifacts={agentState.artifacts}
-              selectedArtifactId={selectedArtifactId}
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] h-full min-h-0">
+            <div className="min-h-0 overflow-y-auto">
+              {agentState ? (
+                <ArtifactsTab
+                  artifacts={agentState.artifacts}
+                  selectedArtifactId={selectedArtifactId}
+                />
+              ) : (
+                <IdleState
+                  icon={<FileBox className="size-5" />}
+                  message="Generated artifacts will appear here."
+                />
+              )}
+            </div>
+
+            <FileExplorer
+              selectedPath={activeFilePath}
+              onSelectPath={setActiveFilePath}
             />
-          ) : (
-            <IdleState
-              icon={<FileBox className="size-5" />}
-              message="Generated artifacts will appear here."
-            />
-          )}
+          </div>
         </TabsContent>
       </Tabs>
     </aside>

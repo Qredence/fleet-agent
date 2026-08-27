@@ -1,19 +1,26 @@
 import {
+  Check,
   ChevronsUpDown,
   CircleUser,
-  Folder,
-  FolderOpen,
-  MoreHorizontal,
+  Laptop,
+  Moon,
+  MoreVertical,
   Pencil,
+  Plug,
   Plus,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Sun,
   Trash,
+  Wrench,
 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogContent,
@@ -30,22 +37,20 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Sidebar,
+  SidebarHeader,
+  SidebarInput,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
+  SidebarGroupActions,
+  SidebarGroupAction,
   SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
   SidebarMenuAction,
   SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarMenuSkeleton,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarSeparator,
 } from '@/components/ui/sidebar'
@@ -61,76 +66,150 @@ import { useThreads } from '@/features/threads/use-threads'
 import {
   createThread,
   deleteThread,
-  type ThreadOut,
 } from '@/features/threads/threads-api'
+import { useWorkspaceStore } from '@/state/workspace-store'
 
-/** Threads shown per project group before a "Show more" expander appears. */
 const THREAD_PREVIEW_COUNT = 5
 
-/**
- * Left sidebar, built on the vendored shadcn/Base-UI sidebar kit
- * (`components/ui/sidebar.tsx`). Structure: header > New thread > one
- * collapsible SidebarMenuItem per project (badge = thread count, hover
- * actions: new-thread + rename/delete) > threads as MenuSub > footer menu.
- * Open/close of the whole panel stays with the workspace shell (zustand +
- * resizable panes) — the kit Provider here is local and never persists.
- */
+// Project-level controls keep their space in the header so revealing them
+// never moves the project label. Pointer hover and focus-within both expose
+// the controls; the touch variant keeps the same actions reachable without a
+// hover device.
+const PROJECT_ACTION_REVEAL =
+  'pointer-events-none opacity-0 transition-opacity duration-80 group-hover/group-header:pointer-events-auto group-hover/group-header:opacity-100 group-focus-within/group-header:pointer-events-auto group-focus-within/group-header:opacity-100 has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:opacity-100 has-[[data-popup-open]]:pointer-events-auto has-[[data-popup-open]]:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100'
+
 export function ProjectSidebar() {
   const projects = useProjects()
   const [createOpen, setCreateOpen] = useState(false)
+  const [searchFilter, setSearchFilter] = useState('')
+  const { projectId } = useParams<{ projectId?: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const allProjects = projects.data ?? []
+  const filteredProjects = searchFilter
+    ? allProjects.filter((p) =>
+        p.name.toLowerCase().includes(searchFilter.toLowerCase()),
+      )
+    : allProjects
 
   return (
-    // The shell owns panel visibility; this provider only feeds the kit's
-    // internal `useSidebar` consumers (never persists, no ⌘B).
     <SidebarProvider
-      className="h-full min-h-0"
-      enableKeyboardShortcut={false}
-      persistState={false}
+      className="h-full min-h-0 w-full min-w-0"
+      width="100%"
+      widthMobile="18rem"
     >
       <Sidebar
+        variant="floating"
         collapsible="none"
-        className="w-full"
-        role="complementary"
-        aria-label="Projects and threads"
+        className="h-full w-full min-w-0"
       >
-        <SidebarHeader className="gap-0 p-0">
-          <div className="flex h-12 items-center px-3">
-            <span className="text-sm font-semibold">Fleet Agent</span>
+        {/* Workspace Switcher & Search */}
+        <SidebarHeader>
+          <div className="flex items-center justify-between px-1 py-0.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full min-w-0 gap-2 px-2 text-left text-sm font-semibold [&>span.relative]:w-full [&>span.relative]:min-w-0 [&>span.relative>span]:flex [&>span.relative>span]:min-w-0 [&>span.relative>span]:flex-1 [&>span.relative>span]:items-center"
+                  />
+                }
+              >
+                <span className="min-w-0 flex-1 truncate text-left">Fleet Agent</span>
+                <ChevronsUpDown className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                  <Plus className="size-3.5" />
+                  New workspace
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <SidebarSeparator />
-          <div className="p-2">
-            <NewThreadButton />
+
+          <div className="relative">
+            <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <SidebarInput
+              placeholder="Search…"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="pl-8"
+            />
           </div>
-          <SidebarSeparator />
+
+          <SidebarMenu>
+            <NewThreadMenuItem />
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                icon={Sparkles}
+                isActive={location.pathname.includes('/optimizer')}
+                onClick={() => projectId && navigate(`/projects/${projectId}/optimizer`)}
+                disabled={!projectId}
+              >
+                <span>Optimizer</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                icon={Wrench}
+                isActive={location.pathname.includes('/tools')}
+                onClick={() => projectId && navigate(`/projects/${projectId}/tools`)}
+                disabled={!projectId}
+              >
+                <span>Tools</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                icon={Plug}
+                isActive={location.pathname.includes('/connectors')}
+                onClick={() => projectId && navigate(`/projects/${projectId}/connectors`)}
+                disabled={!projectId}
+              >
+                <span>Connectors</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
 
+        {/* Dynamic Project Groups */}
         <SidebarContent>
+          <div className="flex items-center justify-between px-3 pt-2 pb-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground/80">
+            <span>Projects</span>
+            <button
+              type="button"
+              aria-label="New project"
+              onClick={() => setCreateOpen(true)}
+              className="p-1 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+
           {projects.data ? (
-            projects.data.length ? (
-              <SidebarGroup>
-                <SidebarGroupLabel>
-                  <span>Projects</span>
-                </SidebarGroupLabel>
-                <SidebarGroupAction
-                  aria-label="New project"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  <Plus />
-                </SidebarGroupAction>
-                <SidebarGroupContent>
-                  <ProjectsMenu projects={projects.data} />
-                </SidebarGroupContent>
-              </SidebarGroup>
+            filteredProjects.length ? (
+              filteredProjects.map((project) => (
+                <ProjectSection
+                  key={project.id}
+                  project={project}
+                  defaultOpen={project.id === projectId}
+                />
+              ))
             ) : (
-              <SidebarGroup className="h-full items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-                <FolderOpen className="size-5" />
-                <p>No projects yet</p>
+              <SidebarGroup className="h-full items-center justify-center gap-2 text-center text-sm text-muted-foreground p-6">
+                <p className="text-xs">No projects found</p>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCreateOpen(true)}
+                  className="h-7 text-xs gap-1"
                 >
-                  <Plus className="size-4" />
+                  <Plus className="size-3.5" />
                   New project
                 </Button>
               </SidebarGroup>
@@ -138,23 +217,38 @@ export function ProjectSidebar() {
           ) : (
             <SidebarGroup>
               <SidebarGroupLabel>Projects</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {Array.from({ length: 3 }, (_, i) => (
-                    <SidebarMenuItem key={i}>
-                      <SidebarMenuSkeleton showIcon />
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
+              <SidebarMenu>
+                {Array.from({ length: 3 }, (_, i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuSkeleton showIcon />
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
             </SidebarGroup>
           )}
         </SidebarContent>
 
-        <SidebarFooter className="gap-0 p-0">
+        {/* Footer Actions & Settings */}
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton icon={Settings}>Settings</SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <ThemeDropdownMenu />
+            </SidebarMenuItem>
+          </SidebarMenu>
+
           <SidebarSeparator />
-          <div className="p-2">
-            <UserMenu />
+
+          <div className="flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <CircleUser className="size-4" />
+              <span className="font-semibold text-foreground">Qredence</span>
+            </div>
+            <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">
+              v0.1.0
+            </span>
           </div>
         </SidebarFooter>
       </Sidebar>
@@ -164,7 +258,58 @@ export function ProjectSidebar() {
   )
 }
 
-function NewThreadButton() {
+function ThemeDropdownMenu() {
+  const theme = useWorkspaceStore((s) => s.theme)
+  const setTheme = useWorkspaceStore((s) => s.setTheme)
+
+  const Icon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Laptop
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <SidebarMenuButton icon={Icon}>
+            <span>Theme</span>
+          </SidebarMenuButton>
+        }
+      />
+      <DropdownMenuContent align="start" side="top" className="w-36 text-xs p-1">
+        <DropdownMenuItem
+          onClick={() => setTheme('light')}
+          className="flex items-center justify-between cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Sun className="size-3.5" />
+            <span>Light</span>
+          </div>
+          {theme === 'light' && <Check className="size-3.5 text-foreground" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setTheme('dark')}
+          className="flex items-center justify-between cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Moon className="size-3.5" />
+            <span>Dark</span>
+          </div>
+          {theme === 'dark' && <Check className="size-3.5 text-foreground" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setTheme('system')}
+          className="flex items-center justify-between cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Laptop className="size-3.5" />
+            <span>System</span>
+          </div>
+          {theme === 'system' && <Check className="size-3.5 text-foreground" />}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function NewThreadMenuItem() {
   const { projectId } = useParams<{ projectId?: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -180,35 +325,24 @@ function NewThreadButton() {
 
   const disabled = !projectId || createMutation.isPending
   return (
-    <SidebarMenuButton
-      variant="outline"
-      onClick={() => projectId && createMutation.mutate(projectId)}
-      disabled={disabled}
-      title={projectId ? 'Start a new thread' : 'Select a project first'}
-      className="justify-start"
-    >
-      <Plus />
-      <span>New thread</span>
-    </SidebarMenuButton>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        icon={Plus}
+        onClick={() => projectId && createMutation.mutate(projectId)}
+        disabled={disabled}
+        aria-label="New thread"
+        className="justify-between"
+      >
+        <span>New</span>
+        <kbd className="pointer-events-none ml-auto text-[10px] text-muted-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
+          ⇧⌘O
+        </kbd>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }
 
-function ProjectsMenu({ projects }: { projects: ProjectOut[] }) {
-  const { projectId: activeProjectId } = useParams()
-  return (
-    <SidebarMenu>
-      {projects.map((project) => (
-        <ProjectGroup
-          key={project.id}
-          project={project}
-          defaultOpen={project.id === activeProjectId}
-        />
-      ))}
-    </SidebarMenu>
-  )
-}
-
-function ProjectGroup({
+function ProjectSection({
   project,
   defaultOpen,
 }: {
@@ -220,11 +354,12 @@ function ProjectGroup({
   const { projectId: activeProjectId, threadId: activeThreadId } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [showAll, setShowAll] = useState(false)
-  // Codex-style: the group containing the active thread starts expanded.
   const [open, setOpen] = useState(defaultOpen)
+  const [showAll, setShowAll] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const isProjectActive = projectId === activeProjectId
 
   const newThreadMutation = useMutation({
     mutationFn: () => createThread(projectId),
@@ -255,69 +390,102 @@ function ProjectGroup({
   const hasHidden = all.length > THREAD_PREVIEW_COUNT
 
   return (
-    <SidebarMenuItem>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger
-          render={
-            <SidebarMenuButton
-              size="sm"
-              className="font-semibold text-muted-foreground group-has-data-[sidebar=menu-action]/menu-item:pr-[3.25rem]"
-              aria-label={`Project: ${name}`}
-            />
-          }
-        >
-          {open ? <FolderOpen /> : <Folder />}
-          <span>{name}</span>
-        </CollapsibleTrigger>
-        {threads.data && (
-          <SidebarMenuBadge className="transition-opacity group-hover/menu-item:opacity-0 group-focus-within/menu-item:opacity-0">
-            {all.length}
-          </SidebarMenuBadge>
-        )}
-        <SidebarMenuAction
-          showOnHover
-          aria-label={`New thread in: ${name}`}
-          onClick={() => newThreadMutation.mutate()}
-          className="right-6"
-        >
-          <Plus />
-        </SidebarMenuAction>
-        <ProjectActionsMenu
-          name={name}
-          onRename={() => setRenameOpen(true)}
-          onDelete={() => setDeleteOpen(true)}
-        />
-        <CollapsibleContent>
-          {all.length ? (
-            <SidebarMenuSub className="mx-0 translate-x-0 border-l-0 px-0 py-0.5">
-              {visible.map((thread) => (
-                <ThreadSubItem
-                  key={thread.id}
-                  thread={thread}
-                  isActive={thread.id === activeThreadId && projectId === activeProjectId}
-                  onOpen={() => navigate(`/projects/${projectId}/threads/${thread.id}`)}
-                  onDelete={() => deleteThreadMutation.mutate(thread.id)}
-                />
-              ))}
-              {hasHidden && (
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    className="w-full translate-x-0 pl-8 text-muted-foreground"
-                    onClick={() => setShowAll((current) => !current)}
-                    render={<button type="button" />}
-                  >
-                    <span className="text-xs">
-                      {showAll ? 'Show less' : 'Show more'}
-                    </span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              )}
-            </SidebarMenuSub>
-          ) : (
-            <p className="pl-4 pt-1 text-xs text-muted-foreground">No threads</p>
+    <SidebarGroup collapsible open={open} onOpenChange={setOpen}>
+      <div className="group/group-header relative w-full min-w-0">
+        <div className="flex w-full min-w-0 items-center justify-between">
+          {/* Two header actions occupy a 24px box each plus their gap. Keep
+              this reservation local to the project row so the title never
+              shifts when the quiet controls fade in. */}
+          <SidebarGroupLabel
+            role="button"
+            tabIndex={0}
+            aria-label={`Project: ${name}`}
+            onClick={() => setOpen(!open)}
+            className="min-w-0 flex-1 cursor-pointer select-none truncate pr-[62px]"
+          >
+            <span>{name}</span>
+          </SidebarGroupLabel>
+
+          {threads.data && (
+            <SidebarMenuBadge className="mr-1 text-[10px]">
+              {all.length}
+            </SidebarMenuBadge>
           )}
-        </CollapsibleContent>
-      </Collapsible>
+        </div>
+
+        <SidebarGroupActions
+          className={`${PROJECT_ACTION_REVEAL} right-1.5 top-0`}
+        >
+          <SidebarGroupAction
+            aria-label={`New thread in: ${name}`}
+            onClick={() => newThreadMutation.mutate()}
+          >
+            <Plus className="size-3.5" />
+          </SidebarGroupAction>
+
+          <ProjectDropdownAction
+            name={name}
+            onRename={() => setRenameOpen(true)}
+            onDelete={() => setDeleteOpen(true)}
+          />
+        </SidebarGroupActions>
+      </div>
+
+      {open && (
+        <SidebarMenu className="w-full min-w-0">
+          {all.length ? (
+            visible.map((thread) => {
+              const isActive = thread.id === activeThreadId && isProjectActive
+              return (
+                <SidebarMenuItem key={thread.id}>
+                  <SidebarMenuButton
+                    status={isActive ? 'active' : 'idle'}
+                    isActive={isActive}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => navigate(`/projects/${projectId}/threads/${thread.id}`)}
+                    className="w-full min-w-0"
+                  >
+                    <span className="truncate">{thread.title}</span>
+                  </SidebarMenuButton>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <SidebarMenuAction
+                          showOnHover
+                          aria-label={`Thread actions: ${thread.title}`}
+                        >
+                          <MoreVertical className="size-3.5" />
+                        </SidebarMenuAction>
+                      }
+                    />
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem onClick={() => deleteThreadMutation.mutate(thread.id)}>
+                        <Trash className="size-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </SidebarMenuItem>
+              )
+            })
+          ) : (
+            <p className="px-2 py-1 text-xs text-muted-foreground italic">No chats</p>
+          )}
+
+          {hasHidden && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowAll((cur) => !cur)}
+              >
+                <span>{showAll ? 'Show less' : 'Show more'}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
+      )}
 
       <ProjectNameDialog
         open={renameOpen}
@@ -334,13 +502,13 @@ function ProjectGroup({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         project={project}
-        isActive={projectId === activeProjectId}
+        isActive={isProjectActive}
       />
-    </SidebarMenuItem>
+    </SidebarGroup>
   )
 }
 
-function ProjectActionsMenu({
+function ProjectDropdownAction({
   name,
   onRename,
   onDelete,
@@ -353,15 +521,14 @@ function ProjectActionsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <SidebarMenuAction
-            showOnHover
+          <SidebarGroupAction
             aria-label={`Project actions: ${name}`}
-            className="aria-expanded:opacity-100"
-          />
+            className="hover:bg-sidebar-accent"
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </SidebarGroupAction>
         }
-      >
-        <MoreHorizontal />
-      </DropdownMenuTrigger>
+      />
       <DropdownMenuContent align="end" className="w-36">
         <DropdownMenuItem onClick={onRename}>
           <Pencil className="size-3.5" />
@@ -371,74 +538,6 @@ function ProjectActionsMenu({
           <Trash className="size-3.5" />
           Delete
         </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function ThreadSubItem({
-  thread,
-  isActive,
-  onOpen,
-  onDelete,
-}: {
-  thread: ThreadOut
-  isActive: boolean
-  onOpen: () => void
-  onDelete: () => void
-}) {
-  return (
-    <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        isActive={isActive}
-        aria-current={isActive ? 'page' : undefined}
-        onClick={onOpen}
-        render={<button type="button" />}
-        className="w-full translate-x-0 pl-8 pr-6"
-      >
-        <span>{thread.title}</span>
-      </SidebarMenuSubButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              className="absolute top-1 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground opacity-0 outline-hidden transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:ring-2 group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:opacity-100 data-popup-open:opacity-100 [&>svg]:size-4"
-              aria-label={`Thread actions: ${thread.title}`}
-            />
-          }
-        >
-          <MoreHorizontal />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-36">
-          <DropdownMenuItem onClick={onDelete}>
-            <Trash className="size-3.5" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </SidebarMenuSubItem>
-  )
-}
-
-function UserMenu() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2"
-            aria-label="User menu"
-          />
-        }
-      >
-        <CircleUser className="size-4" />
-        <span className="flex-1 truncate text-left">Guest</span>
-        <ChevronsUpDown className="size-4 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-56">
-        <DropdownMenuItem disabled>Settings (coming soon)</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -469,7 +568,6 @@ function CreateProjectDialog({
   )
 }
 
-/** Name-input dialog shared by "New project" and "Rename project". */
 function ProjectNameDialog<TResult>({
   open,
   onOpenChange,

@@ -18,6 +18,10 @@ import type {
   ThreadBootstrap,
 } from '@/features/threads/threads-api'
 
+export type UserMessagePersistedHandler = (
+  message: ExportedMessageRepositoryItem['message'],
+) => void | Promise<void>
+
 type ReadonlyJSONValue =
   | null
   | boolean
@@ -62,6 +66,7 @@ export async function waitForThreadHistoryWrites(
 export function buildHistoryAdapter(
   threadId: string,
   suppliedBootstrap?: ThreadBootstrap,
+  options: { onUserMessagePersisted?: UserMessagePersistedHandler } = {},
 ): {
   load: () => Promise<
     ExportedMessageRepository & { state?: ReadonlyJSONValue }
@@ -147,6 +152,15 @@ export function buildHistoryAdapter(
           : {}),
       })
       await threadApi.invalidateThreadBootstrap(threadId)
+
+      if (item.message.role === 'user') {
+        // A title sync must never make a successful message write fail. The
+        // callback runs only after the message has been accepted by the API,
+        // while its own failure remains local to title enrichment.
+        void Promise.resolve(options.onUserMessagePersisted?.(item.message)).catch(
+          () => undefined,
+        )
+      }
     })
 
   return { load, append: persist, update: persist }

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
@@ -7,6 +7,7 @@ import { ProcessPanel } from '@/components/process-panel/process-panel'
 import { useAutoOpenProcessPanel } from '@/components/process-panel/use-auto-open-process-panel'
 import { ProjectSidebar } from '@/components/projects/project-sidebar'
 import { ConversationPane } from '@/components/thread/conversation-pane'
+import type { ComposerWorkspaceContext } from '@/components/assistant-ui/composer-elements'
 import {
   ResizableHandle,
   ResizablePanel,
@@ -19,7 +20,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import type { AgentWorkspaceState } from '@/contracts/generated'
+import { useProjects } from '@/features/projects/use-projects'
 import { useIsCompact, useIsMobile } from '@/hooks/use-media-query'
+import { cn } from '@/lib/utils'
+import { SurfaceProvider } from '@/lib/surface-context'
+import { surfaceClasses } from '@/lib/surface-classes'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
 /**
@@ -30,14 +35,46 @@ import { useWorkspaceStore } from '@/state/workspace-store'
  * <768px: conversation only; both side panels become Sheets.
  */
 export function AgentWorkspace({
+  projectId,
+  threadId,
   threadTitle = 'New conversation',
+  customMain,
 }: {
   projectId?: string
   threadId?: string
   threadTitle?: string
+  customMain?: ReactNode
 }) {
   const isMobile = useIsMobile()
-  return isMobile ? <MobileWorkspace threadTitle={threadTitle} /> : <DesktopWorkspace threadTitle={threadTitle} />
+  const projects = useProjects()
+  const projectLabel =
+    projects.data?.find((project) => project.id === projectId)?.name ??
+    projectId ??
+    'Current project'
+  const workspaceContext = useMemo<ComposerWorkspaceContext>(
+    () => ({
+      agentLabel: 'Fleet Agent',
+      projectLabel,
+      threadLabel: threadTitle,
+      ...(projectId ? { projectId } : {}),
+      ...(threadId ? { threadId } : {}),
+    }),
+    [projectId, projectLabel, threadId, threadTitle],
+  )
+
+  return isMobile ? (
+    <MobileWorkspace
+      threadTitle={threadTitle}
+      workspaceContext={workspaceContext}
+      customMain={customMain}
+    />
+  ) : (
+    <DesktopWorkspace
+      threadTitle={threadTitle}
+      workspaceContext={workspaceContext}
+      customMain={customMain}
+    />
+  )
 }
 
 /** Shared toggle wiring for the conversation header buttons. */
@@ -69,7 +106,15 @@ function usePaneActions() {
   }
 }
 
-function DesktopWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: string }) {
+function DesktopWorkspace({
+  threadTitle = 'New conversation',
+  workspaceContext,
+  customMain,
+}: {
+  threadTitle?: string
+  workspaceContext: ComposerWorkspaceContext
+  customMain?: ReactNode
+}) {
   const isCompact = useIsCompact()
   const sidebarCollapsed = useWorkspaceStore((s) => s.sidebarCollapsed)
   const setSidebarCollapsed = useWorkspaceStore((s) => s.setSidebarCollapsed)
@@ -108,20 +153,24 @@ function DesktopWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: 
   })
 
   return (
-    <div className="flex h-dvh bg-background text-foreground">
+    <SurfaceProvider value={1}>
+      <div className="flex h-dvh bg-surface-1 text-foreground">
       {isCompact && (
         <Sheet open={processSheetOpen} onOpenChange={setProcessSheetOpen}>
           <SheetContent
             side="right"
             showCloseButton={false}
-            className="gap-0 p-0 sm:max-w-md"
+            className={cn('gap-0 p-0 sm:max-w-md', surfaceClasses(3, 3))}
             aria-label="Process"
           >
             <SheetTitle className="sr-only">Process</SheetTitle>
             <SheetDescription className="sr-only">
               Agent process: steps, tool calls, sources, and artifacts.
             </SheetDescription>
-            <ProcessPanel onClose={() => setProcessSheetOpen(false)} />
+            <ProcessPanel
+              compact
+              onClose={() => setProcessSheetOpen(false)}
+            />
           </SheetContent>
         </Sheet>
       )}
@@ -140,7 +189,7 @@ function DesktopWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: 
           collapsedSize="0px"
           minSize="220px"
           maxSize="320px"
-          defaultSize={sidebarCollapsed ? '0px' : '248px'}
+          defaultSize={sidebarCollapsed ? '0px' : '260px'}
           onResize={() => {
             // Keep the store truthful when collapse happens by dragging.
             const panel = sidebarPanelRef.current
@@ -160,7 +209,10 @@ function DesktopWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: 
             onProcessToggle={toggleProcess}
             processPanelActive={processPanelActive}
             title={threadTitle}
-          />
+            workspaceContext={workspaceContext}
+          >
+            {customMain}
+          </ConversationPane>
         </ResizablePanel>
 
         {!isCompact && processPanelOpen && (
@@ -189,11 +241,20 @@ function DesktopWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: 
           </ResizablePanel>
         )}
       </ResizablePanelGroup>
-    </div>
+      </div>
+    </SurfaceProvider>
   )
 }
 
-function MobileWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: string }) {
+function MobileWorkspace({
+  threadTitle = 'New conversation',
+  workspaceContext,
+  customMain,
+}: {
+  threadTitle?: string
+  workspaceContext: ComposerWorkspaceContext
+  customMain?: ReactNode
+}) {
   const sidebarSheetOpen = useWorkspaceStore((s) => s.sidebarSheetOpen)
   const setSidebarSheetOpen = useWorkspaceStore((s) => s.setSidebarSheetOpen)
   const processSheetOpen = useWorkspaceStore((s) => s.processSheetOpen)
@@ -201,12 +262,14 @@ function MobileWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: s
   const { toggleSidebar, toggleProcess, processPanelActive } = usePaneActions()
 
   return (
-    <div className="flex h-dvh bg-background text-foreground">
+    <SurfaceProvider value={1}>
+      <div className="flex h-dvh bg-surface-1 text-foreground">
       <Sheet open={sidebarSheetOpen} onOpenChange={setSidebarSheetOpen}>
         <SheetContent
           side="left"
           showCloseButton={false}
-          className="gap-0 p-0"
+          className={cn('gap-0 p-0', surfaceClasses(3, 3))}
+          style={{ width: '18rem' }}
           aria-label="Projects and threads"
         >
           <SheetTitle className="sr-only">Projects and threads</SheetTitle>
@@ -221,14 +284,17 @@ function MobileWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: s
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="h-full gap-0 p-0"
+          className={cn('h-full gap-0 p-0', surfaceClasses(3, 3))}
           aria-label="Process"
         >
           <SheetTitle className="sr-only">Process</SheetTitle>
           <SheetDescription className="sr-only">
             Agent process: steps, tool calls, sources, and artifacts.
           </SheetDescription>
-          <ProcessPanel onClose={() => setProcessSheetOpen(false)} />
+          <ProcessPanel
+            compact
+            onClose={() => setProcessSheetOpen(false)}
+          />
         </SheetContent>
       </Sheet>
 
@@ -237,7 +303,11 @@ function MobileWorkspace({ threadTitle = 'New conversation' }: { threadTitle?: s
         onProcessToggle={toggleProcess}
         processPanelActive={processPanelActive}
         title={threadTitle}
-      />
-    </div>
+        workspaceContext={workspaceContext}
+      >
+        {customMain}
+      </ConversationPane>
+      </div>
+    </SurfaceProvider>
   )
 }
