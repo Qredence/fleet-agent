@@ -162,6 +162,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             ref?: React.Ref<HTMLButtonElement>;
             disabled?: boolean;
             "aria-disabled"?: boolean;
+            tabIndex?: number;
+            onClick?: React.MouseEventHandler<HTMLElement>;
+            onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
           }>)
         : null;
     const label = asChildElement ? asChildElement.props.children : children;
@@ -273,6 +276,21 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const isDisabled = disabled || loading;
 
+    // Anchors have no native disabled state, and aria-disabled does not stop
+    // keyboard activation: a disabled Button rendered as an anchor must
+    // suppress click/Enter navigation and leave the tab order.
+    const disabledAnchorProps = isDisabled
+      ? {
+          tabIndex: -1,
+          onClick: (event: React.MouseEvent<HTMLElement>) => {
+            event.preventDefault();
+          },
+          onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+            if (event.key === "Enter") event.preventDefault();
+          },
+        }
+      : null;
+
     if (render && isValidElement(render)) {
       const renderEl = render as ReactElement<{
         className?: string;
@@ -280,6 +298,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         children?: ReactNode;
         disabled?: boolean;
         "aria-disabled"?: boolean;
+        tabIndex?: number;
+        onClick?: React.MouseEventHandler<HTMLElement>;
+        onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
         ref?: React.Ref<HTMLButtonElement>;
       }>;
       const isAnchor = renderEl.type === "a";
@@ -292,6 +313,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           // state is conveyed via aria-disabled (styled by the variants).
           disabled: isAnchor ? undefined : isDisabled || undefined,
           "aria-disabled": isDisabled || undefined,
+          ...(isAnchor && disabledAnchorProps ? disabledAnchorProps : {}),
           className: cn(rootClassName, renderEl.props.className),
           style: { ...style, ...renderEl.props.style },
         },
@@ -309,6 +331,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           ref,
           disabled: isAnchor ? undefined : isDisabled || undefined,
           "aria-disabled": isDisabled || undefined,
+          ...(isAnchor && disabledAnchorProps ? disabledAnchorProps : {}),
           className: cn(rootClassName, childProps.className),
           style: { ...style, ...childProps.style },
         },

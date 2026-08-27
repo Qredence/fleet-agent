@@ -199,14 +199,11 @@ def test_live_synthesis_summary_starts_step_with_started_at():
     assert state["run"]["activeStepId"] == "step-synthesis"
 
     # A second chunk must not restart or duplicate the running step.
+    started_at = synthesis["startedAt"]
     ops = reducer.live_synthesis_summary("Drafting the rest...")
-    assert all(
-        op["path"] != "/run/activeStepId" and op["value"] != "step-synthesis"
-        for op in ops
-        if op["op"] == "add" and op["path"].endswith("startedAt")
-    )
     state = _state_after(reducer, wire, ops)
     wire.matches(reducer)
+    assert state["steps"][-1]["startedAt"] == started_at
     assert len([s for s in state["steps"] if s["id"] == "step-synthesis"]) == 1
 
     final = _state_after(reducer, wire, reducer.complete_run(successful_result()))
