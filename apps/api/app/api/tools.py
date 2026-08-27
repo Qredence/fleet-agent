@@ -15,7 +15,7 @@ class ToolCatalogResponse(BaseModel):
 async def list_tools(request: Request) -> ToolCatalogResponse:
     """
     Builds a browser-safe catalog of tools registered with the DSPy engine.
-    
+
     Returns:
         ToolCatalogResponse: The catalog of registered tools.
     """

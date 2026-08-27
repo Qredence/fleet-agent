@@ -93,13 +93,16 @@ def make_engine_builder(
     settings: Settings, *, storage: ArtifactStorage
 ) -> EngineBuilder:
     """
-    Create a builder for run-scoped agent engines using shared language-model configuration.
-    
+    Create a builder for run-scoped agent engines using shared language-model
+        configuration.
+
     Parameters:
-        storage (ArtifactStorage): Storage used by report-writing tools created for each run.
-    
+        storage (ArtifactStorage): Storage used by report-writing tools created for each
+            run.
+
     Returns:
-        EngineBuilder: A builder that creates an engine bound to a run event bus and thread.
+        EngineBuilder: A builder that creates an engine bound to a run event bus and
+            thread.
     """
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
@@ -107,12 +110,12 @@ def make_engine_builder(
     def build(bus: RunEventBus, *, thread_id: str) -> AgentEngine:
         """
         Build an agent engine configured for the current run.
-        
+
         Parameters:
-        	thread_id (str): Identifier of the thread associated with report artifacts.
-        
+            thread_id (str): Identifier of the thread associated with report artifacts.
+
         Returns:
-        	AgentEngine: A staged or ReAct engine configured from the current settings.
+            AgentEngine: A staged or ReAct engine configured from the current settings.
         """
         docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(

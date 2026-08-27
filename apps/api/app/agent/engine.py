@@ -46,16 +46,17 @@ class AgentEngine(Protocol):
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
-    ) -> AgentRunResult: """
+    ) -> AgentRunResult:
+        """
         Execute an agent run for the user's request and conversation history.
-        
+
         Parameters:
-        	user_request (str): The request to process.
-        	history (Any | None): Previous conversation history, if available.
-        	context (AgentRunContext): Thread and run identifiers for the execution.
-        
+            user_request (str): The request to process.
+            history (Any | None): Previous conversation history, if available.
+            context (AgentRunContext): Thread and run identifiers for the execution.
+
         Returns:
-        	AgentRunResult: The completed or failed agent run result.
+            AgentRunResult: The completed or failed agent run result.
         """
         ...
 
@@ -159,13 +160,13 @@ class DspyReActV2Engine:
     ) -> AgentRunResult:
         """
         Execute an agent run and convert its prediction into a public result.
-        
+
         Parameters:
-        	user_request (str): The user's request to process.
-        	history (Any | None): Optional prior conversation history.
-        
+            user_request (str): The user's request to process.
+            history (Any | None): Optional prior conversation history.
+
         Returns:
-        	AgentRunResult: The completed or failed agent run result.
+            AgentRunResult: The completed or failed agent run result.
         """
         del context  # run identity is consumed by the bridge (PR 6)
         prediction = await asyncio.to_thread(self._run_sync, user_request, history)
@@ -178,12 +179,13 @@ class DspyReActV2Engine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AsyncIterator[AgentStreamUpdate]:
-        """Stream submission fields when available, followed by the settled agent result.
-        
+        """Stream submission fields when available, followed by the settled agent
+            result.
+
         Yields:
             AgentStreamUpdate: A submit-time update containing public final fields or a
                 final update containing the completed run result.
-        
+
         Raises:
             BaseException: If agent execution fails.
         """
@@ -194,7 +196,7 @@ class DspyReActV2Engine:
         def on_agent_ready(agent: dspy.ReActV2) -> None:
             """
             Configure the agent's submission tool to publish final fields to the stream.
-            
+
             Parameters:
                 agent (dspy.ReActV2): Agent whose submission tool should be monitored.
             """
@@ -225,8 +227,9 @@ class DspyReActV2Engine:
         async def produce() -> None:
             """
             Run the agent execution and enqueue its final stream update.
-            
-            Agent execution failures are enqueued for stream consumers before being propagated.
+
+            Agent execution failures are enqueued for stream consumers before being
+                propagated.
             """
             try:
                 prediction = await asyncio.to_thread(
@@ -265,14 +268,15 @@ class DspyReActV2Engine:
     ) -> dspy.Prediction:
         """
         Execute the configured agent for a user request and conversation history.
-        
+
         Parameters:
-        	user_request (str): The user's request to process.
-        	history (Any | None): Optional conversation history.
-        	on_agent_ready (Callable[[dspy.ReActV2], None] | None): Optional callback invoked after the agent is created.
-        
+            user_request (str): The user's request to process.
+            history (Any | None): Optional conversation history.
+            on_agent_ready (Callable[[dspy.ReActV2], None] | None): Optional callback
+                invoked after the agent is created.
+
         Returns:
-        	dspy.Prediction: The agent's prediction.
+            dspy.Prediction: The agent's prediction.
         """
         try:
             agent = self._agent_factory()

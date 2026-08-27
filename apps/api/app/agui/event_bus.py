@@ -26,9 +26,9 @@ class RunEventBus:
 
     def publish_from_loop(self, event: DomainEvent) -> None:
         """Publishes an event directly from the event loop.
-        
+
         Parameters:
-        	event (DomainEvent): The event to publish.
+            event (DomainEvent): The event to publish.
         """
         self._queue.put_nowait(event)
 

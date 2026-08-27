@@ -40,14 +40,16 @@ def _first_paragraph(doc: str | None) -> str:
 def tool_catalog_entries(settings: Settings) -> list[ToolCatalogEntry]:
     """
     Build the catalog of tools available under the configured settings.
-    
-    Web search tools are included only when a Tavily API key is configured. Each entry includes metadata and uses the configured reasoning task timeout.
-    
+
+    Web search tools are included only when a Tavily API key is configured. Each entry
+        includes metadata and uses the configured reasoning task timeout.
+
     Parameters:
-    	settings (Settings): Application settings used to determine available tools and their timeout.
-    
+        settings (Settings): Application settings used to determine available tools and
+            their timeout.
+
     Returns:
-    	list[ToolCatalogEntry]: The configured tool catalog entries.
+        list[ToolCatalogEntry]: The configured tool catalog entries.
     """
     timeout = settings.reasoning_task_timeout_seconds
 
@@ -61,14 +63,15 @@ def tool_catalog_entries(settings: Settings) -> list[ToolCatalogEntry]:
     ) -> ToolCatalogEntry:
         """
         Create a catalog entry with the specified tool metadata.
-        
+
         Parameters:
             name (str): Tool name.
             doc (str | None): Tool documentation used to derive the description.
             read_only (bool): Whether the tool only reads data.
             idempotent (bool): Whether repeated calls produce the same result.
-            parallelizable (bool): Whether the tool can run in parallel with other tools.
-        
+            parallelizable (bool): Whether the tool can run in parallel with other
+                tools.
+
         Returns:
             ToolCatalogEntry: The configured tool catalog entry.
         """
@@ -135,8 +138,8 @@ def tool_catalog_by_name(
     settings: Settings,
 ) -> dict[str, ToolCatalogEntry]:
     """Builds the configured tool catalog keyed by tool name.
-    
+
     Returns:
-    	dict[str, ToolCatalogEntry]: A mapping from each tool name to its catalog entry.
+        dict[str, ToolCatalogEntry]: A mapping from each tool name to its catalog entry.
     """
     return {item.name: item for item in tool_catalog_entries(settings)}

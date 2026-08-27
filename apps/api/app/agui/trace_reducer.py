@@ -280,12 +280,13 @@ class TraceReducer:
     def live_synthesis_summary(self, summary: str) -> list[JsonPatchOp]:
         """
         Publish a model-written process summary while the run is in progress.
-        
+
         Parameters:
             summary (str): Process summary to expose in the synthesis step.
-        
+
         Returns:
-            list[JsonPatchOp]: JSON Patch operations that create or update the synthesis step; an empty list if the summary is empty.
+            list[JsonPatchOp]: JSON Patch operations that create or update the synthesis
+                step; an empty list if the summary is empty.
         """
         if not summary:
             return []
@@ -309,13 +310,14 @@ class TraceReducer:
 
     def complete_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
         """
-        Complete the agent run and publish its final status, summary, metrics, decisions, and caveats.
-        
+        Complete the agent run and publish its final status, summary, metrics,
+            decisions, and caveats.
+
         Parameters:
-        	result (AgentRunResult): Final result data used to update the run state.
-        
+            result (AgentRunResult): Final result data used to update the run state.
+
         Returns:
-        	list[JsonPatchOp]: JSON Patch operations describing the completed run.
+            list[JsonPatchOp]: JSON Patch operations describing the completed run.
         """
         ops: list[JsonPatchOp] = []
         if "step-research" in self._step_index:

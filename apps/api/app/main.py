@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """
     Create and configure the Fleet Agent API application.
-    
+
     Returns:
         FastAPI: The configured application instance.
     """

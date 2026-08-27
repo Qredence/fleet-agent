@@ -81,14 +81,15 @@ def map_domain_event(
 ) -> list[BaseEvent]:
     """
     Convert a domain event into the corresponding AG-UI events and state updates.
-    
+
     Parameters:
-    	event (AnyDomainEvent): The domain event to convert.
-    	tools_message_id (str): The message identifier used for tool-related events.
-    	answer_message_id (str | None): The message identifier used for final answer events, when available.
-    
+        event (AnyDomainEvent): The domain event to convert.
+        tools_message_id (str): The message identifier used for tool-related events.
+        answer_message_id (str | None): The message identifier used for final answer
+            events, when available.
+
     Returns:
-    	list[BaseEvent]: The AG-UI events representing the domain event.
+        list[BaseEvent]: The AG-UI events representing the domain event.
     """
     if isinstance(event, FinalFieldsReady):
         return map_final_fields_event(
@@ -132,15 +133,17 @@ def map_tool_event(
     state_delta_ops: list[JsonPatchOp],
 ) -> list[BaseEvent]:
     """
-    Convert a tool lifecycle event into AG-UI events, including any associated state updates.
-    
+    Convert a tool lifecycle event into AG-UI events, including any associated state
+        updates.
+
     Parameters:
-    	event: The tool start, completion, or failure event to convert.
-    	tools_message_id: The message identifier associated with the tool call.
-    	state_delta_ops: State operations to include in the resulting events.
-    
+        event: The tool start, completion, or failure event to convert.
+        tools_message_id: The message identifier associated with the tool call.
+        state_delta_ops: State operations to include in the resulting events.
+
     Returns:
-    	list[BaseEvent]: The AG-UI events representing the tool event and any state changes.
+        list[BaseEvent]: The AG-UI events representing the tool event and any state
+            changes.
     """
     events: list[BaseEvent] = []
 
@@ -186,14 +189,15 @@ def map_final_fields_event(
 ) -> list[BaseEvent]:
     """
     Convert final answer and process summary fields into AG-UI events.
-    
+
     Parameters:
-    	event (FinalFieldsReady): Final answer and process summary data to convert.
-    	answer_message_id (str | None): Message identifier for the streamed assistant answer.
-    	reducer (TraceReducer): Reducer used to apply the process summary.
-    
+        event (FinalFieldsReady): Final answer and process summary data to convert.
+        answer_message_id (str | None): Message identifier for the streamed assistant
+            answer.
+        reducer (TraceReducer): Reducer used to apply the process summary.
+
     Returns:
-    	list[BaseEvent]: Events for the assistant answer and synthesis summary.
+        list[BaseEvent]: Events for the assistant answer and synthesis summary.
     """
     events: list[BaseEvent] = []
 

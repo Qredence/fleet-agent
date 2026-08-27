@@ -67,18 +67,25 @@ class LiveDSPyCoordinator:
     ) -> AsyncIterator[str]:
         """
         Stream an agent run as encoded AG-UI events.
-        
+
         Parameters:
-        	input_data (RunAgentInput): Input data identifying the thread, run, and user request.
-        	engine_builder (EngineBuilder): Factory that creates the agent engine and connects it to the event bus.
-        	accept (str | None): Requested event encoding or media type.
-        	is_disconnected (Callable[[], Awaitable[bool]]): Callback that reports whether the client disconnected.
-        	persistence (RunPersistence | None): Optional lifecycle and state persistence service.
-        	run_timeout_s (float): Maximum duration allowed for event processing and engine completion.
-        	metrics (MetricsRegistry | None): Optional metrics registry for run and tool metrics.
-        
+            input_data (RunAgentInput): Input data identifying the thread, run, and user
+                request.
+            engine_builder (EngineBuilder): Factory that creates the agent engine and
+                connects it to the event bus.
+            accept (str | None): Requested event encoding or media type.
+            is_disconnected (Callable[[], Awaitable[bool]]): Callback that reports
+                whether the client disconnected.
+            persistence (RunPersistence | None): Optional lifecycle and state
+                persistence service.
+            run_timeout_s (float): Maximum duration allowed for event processing and
+                engine completion.
+            metrics (MetricsRegistry | None): Optional metrics registry for run and tool
+                metrics.
+
         Yields:
-        	str: Encoded lifecycle, state, message, and terminal events for the agent run.
+            str: Encoded lifecycle, state, message, and terminal events for the agent
+                run.
         """
         encoder = EventEncoder(accept=accept or "")
         thread_id = input_data.thread_id
@@ -186,9 +193,10 @@ class LiveDSPyCoordinator:
         async def settle_cancelled_bounded() -> bool:
             """
             Complete cancellation settlement within a bounded, shielded interval.
-            
+
             Returns:
-                bool: `True` if cancellation settlement completes successfully, `False` if it times out or fails.
+                bool: `True` if cancellation settlement completes successfully, `False`
+                    if it times out or fails.
             """
 
             task = asyncio.create_task(settle_cancelled())
@@ -214,28 +222,30 @@ class LiveDSPyCoordinator:
             history: Any | None,
             context: AgentRunContext,
         ) -> Coroutine[Any, Any, AgentRunResult]:
-            """Consume a streaming engine and publish final answer fields as soon as they become available.
-            
+            """Consume a streaming engine and publish final answer fields as soon as
+                they become available.
+
             Parameters:
                 stream_factory: Callable that produces agent stream updates.
                 user_request: The user's request.
                 history: Prior conversation history, if available.
                 context: Context for the agent run.
-            
+
             Returns:
                 The authoritative agent run result.
-            
+
             Raises:
                 RuntimeError: If the stream ends without a final result.
             """
 
             async def run_pump() -> AgentRunResult:
                 """
-                Consume the streaming engine updates and provide the completed agent run result.
-                
+                Consume the streaming engine updates and provide the completed agent run
+                    result.
+
                 Raises:
                     RuntimeError: If the stream ends without a final result.
-                
+
                 Returns:
                     AgentRunResult: The completed agent run result.
                 """
