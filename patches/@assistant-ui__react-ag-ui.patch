@@ -1,0 +1,31 @@
+diff --git a/dist/runtime/AgUiThreadRuntimeCore.js b/dist/runtime/AgUiThreadRuntimeCore.js
+index 9ba55c5c5a05a7777dfd00ae5ca52e756810b122..c4765cab114a9eddb54b0cc21e4f44776a24e3d6 100644
+--- a/dist/runtime/AgUiThreadRuntimeCore.js
++++ b/dist/runtime/AgUiThreadRuntimeCore.js
+@@ -224,7 +224,7 @@ var AgUiThreadRuntimeCore = class {
+ 	appendEntry(message) {
+ 		if (message.sourceId) this.tryDeleteMessage(message.sourceId);
+ 		const threadMessage = this.toThreadMessage(message);
+-		const parentId = message.parentId === null ? null : message.parentId && this.hasMessage(message.parentId) ? message.parentId : this.repository.headId;
++		const parentId = message.parentId && this.hasMessage(message.parentId) ? message.parentId : this.repository.headId;
+ 		this.addOrUpdateMessage(parentId, threadMessage);
+ 		this.switchToBranch(threadMessage.id);
+ 		this.notifyUpdate();
+@@ -937,6 +937,7 @@ var AgUiThreadRuntimeCore = class {
+ 				newId
+ 			});
+ 			this.deleteMessage(oldId, oldItem.parentId ?? null);
++			this.switchToBranch(newId);
+ 		} else {
+ 			const { isOptimistic: _, ...metadata } = oldItem.message.metadata;
+ 			this.addOrUpdateMessage(oldItem.parentId, {
+@@ -944,8 +945,8 @@ var AgUiThreadRuntimeCore = class {
+ 				id: newId,
+ 				metadata
+ 			});
+-			this.switchToBranch(newId);
+ 			this.tryDeleteMessage(oldId);
++			this.switchToBranch(newId);
+ 		}
+ 		const pendingParent = this.assistantHistoryParents.get(oldId);
+ 		if (pendingParent !== void 0) {
