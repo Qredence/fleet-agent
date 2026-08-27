@@ -187,16 +187,15 @@ def map_final_fields_event(
     answer_message_id: str | None,
     reducer: TraceReducer,
 ) -> list[BaseEvent]:
-    """
-    Convert final answer and process summary fields into AG-UI events.
-    
+    """Convert final answer and process summary fields into AG-UI events.
+
     Parameters:
-        event (FinalFieldsReady): Final answer and process summary data to convert.
-        answer_message_id (str | None): Identifier for the assistant answer message.
+        event (FinalFieldsReady): Final answer and process summary data.
+        answer_message_id (str | None): Identifier for the assistant message.
         reducer (TraceReducer): Reducer used to apply the process summary.
-    
+
     Returns:
-        list[BaseEvent]: Events representing the streamed answer and resulting state updates.
+        list[BaseEvent]: Streamed answer and state update events.
     """
     events: list[BaseEvent] = []
 

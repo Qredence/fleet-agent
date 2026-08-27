@@ -444,12 +444,12 @@ class _RunOnlyEngine:
     async def run(self, *, user_request, history, context):  # noqa: ANN001, ANN202
         """
         Provide a completed fallback agent result.
-        
+
         Parameters:
             user_request: The current user request.
             history: The conversation history.
             context: The execution context.
-        
+
         Returns:
             AgentRunResult: A completed result containing a fallback answer and summary.
         """
@@ -473,11 +473,11 @@ async def test_run_only_engine_falls_back_to_completion_time_answer():
     def builder(bus, *, thread_id="t-test"):  # noqa: ANN001, ANN202
         """
         Create a run-only test engine.
-        
+
         Parameters:
             bus: Event bus accepted for builder compatibility.
             thread_id (str): Thread identifier accepted for builder compatibility.
-        
+
         Returns:
             _RunOnlyEngine: A test engine exposing only the run interface.
         """
