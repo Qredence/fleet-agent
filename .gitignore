@@ -32,4 +32,5 @@ __pycache__/
 
 .agents
 .claude/
+.impeccable/
 skills-lock.json
