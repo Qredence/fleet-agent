@@ -63,29 +63,16 @@ class ToolRegistry:
     """Registry of explicit ``dspy.Tool`` objects and execution policy."""
 
     def __init__(self, tools: Iterable[tuple[ToolSource, ToolMetadata]] = ()) -> None:
-        """Initialize the registry with the provided tool sources and execution metadata.
-        
-        Parameters:
-        	tools (Iterable[tuple[ToolSource, ToolMetadata]]): Tool sources paired with their execution metadata.
-        """
         self._tools: dict[str, RegisteredTool] = {}
         for source, metadata in tools:
             self.register(source, metadata)
 
     def register(self, source: ToolSource, metadata: ToolMetadata) -> dspy.Tool:
-        """
-        Create and register a synchronous tool for agent execution.
-        
-        Parameters:
-            source (ToolSource): Tool callable or prebuilt DSPy tool to register.
-            metadata (ToolMetadata): Execution policy and catalog metadata for the tool.
-        
-        Returns:
-            dspy.Tool: The registered DSPy tool.
-        
-        Raises:
-            ValueError: If the tool name is already registered or does not match the metadata name.
-            TypeError: If the tool is asynchronous.
+        """Create/register a tool before an agent run starts.
+
+        Existing ``dspy.Tool`` objects must already use the catalog name. This
+        prevents the model-visible schema, execution registry, and public tools
+        page from silently referring to one tool by different names.
         """
         if metadata.name in self._tools:
             raise ValueError(f"duplicate tool: {metadata.name}")
@@ -115,18 +102,6 @@ class ToolRegistry:
         return tool
 
     def get(self, name: str) -> RegisteredTool:
-        """
-        Retrieve a registered tool by name.
-        
-        Parameters:
-        	name (str): The registered tool name.
-        
-        Returns:
-        	RegisteredTool: The tool and its execution metadata.
-        
-        Raises:
-        	KeyError: If no tool is registered with the specified name.
-        """
         try:
             return self._tools[name]
         except KeyError as exc:
@@ -185,17 +160,7 @@ class ToolRegistry:
         *,
         cancel_token: RunCancelToken | None = None,
     ) -> ToolExecutionResult:
-        """
-        Execute a registered tool and return a bounded, structured result.
-        
-        Parameters:
-        	name (str): Name of the registered tool to execute.
-        	arguments (dict[str, Any]): Keyword arguments passed to the tool.
-        	cancel_token (RunCancelToken | None): Optional token used to detect cancellation before execution.
-        
-        Returns:
-        	ToolExecutionResult: Completed, cancelled, or failed execution details with a safe error message when applicable.
-        """
+        """Execute synchronously and convert all failures to safe results."""
         try:
             registered = self.get(name)
         except KeyError:
@@ -258,17 +223,6 @@ class BoundedReadOnlyExecutor:
     async def execute(
         self, name: str, arguments: dict[str, Any]
     ) -> ToolExecutionResult:
-        """
-        Execute a read-only, parallelizable tool with concurrency and timeout limits.
-        
-        Parameters:
-            name (str): Registered name of the tool to execute.
-            arguments (dict[str, Any]): Arguments passed to the tool.
-        
-        Returns:
-            ToolExecutionResult: Structured execution outcome, including success, failure,
-                timeout, cancellation, or unsupported-tool status.
-        """
         try:
             registered = self._registry.get(name)
         except KeyError:

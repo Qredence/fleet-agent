@@ -20,15 +20,6 @@ class StaticProgram(dspy.Module):  # type: ignore[misc]
         user_request: str,
         history: dspy.History | None = None,
     ) -> dspy.Prediction:
-        """
-        Return a completed prediction with a fixed answer and termination reason.
-        
-        Parameters:
-            history (dspy.History | None): Conversation history to preserve in the prediction.
-        
-        Returns:
-            dspy.Prediction: A completed prediction containing the preserved or empty history.
-        """
         del user_request
         return dspy.Prediction(
             answer="Done.",

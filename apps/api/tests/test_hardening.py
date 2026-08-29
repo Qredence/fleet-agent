@@ -122,12 +122,6 @@ def slow_engine_app(db_sessions):
         return "ok"
 
     def build(bus, *, thread_id: str = "t"):
-        """
-        Construct an agent engine configured with a scripted language model and encoder tool.
-        
-        Returns:
-            DspyAgentEngine: The configured agent engine.
-        """
         tools = [instrument_tool(encoder_side, bus)]
 
         def factory():
@@ -191,16 +185,9 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
     from tests.helpers.scripted_lm import ScriptedLM
 
     def build(bus, *, thread_id: str = "t"):
-        """Create a scripted agent engine configured with a document-search tool for a thread."""
         tools = [instrument_tool(SearchDocsTool(), bus)]
 
         def factory():
-            """
-            Create a ReAct agent configured with the agent signature and available tools.
-            
-            Returns:
-                dspy.ReActV2: The configured agent with a maximum of four iterations.
-            """
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
 
         return DspyAgentEngine(
@@ -250,21 +237,9 @@ async def test_run_times_out_with_public_code():
     from app.agent.instrumented import instrument_tool
 
     def build(bus, *, thread_id: str = "t"):
-        """
-        Create an agent engine configured with an instrumented sleepy tool.
-        
-        Returns:
-            DspyAgentEngine: An engine using a scripted language model and JSON adapter.
-        """
         tools = [instrument_tool(sleepy, bus)]
 
         def factory():
-            """
-            Create a ReAct agent configured with the agent signature and available tools.
-            
-            Returns:
-                dspy.ReActV2: The configured agent with a maximum of four iterations.
-            """
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
 
         return DspyAgentEngine(

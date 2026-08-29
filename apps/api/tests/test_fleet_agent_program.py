@@ -12,14 +12,7 @@ from app.settings import Settings
 
 
 def lookup_docs(query: str) -> str:
-    """Look up a query in the test documentation.
-    
-    Parameters:
-    	query (str): The documentation query.
-    
-    Returns:
-    	str: The query prefixed with ``"found:"``.
-    """
+    """Look up a short query in the test documentation."""
     return f"found:{query}"
 
 
@@ -41,11 +34,7 @@ def test_fleet_agent_requires_explicit_dspy_tools() -> None:
 
 def test_fleet_agent_rejects_async_tools_under_sync_react_v2() -> None:
     async def async_lookup(query: str) -> str:
-        """Echoes the supplied query.
-        
-        Returns:
-        	str: The original query.
-        """
+        """Look up a query asynchronously."""
         return query
 
     tool = create_dspy_tool(async_lookup)
@@ -95,15 +84,7 @@ def test_tool_registry_rejects_untyped_arguments() -> None:
 
 def test_tool_registry_rejects_invalid_names_and_variadic_schemas() -> None:
     def variadic(**kwargs: str) -> str:
-        """
-        Convert keyword arguments to their string representation.
-        
-        Parameters:
-        	kwargs (str): Keyword values to include in the representation.
-        
-        Returns:
-        	str: The string representation of the keyword arguments.
-        """
+        """Return variadic values."""
         return str(kwargs)
 
     with pytest.raises(ValueError, match="tool names"):
@@ -123,11 +104,7 @@ def test_tool_registry_requires_a_typed_return_value() -> None:
 
 def test_sync_registry_rejects_async_tools() -> None:
     async def async_lookup(query: str) -> str:
-        """Echoes the supplied query.
-        
-        Returns:
-        	str: The original query.
-        """
+        """Look up a query asynchronously."""
         return query
 
     tool = create_dspy_tool(async_lookup)

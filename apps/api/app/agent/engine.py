@@ -47,17 +47,7 @@ class AgentEngine(Protocol):
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
-    ) -> AgentRunResult: """
-        Execute the agent program for a request and produce its authoritative run result.
-        
-        Parameters:
-            history (Any | None): Optional prior conversation history.
-            context (AgentRunContext): Identifiers associated with the agent run.
-        
-        Returns:
-            AgentRunResult: The completed or failed agent run result.
-        """
-        ...
+    ) -> AgentRunResult: ...
 
 
 class DspyProgram(Protocol):
@@ -68,16 +58,7 @@ class DspyProgram(Protocol):
         *,
         user_request: str,
         history: Any | None,
-    ) -> dspy.Prediction: """
-        Execute the program for a user request and optional conversation history.
-        
-        Parameters:
-        	history (Any | None): Prior conversation context to provide to the program.
-        
-        Returns:
-        	dspy.Prediction: The program's prediction for the request.
-        """
-        ...
+    ) -> dspy.Prediction: ...
 
 
 ProgramFactory = Callable[[], DspyProgram]
@@ -114,15 +95,6 @@ _FORCED_SUBMIT_CAVEAT = (
 
 
 def _map_result(prediction: dspy.Prediction) -> AgentRunResult:
-    """
-    Convert a DSPy prediction into a public agent run result, including token usage and termination metadata.
-    
-    Parameters:
-    	prediction (dspy.Prediction): Prediction containing the agent output and execution metadata.
-    
-    Returns:
-    	AgentRunResult: A completed result when an answer is available; otherwise, a failed result with a public error code.
-    """
     reason = getattr(prediction, "termination_reason", None)
     answer = getattr(prediction, "answer", None) or None
 
@@ -169,15 +141,6 @@ class DspyAgentEngine:
         callbacks: list[BaseCallback] | None = None,
         cleanup: Callable[[], None] | None = None,
     ) -> None:
-        """Initialize an agent engine with a DSPy program factory and runtime configuration.
-        
-        Parameters:
-            program_factory: Factory that creates a fresh DSPy program for each run.
-            lm: Language model used during program execution.
-            adapter: Optional DSPy adapter for program execution.
-            callbacks: Optional callbacks invoked during execution.
-            cleanup: Optional cleanup function called after each run.
-        """
         self._program_factory = program_factory
         self._lm = lm
         self._adapter = adapter
@@ -191,15 +154,6 @@ class DspyAgentEngine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
-        """Execute the DSPy program and map its prediction to a public run result.
-        
-        Parameters:
-        	user_request (str): The user's request.
-        	history (Any | None): Prior conversation history, if available.
-        
-        Returns:
-        	AgentRunResult: The completed or failed agent run result.
-        """
         del context  # run identity is consumed by the AG-UI bridge
         prediction = await asyncio.to_thread(self._run_sync, user_request, history)
         return _map_result(prediction)
@@ -211,15 +165,11 @@ class DspyAgentEngine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AsyncIterator[AgentStreamUpdate]:
-        """Emit settled public fields followed by the authoritative run result.
-        
-        Parameters:
-        	user_request (str): The user's request to execute.
-        	history (Any | None): Prior conversation or execution history.
-        	context (AgentRunContext): Run context for the streaming operation.
-        
-        Yields:
-        	AgentStreamUpdate: An update containing available final fields, followed by the completed or failed run result.
+        """Emit settled public fields and then the authoritative result.
+
+        This deliberately avoids accessing ``program.react.tools['submit']``.
+        The AG-UI contract stays unchanged, while the DSPy program remains a
+        black box to the runtime adapter.
         """
         del context
         prediction = await asyncio.to_thread(self._run_sync, user_request, history)
@@ -238,16 +188,6 @@ class DspyAgentEngine:
         user_request: str,
         history: Any | None,
     ) -> dspy.Prediction:
-        """
-        Execute the configured DSPy program and release run-scoped resources afterward.
-        
-        Parameters:
-        	user_request (str): The user's request to process.
-        	history (Any | None): Optional conversation history supplied to the program.
-        
-        Returns:
-        	dspy.Prediction: The program's prediction.
-        """
         try:
             program = self._program_factory()
             with dspy.context(

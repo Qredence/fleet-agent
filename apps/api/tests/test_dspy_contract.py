@@ -182,16 +182,9 @@ def test_agent_signature_contract():
 
 
 def _make_engine(steps: list, *, use_native: bool) -> DspyAgentEngine:
-    """Create a test agent engine backed by scripted language-model responses."""
     lm = ScriptedLM(steps)
 
     def factory() -> dspy.ReActV2:
-        """
-        Create a ReActV2 agent configured with the agent signature, documentation search tool, and three iteration limit.
-        
-        Returns:
-            dspy.ReActV2: The configured agent.
-        """
         return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=3)
 
     return DspyAgentEngine(
@@ -282,25 +275,10 @@ async def test_usage_keys_are_exact_and_summed():
 
 async def test_concurrent_runs_isolate_lm_and_usage():
     def make(steps: list) -> DspyAgentEngine:
-        """
-        Create an agent engine backed by the supplied scripted language-model steps.
-        
-        Parameters:
-            steps (list): Scripted language-model responses used by the engine.
-        
-        Returns:
-            DspyAgentEngine: An agent engine configured with native function calling.
-        """
         lm = ScriptedLM(steps)
         lm.model = f"scripted-{id(steps)}"  # distinct usage key per engine
 
         def factory() -> dspy.ReActV2:
-            """
-            Create a ReActV2 agent configured with the agent signature and document search tool.
-            
-            Returns:
-            	dspy.ReActV2: The configured agent.
-            """
             return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=2)
 
         return DspyAgentEngine(

@@ -33,17 +33,11 @@ def create_dspy_tool(
     description: str | None = None,
     arg_descriptions: Mapping[str, str] | None = None,
 ) -> dspy.Tool:
-    """
-    Create and validate a DSPy tool from a callable or existing tool.
-    
-    Parameters:
-    	source (ToolSource): Callable or DSPy tool to wrap or reuse.
-    	name (str | None): Optional public name for the tool.
-    	description (str | None): Optional description for the tool.
-    	arg_descriptions (Mapping[str, str] | None): Optional descriptions for the tool's arguments.
-    
-    Returns:
-    	dspy.Tool: The constructed or validated DSPy tool.
+    """Create and validate a DSPy tool from a trusted callable or Tool.
+
+    DSPy infers argument JSON schemas from type hints and descriptions from the
+    callable docstring. Explicit values are only needed when the application
+    wants a stable public name or clearer model-facing descriptions.
     """
     if name is not None:
         name = _validate_tool_name(name)
@@ -85,15 +79,7 @@ def clone_dspy_tool(
     tool: dspy.Tool,
     function: Callable[..., Any],
 ) -> dspy.Tool:
-    """Create a validated tool around a replacement callable while preserving the source tool's schema and metadata.
-    
-    Parameters:
-    	tool (dspy.Tool): Tool whose name, description, argument schema, types, and descriptions are preserved.
-    	function (Callable[..., Any]): Callable used by the cloned tool.
-    
-    Returns:
-    	dspy.Tool: The validated tool wrapping the replacement callable.
-    """
+    """Clone a Tool around another callable without losing explicit schema."""
     cloned = dspy.Tool(
         function,
         name=tool.name,
@@ -112,12 +98,6 @@ def is_async_tool(tool: dspy.Tool) -> bool:
 
 
 def _validate_dspy_tool(tool: dspy.Tool) -> None:
-    """
-    Validate that a DSPy tool has a valid name, description, callable signature, return annotation, and concrete argument types.
-    
-    Parameters:
-        tool (dspy.Tool): The tool to validate.
-    """
     if not isinstance(tool.name, str):
         raise TypeError("dspy.Tool name must be a string")
     name = _validate_tool_name(tool.name)
@@ -154,18 +134,6 @@ def _validate_dspy_tool(tool: dspy.Tool) -> None:
 
 
 def _validate_tool_name(name: str) -> str:
-    """
-    Validate and return a tool name.
-    
-    Parameters:
-        name (str): The tool name to validate.
-    
-    Returns:
-        str: The validated tool name.
-    
-    Raises:
-        ValueError: If the name contains surrounding whitespace or uses invalid characters or length.
-    """
     normalized = name.strip()
     if normalized != name:
         raise ValueError("tool names must not contain surrounding whitespace")
@@ -178,26 +146,12 @@ def _validate_tool_name(name: str) -> str:
 
 
 def _callable_target(function: Callable[..., Any]) -> Callable[..., Any]:
-    """
-    Resolve the callable used for signature and annotation inspection.
-    
-    Parameters:
-    	function (Callable[..., Any]): A function, bound method, or callable object.
-    
-    Returns:
-    	Callable[..., Any]: The function or method itself, or the callable object's class-level ``__call__`` method.
-    """
     if inspect.isfunction(function) or inspect.ismethod(function):
         return function
     return type(function).__call__
 
 
 def _unsupported_parameters(function: Callable[..., Any]) -> list[str]:
-    """Identify parameter names with unsupported calling conventions.
-    
-    Returns:
-    	list[str]: Names of positional-only, variadic positional, or variadic keyword parameters.
-    """
     signature = inspect.signature(_callable_target(function))
     unsupported_kinds = {
         inspect.Parameter.POSITIONAL_ONLY,
@@ -215,16 +169,6 @@ def _apply_arg_descriptions(
     args: dict[str, Any],
     descriptions: Mapping[str, str],
 ) -> None:
-    """
-    Apply validated descriptions to the corresponding argument definitions.
-    
-    Parameters:
-    	args (dict[str, Any]): Argument definitions to update.
-    	descriptions (Mapping[str, str]): Descriptions keyed by argument name.
-    
-    Raises:
-    	ValueError: If a description references an unknown argument or contains only whitespace.
-    """
     unknown = set(descriptions).difference(args)
     if unknown:
         names = ", ".join(sorted(unknown))
