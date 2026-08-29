@@ -111,7 +111,7 @@ def slow_engine_app(db_sessions):
 
     import dspy
 
-    from app.agent.engine import DspyReActV2Engine
+    from app.agent.engine import DspyAgentEngine
     from app.agent.instrumented import instrument_tool
     from app.agent.signature import AgentSignature
     from tests.helpers.scripted_lm import ScriptedLM, submit_call
@@ -127,8 +127,8 @@ def slow_engine_app(db_sessions):
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=3)
 
-        return DspyReActV2Engine(
-            agent_factory=factory,
+        return DspyAgentEngine(
+            program_factory=factory,
             lm=ScriptedLM(
                 [[{"name": "encoder_side", "args": {"query": "x"}}], [submit_call()]]
             ),
@@ -177,7 +177,7 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
 
     import dspy
 
-    from app.agent.engine import DspyReActV2Engine
+    from app.agent.engine import DspyAgentEngine
     from app.agent.instrumented import instrument_tool
     from app.agent.signature import AgentSignature
     from app.agent.tools.docs import SearchDocsTool
@@ -190,8 +190,8 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
 
-        return DspyReActV2Engine(
-            agent_factory=factory,
+        return DspyAgentEngine(
+            program_factory=factory,
             lm=ScriptedLM(
                 [[{"name": "search_docs", "args": {"query": "x"}}], [submit_call()]]
             ),
@@ -223,7 +223,7 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
 async def test_run_times_out_with_public_code():
     import dspy
 
-    from app.agent.engine import DspyReActV2Engine
+    from app.agent.engine import DspyAgentEngine
     from app.agent.signature import AgentSignature
     from tests.helpers.scripted_lm import ScriptedLM
 
@@ -242,8 +242,8 @@ async def test_run_times_out_with_public_code():
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
 
-        return DspyReActV2Engine(
-            agent_factory=factory,
+        return DspyAgentEngine(
+            program_factory=factory,
             lm=ScriptedLM(
                 [[{"name": "sleepy", "args": {"query": "x"}}], [submit_call()]]
             ),

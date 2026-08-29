@@ -1,6 +1,6 @@
 from pydantic import SecretStr
 
-from app.agent.engine import DspyReActV2Engine
+from app.agent.engine import DspyAgentEngine
 from app.agent.factory import build_dspy_engine
 from app.settings import Settings
 
@@ -16,7 +16,7 @@ def make_settings(**overrides) -> Settings:
 
 def test_factory_builds_engine():
     engine = build_dspy_engine(make_settings())
-    assert isinstance(engine, DspyReActV2Engine)
+    assert isinstance(engine, DspyAgentEngine)
 
 
 def test_api_key_never_appears_in_reprs():

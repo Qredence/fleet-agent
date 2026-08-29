@@ -7,7 +7,7 @@ import dspy
 import pytest
 from dspy.utils.exceptions import ContextWindowExceededError
 
-from app.agent.engine import AgentRunContext, AgentRunResult, DspyReActV2Engine
+from app.agent.engine import AgentRunContext, AgentRunResult, DspyAgentEngine
 from app.agent.signature import AgentSignature
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 
@@ -19,7 +19,7 @@ def make_engine(
     tools: list | None = None,
     max_iters: int = 4,
     cleanup: Callable[[], None] | None = None,
-) -> DspyReActV2Engine:
+) -> DspyAgentEngine:
     from app.agent.tools import search_docs
 
     lm = ScriptedLM(steps)
@@ -31,8 +31,8 @@ def make_engine(
             max_iters=max_iters,
         )
 
-    return DspyReActV2Engine(
-        agent_factory=factory,
+    return DspyAgentEngine(
+        program_factory=factory,
         lm=lm,  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(),
         cleanup=cleanup,
@@ -40,7 +40,7 @@ def make_engine(
 
 
 async def run(
-    engine: DspyReActV2Engine, request: str = "How does state sync work?", history=None
+    engine: DspyAgentEngine, request: str = "How does state sync work?", history=None
 ):
     return await engine.run(user_request=request, history=history, context=CTX)
 
@@ -83,8 +83,8 @@ async def test_cleanup_runs_when_agent_construction_raises():
     def factory() -> dspy.ReActV2:
         raise RuntimeError("agent construction failed")
 
-    engine = DspyReActV2Engine(
-        agent_factory=factory,
+    engine = DspyAgentEngine(
+        program_factory=factory,
         lm=ScriptedLM([]),  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(),
         cleanup=cleanup,
@@ -119,8 +119,8 @@ async def test_cleanup_waits_for_worker_after_outer_cancellation():
     def cleanup() -> None:
         cleaned.set()
 
-    engine = DspyReActV2Engine(
-        agent_factory=factory,
+    engine = DspyAgentEngine(
+        program_factory=factory,
         lm=ScriptedLM([]),  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(),
         cleanup=cleanup,

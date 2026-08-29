@@ -8,7 +8,7 @@ import dspy  # noqa: E402
 from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 
-from app.agent.engine import DspyReActV2Engine  # noqa: E402
+from app.agent.engine import DspyAgentEngine  # noqa: E402
 from app.agent.instrumented import instrument_tool  # noqa: E402
 from app.agent.signature import AgentSignature  # noqa: E402
 from app.agent.tools.docs import SearchDocsTool
@@ -41,8 +41,8 @@ def rich_builder(storage, steps):
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=6)
 
-        return DspyReActV2Engine(
-            agent_factory=factory, lm=ScriptedLM(steps), adapter=dspy.JSONAdapter()
+        return DspyAgentEngine(
+            program_factory=factory, lm=ScriptedLM(steps), adapter=dspy.JSONAdapter()
         )
 
     return build
