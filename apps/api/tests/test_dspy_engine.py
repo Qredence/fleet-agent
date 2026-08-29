@@ -20,11 +20,24 @@ def make_engine(
     max_iters: int = 4,
     cleanup: Callable[[], None] | None = None,
 ) -> DspyAgentEngine:
+    """
+    Create a DspyAgentEngine configured with a scripted language model.
+    
+    Parameters:
+        steps (list): Scripted model responses used during execution.
+        tools (list | None): Tools made available to the agent. Defaults to document search.
+        max_iters (int): Maximum number of agent iterations.
+        cleanup (Callable[[], None] | None): Optional callback invoked when execution finishes.
+    
+    Returns:
+        DspyAgentEngine: The configured agent engine.
+    """
     from app.agent.tools import search_docs
 
     lm = ScriptedLM(steps)
 
     def factory() -> dspy.ReActV2:
+        """Create a configured ReActV2 agent for the test engine."""
         return dspy.ReActV2(
             AgentSignature,
             tools=tools if tools is not None else [search_docs],
@@ -42,6 +55,17 @@ def make_engine(
 async def run(
     engine: DspyAgentEngine, request: str = "How does state sync work?", history=None
 ):
+    """
+    Run the agent engine with a request and shared test context.
+    
+    Parameters:
+        engine (DspyAgentEngine): Engine used to process the request.
+        request (str): User request to submit.
+        history: Optional conversation history.
+    
+    Returns:
+        The engine's run result.
+    """
     return await engine.run(user_request=request, history=history, context=CTX)
 
 
@@ -81,6 +105,7 @@ async def test_cleanup_runs_when_agent_construction_raises():
         cleanup_calls += 1
 
     def factory() -> dspy.ReActV2:
+        """Raise an error indicating that agent construction failed."""
         raise RuntimeError("agent construction failed")
 
     engine = DspyAgentEngine(

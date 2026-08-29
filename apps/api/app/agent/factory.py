@@ -27,6 +27,12 @@ class _FleetLM(dspy.LM):  # type: ignore[misc]
     """LM with an explicit capability override for compatible gateways."""
 
     def __init__(self, *, force_function_calling: bool, **kwargs: Any) -> None:
+        """Initialize the language model with optional forced function-calling support.
+        
+        Parameters:
+        	force_function_calling (bool): Whether to force the model to report function-calling support.
+        	**kwargs (Any): Configuration passed to the base language model.
+        """
         self._force_function_calling = force_function_calling
         super().__init__(**kwargs)
 
@@ -51,12 +57,28 @@ def _build_lm(settings: Settings) -> dspy.LM:
 
 
 def _build_adapter(settings: Settings) -> dspy.JSONAdapter:
+    """Create a JSON adapter configured for the selected language model function-calling mode.
+    
+    Parameters:
+    	settings (Settings): Configuration specifying whether to use native function calling.
+    
+    Returns:
+    	dspy.JSONAdapter: The configured JSON adapter.
+    """
     return dspy.JSONAdapter(
         use_native_function_calling=settings.llm_native_function_calling
     )
 
 
 def _source_name(source: ToolSource) -> str:
+    """Return the catalog lookup name for a tool source.
+    
+    Parameters:
+    	source (ToolSource): A DSPy tool or callable tool source.
+    
+    Returns:
+    	str: The source's declared tool name or type name.
+    """
     if isinstance(source, dspy.Tool):
         return str(source.name or "")
     return str(getattr(source, "__name__", type(source).__name__))
@@ -66,7 +88,19 @@ def _build_tool_registry(
     settings: Settings,
     sources: list[ToolSource],
 ) -> ToolRegistry:
-    """Create the single run-scoped source of truth for DSPy tools."""
+    """
+    Create a run-scoped registry that associates executable tool sources with catalog metadata.
+    
+    Parameters:
+        settings (Settings): Configuration used to select the tool catalog.
+        sources (list[ToolSource]): Executable tool sources to register.
+    
+    Returns:
+        ToolRegistry: Registry containing each source and its catalog metadata.
+    
+    Raises:
+        RuntimeError: If a source is missing from the tool catalog.
+    """
     catalog = tool_catalog_by_name(settings)
     registrations: list[tuple[ToolSource, ToolMetadata]] = []
 
@@ -101,6 +135,11 @@ def build_dspy_engine(settings: Settings) -> AgentEngine:
     registry = _build_tool_registry(settings, [search_docs, get_current_time])
 
     def program_factory() -> FleetAgent:
+        """Create a FleetAgent configured with the registered tools and iteration limit.
+        
+        Returns:
+            FleetAgent: A configured agent for the current run.
+        """
         return FleetAgent(
             tools=registry.dspy_tools(),
             max_iters=settings.llm_max_iters,
@@ -126,11 +165,30 @@ def _build_web_tools(settings: Settings) -> WebToolBundle | None:
 def make_engine_builder(
     settings: Settings, *, storage: ArtifactStorage
 ) -> EngineBuilder:
-    """Create run-scoped programs while sharing immutable LM configuration."""
+    """
+    Create a builder that constructs run-scoped agent engines using shared LM configuration.
+    
+    Parameters:
+    	settings (Settings): Configuration for the language model, adapter, tools, and engine limits.
+    	storage (ArtifactStorage): Storage used for generated reports.
+    
+    Returns:
+    	EngineBuilder: A builder that creates an agent engine for a run event bus and thread.
+    """
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
 
     def build(bus: RunEventBus, *, thread_id: str) -> AgentEngine:
+        """
+        Build a run-scoped DSPy agent engine with documentation, reporting, time, and optional web tools.
+        
+        Parameters:
+        	bus (RunEventBus): Event bus used for run events and cancellation.
+        	thread_id (str): Identifier of the thread associated with report output.
+        
+        Returns:
+        	AgentEngine: A staged or standard DSPy agent engine based on the configured reasoning program.
+        """
         docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(
             storage=storage,
@@ -166,6 +224,12 @@ def make_engine_builder(
             )
 
         def program_factory() -> FleetAgent:
+            """
+            Create a FleetAgent configured with the registered tools and iteration limit.
+            
+            Returns:
+                FleetAgent: A configured agent for the current run.
+            """
             return FleetAgent(
                 tools=registry.dspy_tools(),
                 max_iters=settings.llm_max_iters,

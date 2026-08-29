@@ -31,6 +31,16 @@ pytestmark = requires_db
 
 
 def rich_builder(storage, steps):
+    """
+    Create an agent-engine builder configured with artifact storage and scripted steps.
+    
+    Parameters:
+    	storage: Storage used by the report-writing tool.
+    	steps: Scripted language-model actions used by the agent.
+    
+    Returns:
+    	A builder function that creates a configured agent engine for a thread.
+    """
     def build(bus, *, thread_id: str = "t"):
         docs = SearchDocsTool()
         report = WriteReportTool(

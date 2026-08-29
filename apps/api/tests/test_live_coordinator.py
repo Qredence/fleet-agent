@@ -17,9 +17,29 @@ from tests.helpers.scripted_lm import ScriptedLM, submit_call
 
 
 def scripted_builder(steps, tools=None, max_iters=4):
+    """
+    Create a builder for a scripted DSPy agent engine.
+    
+    Parameters:
+    	steps: Scripted language-model responses used by the engine.
+    	tools: Optional tools exposed to the agent; defaults to document search.
+    	max_iters (int): Maximum number of agent iterations.
+    
+    Returns:
+    	A builder that creates an instrumented DSPy agent engine for a run event bus.
+    """
     base_tools = tools if tools is not None else [search_docs]
 
     def build(bus: RunEventBus, *, thread_id: str = "t-test"):
+        """
+        Construct a scripted DSPy agent engine with instrumented tools.
+        
+        Parameters:
+            bus (RunEventBus): Event bus used to instrument tool execution.
+        
+        Returns:
+            DspyAgentEngine: Configured agent engine for scripted execution.
+        """
         wrapped = [instrument_tool(tool, bus) for tool in base_tools]
 
         def program_factory() -> dspy.ReActV2:
@@ -226,10 +246,26 @@ async def test_web_search_and_sources_are_transcript_custom_events():
     web_search.last_sources = []
 
     def builder(bus: RunEventBus, *, thread_id: str = "thread-live"):
+        """
+        Create a scripted agent engine configured for web-search event tests.
+        
+        Parameters:
+        	bus (RunEventBus): Event bus used for streaming run callbacks
+        	thread_id (str): Retained for compatibility with standard test builders
+        
+        Returns:
+        	DspyAgentEngine: Engine configured with web search and scripted responses
+        """
         del thread_id
         callback = AgUiRunCallback(bus=bus)
 
         def program_factory() -> dspy.ReActV2:
+            """
+            Create a configured ReAct program for the agent tests.
+            
+            Returns:
+                dspy.ReActV2: A program using the agent signature, web search tool, and two iteration limit.
+            """
             return dspy.ReActV2(
                 AgentSignature,
                 tools=[web_search],

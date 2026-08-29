@@ -35,6 +35,13 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         tools: Sequence[dspy.Tool],
         max_iters: int = 20,
     ) -> None:
+        """
+        Initialize the agent with its registered tools and iteration limit.
+        
+        Parameters:
+            tools (Sequence[dspy.Tool]): Tools available to the agent.
+            max_iters (int): Maximum number of reasoning iterations; must be at least 1.
+        """
         super().__init__()
         if max_iters < 1:
             raise ValueError("max_iters must be at least 1")
@@ -64,17 +71,45 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
 
     @property
     def tools(self) -> tuple[dspy.Tool, ...]:
-        """Return user tools through an application-owned read-only view."""
+        """
+        Provide the registered tools as a read-only tuple.
+        
+        Returns:
+            tuple[dspy.Tool, ...]: The registered tools in their registration order.
+        """
         return tuple(self.react.tools[name] for name in self.tool_names)
 
     def get_tool(self, name: str) -> dspy.Tool:
-        """Return one registered user tool without exposing ReActV2 internals."""
+        """Return a registered tool by name.
+        
+        Parameters:
+        	name (str): The name of the registered tool.
+        
+        Returns:
+        	dspy.Tool: The registered tool.
+        
+        Raises:
+        	KeyError: If no tool is registered with the specified name.
+        """
         if name not in self.tool_names:
             raise KeyError(f"unknown tool: {name}")
         return self.react.tools[name]
 
 
 def _validate_tools(tools: Sequence[dspy.Tool]) -> list[dspy.Tool]:
+    """
+    Validate and prepare the tools registered with the agent.
+    
+    Parameters:
+        tools (Sequence[dspy.Tool]): Tools to validate and register.
+    
+    Returns:
+        list[dspy.Tool]: Validated tools in their original order.
+    
+    Raises:
+        TypeError: If an item is not a `dspy.Tool` or is asynchronous.
+        ValueError: If a tool has an empty, duplicate, or reserved name, or lacks a description or docstring.
+    """
     validated: list[dspy.Tool] = []
     seen: set[str] = set()
 
