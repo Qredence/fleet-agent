@@ -6,7 +6,7 @@ import json
 import dspy
 
 from app.agent.callbacks import AgUiRunCallback
-from app.agent.engine import DspyReActV2Engine
+from app.agent.engine import DspyAgentEngine
 from app.agent.instrumented import instrument_tool
 from app.agent.signature import AgentSignature
 from app.agent.tools import search_docs
@@ -22,11 +22,11 @@ def scripted_builder(steps, tools=None, max_iters=4):
     def build(bus: RunEventBus, *, thread_id: str = "t-test"):
         wrapped = [instrument_tool(tool, bus) for tool in base_tools]
 
-        def agent_factory() -> dspy.ReActV2:
+        def program_factory() -> dspy.ReActV2:
             return dspy.ReActV2(AgentSignature, tools=wrapped, max_iters=max_iters)
 
-        return DspyReActV2Engine(
-            agent_factory=agent_factory,
+        return DspyAgentEngine(
+            program_factory=program_factory,
             lm=ScriptedLM(steps),  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(),
         )
@@ -229,15 +229,15 @@ async def test_web_search_and_sources_are_transcript_custom_events():
         del thread_id
         callback = AgUiRunCallback(bus=bus)
 
-        def agent_factory() -> dspy.ReActV2:
+        def program_factory() -> dspy.ReActV2:
             return dspy.ReActV2(
                 AgentSignature,
                 tools=[web_search],
                 max_iters=2,
             )
 
-        return DspyReActV2Engine(
-            agent_factory=agent_factory,
+        return DspyAgentEngine(
+            program_factory=program_factory,
             lm=ScriptedLM(
                 [
                     [{"name": "web_search", "args": {"query": "DSPy"}}],

@@ -62,7 +62,7 @@ flowchart TB
     end
 
     subgraph AGENTSVC["app.agent"]
-        E["AgentEngine (Protocol)\nDspyReActV2Engine | StagedDspyEngine"]
+        E["AgentEngine (Protocol)\nDspyAgentEngine | StagedDspyEngine"]
         SIG["AgentSignature fields:\nanswer · process_summary · key_decisions · caveats"]
         F["factory & EngineBuilder\nruns create run-scoped engines"]
         TC["ToolRegistry + catalog\n(search_docs · write_report · get_current_time · web_*)"]

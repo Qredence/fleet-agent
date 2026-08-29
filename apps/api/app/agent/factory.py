@@ -1,19 +1,17 @@
-"""Builds the production DspyReActV2Engine from Settings.
+"""Build run-scoped FleetAgent programs and their DSPy runtime boundary."""
 
-Native function calling is configured explicitly (JSONAdapter enables it by
-default; being explicit keeps behavior stable across DSPy patch releases).
-"""
+from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import dspy
 
 from app.agent.callbacks import AgUiRunCallback
-from app.agent.engine import AgentEngine, DspyReActV2Engine
-from app.agent.signature import AgentSignature
+from app.agent.engine import AgentEngine, DspyAgentEngine
+from app.agent.program import FleetAgent
 from app.agent.staged import StagedDspyEngine
 from app.agent.tool_registry import ToolMetadata, ToolRegistry
+from app.agent.tooling import ToolSource
 from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
@@ -26,14 +24,7 @@ from app.settings import Settings
 
 
 class _FleetLM(dspy.LM):  # type: ignore[misc]
-    """LM with an explicit capability override for OpenAI-compatible gateways.
-
-    LiteLLM cannot infer function-calling support for many gateway-specific
-    model names. When native mode is explicitly enabled, DSPy would otherwise
-    omit the tools while ReActV2 still requests a forced tool choice during
-    final submission. Custom OpenAI-compatible endpoints can advertise that
-    capability through this adapter.
-    """
+    """LM with an explicit capability override for compatible gateways."""
 
     def __init__(self, *, force_function_calling: bool, **kwargs: Any) -> None:
         self._force_function_calling = force_function_calling
@@ -65,22 +56,65 @@ def _build_adapter(settings: Settings) -> dspy.JSONAdapter:
     )
 
 
+def _source_name(source: ToolSource) -> str:
+    if isinstance(source, dspy.Tool):
+        return str(source.name or "")
+    return str(getattr(source, "__name__", type(source).__name__))
+
+
+def _build_tool_registry(
+    settings: Settings,
+    sources: list[ToolSource],
+) -> ToolRegistry:
+    """Create the single run-scoped source of truth for DSPy tools."""
+    catalog = tool_catalog_by_name(settings)
+    registrations: list[tuple[ToolSource, ToolMetadata]] = []
+
+    for source in sources:
+        name = _source_name(source)
+        try:
+            item = catalog[name]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"tool {name!r} is executable but missing from tools_catalog.py"
+            ) from exc
+        registrations.append(
+            (
+                source,
+                ToolMetadata(
+                    name=item.name,
+                    read_only=item.read_only,
+                    idempotent=item.idempotent,
+                    parallelizable=item.parallelizable,
+                    timeout_seconds=item.timeout_seconds,
+                ),
+            )
+        )
+
+    return ToolRegistry(registrations)
+
+
 def build_dspy_engine(settings: Settings) -> AgentEngine:
+    """Build the default engine used by focused backend tests."""
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
+    registry = _build_tool_registry(settings, [search_docs, get_current_time])
 
-    def agent_factory() -> dspy.ReActV2:
-        return dspy.ReActV2(
-            AgentSignature,
-            tools=[search_docs, get_current_time],
+    def program_factory() -> FleetAgent:
+        return FleetAgent(
+            tools=registry.dspy_tools(),
             max_iters=settings.llm_max_iters,
         )
 
-    return DspyReActV2Engine(agent_factory=agent_factory, lm=lm, adapter=adapter)
+    return DspyAgentEngine(
+        program_factory=program_factory,
+        lm=lm,
+        adapter=adapter,
+    )
 
 
 def _build_web_tools(settings: Settings) -> WebToolBundle | None:
-    """Tavily-backed web tools; empty when no API key is configured."""
+    """Build Tavily-backed web tools when an API key is configured."""
     if not settings.tavily_api_key:
         return None
     return build_web_tool_bundle(
@@ -92,68 +126,30 @@ def _build_web_tools(settings: Settings) -> WebToolBundle | None:
 def make_engine_builder(
     settings: Settings, *, storage: ArtifactStorage
 ) -> EngineBuilder:
-    """
-    Create a builder for run-scoped agent engines using shared language-model
-        configuration.
-
-    Parameters:
-        storage (ArtifactStorage): Storage used by report-writing tools created for each
-            run.
-
-    Returns:
-        EngineBuilder: A builder that creates an engine bound to a run event bus and
-            thread.
-    """
+    """Create run-scoped programs while sharing immutable LM configuration."""
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
 
     def build(bus: RunEventBus, *, thread_id: str) -> AgentEngine:
-        """
-        Build an agent engine configured for the current run.
-
-        Parameters:
-            thread_id (str): Identifier of the thread associated with report artifacts.
-
-        Returns:
-            AgentEngine: A staged or ReAct engine configured from the current settings.
-        """
         docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(
             storage=storage,
             bus=bus,
             thread_id=thread_id,
             max_bytes=settings.artifact_max_bytes,
-            step_id="step-synthesis"
-            if settings.reasoning_program == "staged"
-            else None,
+            step_id=(
+                "step-synthesis" if settings.reasoning_program == "staged" else None
+            ),
         )
         web_bundle = _build_web_tools(settings)
-        tools: list[Callable[..., Any]] = [
+        sources: list[ToolSource] = [
             *(web_bundle.tools if web_bundle else []),
             docs_tool,
             report_tool,
             get_current_time,
         ]
+        registry = _build_tool_registry(settings, sources)
         callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
-
-        # Metadata comes from the shared catalog (also served by GET /api/tools)
-        # so the public page can never drift from what runs actually use.
-        catalog = tool_catalog_by_name(settings)
-        registry = ToolRegistry(
-            [
-                (
-                    tool,
-                    ToolMetadata(
-                        name=catalog[tool.__name__].name,
-                        read_only=catalog[tool.__name__].read_only,
-                        idempotent=catalog[tool.__name__].idempotent,
-                        parallelizable=catalog[tool.__name__].parallelizable,
-                        timeout_seconds=catalog[tool.__name__].timeout_seconds,
-                    ),
-                )
-                for tool in tools
-            ]
-        )
 
         if settings.reasoning_program == "staged":
             return StagedDspyEngine(
@@ -169,15 +165,14 @@ def make_engine_builder(
                 cleanup=web_bundle.close if web_bundle else None,
             )
 
-        def agent_factory() -> dspy.ReActV2:
-            return dspy.ReActV2(
-                AgentSignature,
-                tools=tools,
+        def program_factory() -> FleetAgent:
+            return FleetAgent(
+                tools=registry.dspy_tools(),
                 max_iters=settings.llm_max_iters,
             )
 
-        return DspyReActV2Engine(
-            agent_factory=agent_factory,
+        return DspyAgentEngine(
+            program_factory=program_factory,
             lm=lm,
             adapter=adapter,
             callbacks=[callback],

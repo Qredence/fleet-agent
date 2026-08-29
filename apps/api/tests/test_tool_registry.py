@@ -61,6 +61,7 @@ def test_registry_can_isolate_stateful_dspy_tools():
 
 def test_registry_converts_failures_and_cancellation_to_safe_results():
     def fail(value: str) -> str:
+        """Fail deterministically for safe-error testing."""
         raise RuntimeError(f"secret {value}")
 
     registry = ToolRegistry([(fail, ToolMetadata(name="fail"))])
@@ -82,12 +83,14 @@ async def test_executor_overlaps_read_only_tasks_and_rejects_side_effects():
     barrier = threading.Barrier(2)
 
     def read(label: str) -> str:
+        """Read one label after both parallel workers have started."""
         barrier.wait(timeout=2)
         return label
 
     side_effect_called = False
 
     def write(label: str) -> str:
+        """Write one label for serialization-policy testing."""
         nonlocal side_effect_called
         side_effect_called = True
         return label
@@ -127,6 +130,7 @@ async def test_executor_does_not_start_after_cancellation():
     called = False
 
     def read() -> str:
+        """Return an unexpected value if cancellation handling regresses."""
         nonlocal called
         called = True
         return "unexpected"

@@ -1,8 +1,7 @@
-"""Typed, bounded tool execution primitives used by staged DSPy runs.
+"""Typed DSPy tool creation, registration, and bounded execution.
 
-The registry is deliberately an internal layer.  DSPy still receives normal
-``dspy.Tool`` instances, while orchestration gets metadata and a small,
-model-safe result envelope.
+The registry adds execution policy, allowlisting, isolation, and bounded
+results around the validated ``dspy.Tool`` objects built by ``tooling.py``.
 """
 
 from __future__ import annotations
@@ -17,6 +16,13 @@ import dspy
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.instrumented import preview
+from app.agent.tooling import (
+    TOOL_NAME_PATTERN,
+    ToolSource,
+    clone_dspy_tool,
+    create_dspy_tool,
+    is_async_tool,
+)
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.contracts.domain import ArtifactResult, SourceResult
 
@@ -26,7 +32,7 @@ class ToolMetadata(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    name: str
+    name: str = Field(pattern=TOOL_NAME_PATTERN)
     read_only: bool = True
     idempotent: bool = True
     timeout_seconds: float = Field(default=30.0, gt=0)
@@ -54,17 +60,46 @@ class RegisteredTool:
 
 
 class ToolRegistry:
-    """Registry that adapts existing synchronous callables to ``dspy.Tool``."""
+    """Registry of explicit ``dspy.Tool`` objects and execution policy."""
 
-    def __init__(
-        self, tools: Iterable[tuple[Callable[..., Any], ToolMetadata]]
-    ) -> None:
+    def __init__(self, tools: Iterable[tuple[ToolSource, ToolMetadata]] = ()) -> None:
         self._tools: dict[str, RegisteredTool] = {}
-        for function, metadata in tools:
-            if metadata.name in self._tools:
-                raise ValueError(f"duplicate tool: {metadata.name}")
-            tool = dspy.Tool(function, name=metadata.name)
-            self._tools[metadata.name] = RegisteredTool(tool=tool, metadata=metadata)
+        for source, metadata in tools:
+            self.register(source, metadata)
+
+    def register(self, source: ToolSource, metadata: ToolMetadata) -> dspy.Tool:
+        """Create/register a tool before an agent run starts.
+
+        Existing ``dspy.Tool`` objects must already use the catalog name. This
+        prevents the model-visible schema, execution registry, and public tools
+        page from silently referring to one tool by different names.
+        """
+        if metadata.name in self._tools:
+            raise ValueError(f"duplicate tool: {metadata.name}")
+
+        if isinstance(source, dspy.Tool):
+            if source.name != metadata.name:
+                raise ValueError(
+                    "prebuilt dspy.Tool name does not match metadata: "
+                    f"{source.name!r} != {metadata.name!r}"
+                )
+            tool = create_dspy_tool(source)
+        else:
+            tool = create_dspy_tool(source, name=metadata.name)
+
+        if tool.name != metadata.name:
+            raise ValueError(
+                "model-visible tool name does not match registry metadata: "
+                f"{tool.name!r} != {metadata.name!r}"
+            )
+        if is_async_tool(tool):
+            raise TypeError(
+                f"tool {metadata.name!r} is async, but ToolRegistry and the "
+                "DSPy 3.3.1 ReActV2 path execute tools synchronously"
+            )
+
+        self._tools[metadata.name] = RegisteredTool(tool=tool, metadata=metadata)
+        return tool
 
     def get(self, name: str) -> RegisteredTool:
         try:
@@ -82,14 +117,22 @@ class ToolRegistry:
         allowed_names: Iterable[str] | None = None,
         isolate: bool = False,
     ) -> list[dspy.Tool]:
-        """Return tools for a DSPy invocation.
+        """Return the exact tools available to one DSPy program.
 
-        ``isolate`` creates fresh ``dspy.Tool`` wrappers and asks stateful
-        callable objects that support ``clone_for_worker`` for a per-worker
-        instance. Plain functions remain shared because they have no mutable
-        instance state.
+        ``allowed_names`` is the safe dynamic-selection mechanism: the server
+        decides which trusted tools are available, then ReActV2 decides which of
+        those tools to invoke. It never generates executable Python at runtime.
+
+        ``isolate`` creates fresh Tool wrappers and asks stateful callable
+        objects that implement ``clone_for_worker`` for per-worker instances.
+        Plain functions remain shared because they have no instance state.
         """
         allowed = set(allowed_names) if allowed_names is not None else None
+        unknown = allowed.difference(self._tools) if allowed is not None else set()
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise KeyError(f"unknown tool(s): {names}")
+
         result: list[dspy.Tool] = []
         clones: dict[int, Callable[..., Any]] = {}
         for name, registered in self._tools.items():
@@ -102,8 +145,12 @@ class ToolRegistry:
             if not isolate:
                 result.append(registered.tool)
                 continue
+
             function = _clone_for_worker(registered.tool.func, clones)
-            result.append(dspy.Tool(function, name=name))
+            cloned = clone_dspy_tool(registered.tool, function)
+            if is_async_tool(cloned):
+                raise TypeError(f"isolated tool {name!r} unexpectedly became async")
+            result.append(cloned)
         return result
 
     def execute(
@@ -114,7 +161,6 @@ class ToolRegistry:
         cancel_token: RunCancelToken | None = None,
     ) -> ToolExecutionResult:
         """Execute synchronously and convert all failures to safe results."""
-
         try:
             registered = self.get(name)
         except KeyError:
@@ -123,6 +169,7 @@ class ToolRegistry:
                 error_code="unknown_tool",
                 error_message="The requested tool is not available.",
             )
+
         started = time.monotonic()
         try:
             if cancel_token is not None:
@@ -184,6 +231,7 @@ class BoundedReadOnlyExecutor:
                 error_code="unknown_tool",
                 error_message="The requested tool is not available.",
             )
+
         if not registered.metadata.read_only or not registered.metadata.parallelizable:
             return ToolExecutionResult(
                 status="failed",
@@ -196,6 +244,7 @@ class BoundedReadOnlyExecutor:
                 error_code="run_cancelled",
                 error_message="The task was cancelled before the tool started.",
             )
+
         async with self._semaphore:
             if self._cancel_token is not None and self._cancel_token.cancelled:
                 return ToolExecutionResult(

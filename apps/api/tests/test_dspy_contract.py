@@ -14,7 +14,7 @@ import dspy
 import pytest
 from dspy.adapters.types.tool import Tool
 
-from app.agent.engine import AgentRunContext, DspyReActV2Engine
+from app.agent.engine import AgentRunContext, DspyAgentEngine
 from app.agent.factory import build_dspy_engine
 from app.agent.instrumented import instrument_tool
 from app.agent.signature import AgentSignature
@@ -181,14 +181,14 @@ def test_agent_signature_contract():
 # ---------------------------------------------------------------------------
 
 
-def _make_engine(steps: list, *, use_native: bool) -> DspyReActV2Engine:
+def _make_engine(steps: list, *, use_native: bool) -> DspyAgentEngine:
     lm = ScriptedLM(steps)
 
     def factory() -> dspy.ReActV2:
         return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=3)
 
-    return DspyReActV2Engine(
-        agent_factory=factory,
+    return DspyAgentEngine(
+        program_factory=factory,
         lm=lm,  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(use_native_function_calling=use_native),
     )
@@ -274,15 +274,15 @@ async def test_usage_keys_are_exact_and_summed():
 
 
 async def test_concurrent_runs_isolate_lm_and_usage():
-    def make(steps: list) -> DspyReActV2Engine:
+    def make(steps: list) -> DspyAgentEngine:
         lm = ScriptedLM(steps)
         lm.model = f"scripted-{id(steps)}"  # distinct usage key per engine
 
         def factory() -> dspy.ReActV2:
             return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=2)
 
-        return DspyReActV2Engine(
-            agent_factory=factory,
+        return DspyAgentEngine(
+            program_factory=factory,
             lm=lm,  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(use_native_function_calling=True),
         )
@@ -325,7 +325,7 @@ async def test_async_tool_raises_under_sync_loop():
         [[{"name": "fetch_thing", "args": {"query": "x"}}]],
         use_native=True,
     )
-    engine._agent_factory = lambda: dspy.ReActV2(
+    engine._program_factory = lambda: dspy.ReActV2(
         AgentSignature, tools=[fetch_thing], max_iters=2
     )
     # ReActV2 converts the raised ValueError into an error observation; the
@@ -395,7 +395,7 @@ def test_production_engine_builds_native_uncached_lm():
 
     settings = Settings(llm_api_key=SecretStr("sk-test-contract"))
     engine = build_dspy_engine(settings)
-    assert isinstance(engine, DspyReActV2Engine)
+    assert isinstance(engine, DspyAgentEngine)
     assert isinstance(engine._adapter, dspy.JSONAdapter)
     assert engine._adapter.use_native_function_calling is True
     # cache=False is an LM-instance flag (lm.cache), not a request kwarg —
