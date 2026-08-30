@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type ProcessPanelTab = 'sources' | 'artifacts'
+export type ProcessPanelTab = 'activity' | 'sources' | 'artifacts'
 export type ThemeMode = 'dark' | 'light' | 'system'
 
 interface WorkspaceState {
@@ -78,7 +78,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       theme: 'dark',
       sidebarCollapsed: false,
       processPanelOpen: true,
-      processPanelTab: 'sources',
+      processPanelTab: 'activity',
       sidebarSheetOpen: false,
       processSheetOpen: false,
       selectedArtifactId: null,

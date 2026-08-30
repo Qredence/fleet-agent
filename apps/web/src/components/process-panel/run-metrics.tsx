@@ -35,6 +35,9 @@ const TERMINATION_LABELS: Record<string, string> = {
   context_window_exceeded: 'Stopped: conversation is too long for the model',
   timeout: 'Stopped: the agent run timed out',
   cancelled: 'Run cancelled',
+  approval_required: 'Waiting for approval',
+  approval_expired: 'Approval expired',
+  approval_invalid: 'Approval could not be applied',
 }
 
 /** Surfaces how a run ended — prominent for problems, quiet for submit. */
@@ -77,7 +80,7 @@ export function TerminationNotice({
             <code
               className={cn(
                 mono,
-                'bg-foreground/[0.06] text-foreground/70 rounded-md px-1.5 py-0.5',
+                'bg-foreground/[0.06] text-foreground/70 rounded-lg px-1.5 py-0.5',
               )}
             >
               {errorCode}

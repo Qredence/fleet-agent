@@ -32,6 +32,54 @@ type ReadonlyJSONValue =
 
 const threadWriteBarriers = new Map<string, Promise<void>>()
 
+export async function persistThreadHeadWithRetry(
+  threadId: string,
+  headId: string | null,
+  options: {
+    signal: AbortSignal
+    isCurrent: () => boolean
+    retryDelayMs?: number
+    maxRetries?: number
+  },
+): Promise<boolean> {
+  const retryDelayMs = options.retryDelayMs ?? 300
+  const maxRetries = options.maxRetries ?? 3
+
+  const waitBeforeRetry = async (): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      let settled = false
+      let timeout: ReturnType<typeof globalThis.setTimeout>
+      const finish = () => {
+        if (settled) return
+        settled = true
+        globalThis.clearTimeout(timeout)
+        options.signal.removeEventListener('abort', onAbort)
+        resolve()
+      }
+      const onAbort = () => finish()
+      timeout = globalThis.setTimeout(finish, retryDelayMs)
+      options.signal.addEventListener('abort', onAbort, { once: true })
+      if (options.signal.aborted) finish()
+    })
+  }
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (!options.isCurrent()) return false
+    try {
+      await waitForThreadHistoryWrites(threadId, { consumeFailure: false })
+      if (!options.isCurrent()) return false
+      await threadApi.persistThreadHead(threadId, headId, {
+        signal: options.signal,
+      })
+      return options.isCurrent()
+    } catch {
+      if (!options.isCurrent() || attempt >= maxRetries) return false
+      await waitBeforeRetry()
+    }
+  }
+  return false
+}
+
 /**
  * Waits for the pending history write for a thread.
  *
@@ -228,12 +276,47 @@ export function HistoryHeadSync({
   initialHeadId: string | null
 }) {
   const messages = useAuiState((state) => state.thread.messages)
+  const isRunning = useAuiState((state) => state.thread.isRunning)
   const headId = messages.at(-1)?.id ?? null
   const lastPersisted = useRef<string | null | undefined>(initialHeadId)
   const pendingHead = useRef<string | null | undefined>(undefined)
+  const desiredHead = useRef<string | null | undefined>(initialHeadId)
+  const retryGeneration = useRef(0)
+  const retryAbort = useRef<AbortController | null>(null)
   const loaded = useRef(false)
 
   useEffect(() => {
+    return () => {
+      retryGeneration.current += 1
+      retryAbort.current?.abort()
+      retryAbort.current = null
+      pendingHead.current = undefined
+    }
+  }, [])
+
+  useEffect(() => {
+    // A branch can change while a run is still streaming. Invalidate the old
+    // retry chain immediately, even though the new head is intentionally not
+    // persisted until the run settles.
+    if (desiredHead.current !== headId) {
+      desiredHead.current = headId
+      retryGeneration.current += 1
+      retryAbort.current?.abort()
+      retryAbort.current = null
+      pendingHead.current = undefined
+    }
+    // Streaming adds the assistant message to runtime state before its
+    // history write exists, so syncing mid-run would publish an unpersisted
+    // id. Wait for the run to settle; the final effect run below persists
+    // the settled branch head.
+    if (isRunning) return
+    // assistant-ui surfaces optimistic placeholder ids ("__optimistic__*")
+    // before the real message id arrives; those never exist server-side.
+    // Skip the sync (without publishing a transient null) until the real id
+    // replaces the placeholder.
+    if (typeof headId === "string" && headId.startsWith("__optimistic__")) {
+      return
+    }
     // assistant-ui starts with an empty in-memory repository while its first
     // adapter load is pending. Do not publish that transient null head over
     // the server-selected branch, including the empty-thread null -> null
@@ -248,19 +331,30 @@ export function HistoryHeadSync({
     ) {
       return
     }
+    const generation = retryGeneration.current
+    const controller = new AbortController()
+    retryAbort.current = controller
     pendingHead.current = headId
-    void waitForThreadHistoryWrites(threadId, { consumeFailure: false })
-      .then(() => threadApi.persistThreadHead(threadId, headId))
-      .then(() => {
-        lastPersisted.current = headId
-      })
-      .catch(() => {
-        // A later branch change retries; failed head persistence must not break
-        // the mounted assistant runtime.
-      })
+    // A streamed assistant message can appear in runtime state slightly
+    // before its history-adapter write is enqueued, so the first head write
+    // may observe an "unknown branch head" 409. Retry briefly; any later
+    // branch change aborts and supersedes this generation.
+    const isCurrent = () =>
+      retryGeneration.current === generation &&
+      pendingHead.current === headId &&
+      !controller.signal.aborted
+    void persistThreadHeadWithRetry(threadId, headId, {
+      signal: controller.signal,
+      isCurrent,
+    }).then((persisted) => {
+      if (persisted && isCurrent()) lastPersisted.current = headId
+    })
       .finally(() => {
-        if (pendingHead.current === headId) pendingHead.current = undefined
+        if (isCurrent()) {
+          pendingHead.current = undefined
+          retryAbort.current = null
+        }
       })
-  }, [headId, initialHeadId, threadId])
+  }, [headId, initialHeadId, threadId, isRunning])
   return null
 }

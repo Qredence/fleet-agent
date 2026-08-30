@@ -65,7 +65,7 @@ async def test_callback_publishes_tool_started_and_completed():
     started, completed = events
     assert isinstance(started, ToolStarted)
     assert started.name == "simple_tool"
-    assert "dspy" in started.input_preview
+    assert '"chars":4' in started.arguments_json
     assert isinstance(completed, ToolCompleted)
     assert completed.name == "simple_tool"
     assert "result for dspy" in completed.output_preview

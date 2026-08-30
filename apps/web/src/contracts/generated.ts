@@ -5,7 +5,7 @@
  * and run json-schema-to-typescript to regenerate this file.
  */
 
-export type RunStatus = "idle" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type RunStatus = "idle" | "queued" | "running" | "interrupted" | "completed" | "failed" | "cancelled";
 export type StepPhase = "understanding" | "planning" | "research" | "analysis" | "critique" | "synthesis";
 export type StepStatus = "pending" | "running" | "completed" | "failed";
 export type DecisionStatus = "considering" | "accepted" | "rejected";

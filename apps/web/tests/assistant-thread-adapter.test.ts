@@ -15,6 +15,7 @@ vi.mock('@/features/threads/threads-api', () => ({
 
 import {
   buildHistoryAdapter,
+  persistThreadHeadWithRetry,
   waitForThreadHistoryWrites,
 } from '@/features/threads/assistant-thread-adapter'
 
@@ -212,5 +213,42 @@ describe('assistant-ui history adapter', () => {
     expect(content).not.toContainEqual(
       expect.objectContaining({ type: 'reasoning' }),
     )
+  })
+
+  it('abandons an older head retry when a newer branch head is selected', async () => {
+    const controllerA = new AbortController()
+    let generation = 1
+    persistThreadHeadMock.mockRejectedValue(new Error('transient 409'))
+
+    const retryA = persistThreadHeadWithRetry('thread-1', 'head-a', {
+      signal: controllerA.signal,
+      isCurrent: () => generation === 1,
+      retryDelayMs: 100,
+      maxRetries: 3,
+    })
+
+    await vi.waitFor(() => {
+      expect(persistThreadHeadMock).toHaveBeenCalledTimes(1)
+    })
+    generation = 2
+    controllerA.abort()
+
+    await expect(retryA).resolves.toBe(false)
+    expect(persistThreadHeadMock).toHaveBeenCalledTimes(1)
+
+    persistThreadHeadMock.mockResolvedValue({ headId: 'head-b' })
+    const controllerB = new AbortController()
+    await expect(
+      persistThreadHeadWithRetry('thread-1', 'head-b', {
+        signal: controllerB.signal,
+        isCurrent: () => generation === 2,
+        retryDelayMs: 0,
+        maxRetries: 1,
+      }),
+    ).resolves.toBe(true)
+    expect(persistThreadHeadMock).toHaveBeenCalledTimes(2)
+    expect(persistThreadHeadMock.mock.calls[1]?.[2]).toEqual({
+      signal: controllerB.signal,
+    })
   })
 })

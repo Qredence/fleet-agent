@@ -54,7 +54,12 @@ async def test_search_docs_tool_exposes_discovered_sources():
 def test_source_dedup_by_canonical_uri_and_id():
     reducer = TraceReducer(thread_id="t", run_id="r")
     reducer.apply_event(
-        ToolStarted(tool_call_id="tool_1", name="search_docs", input_preview="{}")
+        ToolStarted(
+            tool_call_id="tool_1",
+            name="search_docs",
+            arguments_json="{}",
+            input_preview="{}",
+        )
     )
     event = SourceDiscovered(
         tool_call_id="tool_1",
@@ -68,7 +73,7 @@ def test_source_dedup_by_canonical_uri_and_id():
     )
     ops1 = reducer.apply_event(event)
     assert any(op["path"] == "/sources/-" for op in ops1)
-    assert reducer.state["steps"][2]["sourceIds"] == ["doc-agui-events"]
+    assert reducer.state["steps"][1]["sourceIds"] == ["doc-agui-events"]
 
     # Same URI, different trailing slash + fragment + case → deduped away.
     event2 = SourceDiscovered(

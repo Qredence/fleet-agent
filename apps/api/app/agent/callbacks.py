@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from dspy.utils.callback import BaseCallback
 
-from app.agent.instrumented import preview, sanitize_args
+from app.agent.instrumented import preview, public_tool_args, public_tool_args_json
 from app.agui.cancel_token import RunCancelToken
 from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
@@ -47,7 +47,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         self.sources: list[SourceResult] = []
         self._tool_starts: dict[str, float] = {}
         self._tool_instances: dict[str, Any] = {}
-        self._web_search_queries: dict[str, str] = {}
+        self._web_search_queries: dict[str, dict[str, object]] = {}
         self._web_search_cycle = 0
 
     def on_tool_start(
@@ -73,14 +73,19 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         kwargs = inputs.get("kwargs", inputs) if isinstance(inputs, dict) else {}
         if name == "web_search":
             self._web_search_cycle += 1
-            query = _safe_inline_text(kwargs.get("query"), limit=240)
-            self._web_search_queries[event_call_id] = query
+            query = public_tool_args(name, {"query": kwargs.get("query")}).get(
+                "query", {"type": "string", "chars": 0}
+            )
+            query_metadata = (
+                query if isinstance(query, dict) else {"type": type(query).__name__}
+            )
+            self._web_search_queries[event_call_id] = query_metadata
             self._bus.publish_from_worker(
                 InlineDataEvent(
                     name="web-search",
                     value={
                         "schemaVersion": 1,
-                        "query": query or "Web search",
+                        "query": query_metadata,
                         "results": [],
                         "visibleResults": 0,
                         "searching": True,
@@ -88,11 +93,13 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                     },
                 )
             )
+        arguments_json = public_tool_args_json(name, kwargs)
         self._bus.publish_from_worker(
             ToolStarted(
                 tool_call_id=event_call_id,
                 name=name,
-                input_preview=sanitize_args(kwargs),
+                arguments_json=arguments_json,
+                input_preview=preview(arguments_json),
                 step_id=self._step_id,
             )
         )
@@ -157,6 +164,29 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 self._publish_sources()
             self._publish_web_search_finished(event_call_id, list(produced or []))
 
+    def resume_tool_end(
+        self,
+        call_id: str,
+        instance: Any,
+        outputs: Any | None,
+        exception: BaseException | None = None,
+    ) -> None:
+        """Publish a result for a tool started by an earlier SSE response.
+
+        A resumed approval request gets a fresh callback instance, so the
+        normal ``on_tool_end`` lookup has no in-process start record.  The
+        tool-call id remains stable across the two responses; seed only the
+        private timing/instance bookkeeping and emit the result, never a
+        second TOOL_CALL_START event.
+        """
+
+        event_call_id = f"{self._id_prefix}{call_id}"
+        self._tool_starts.setdefault(event_call_id, time.monotonic())
+        self._tool_instances.setdefault(event_call_id, instance)
+        self.on_tool_end(
+            event_call_id.removeprefix(self._id_prefix), outputs, exception
+        )
+
     def on_lm_start(
         self,
         call_id: str,
@@ -179,7 +209,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 name="web-search",
                 value={
                     "schemaVersion": 1,
-                    "query": query or "Web search",
+                    "query": query or {"type": "string", "chars": 0},
                     "results": [
                         {
                             "title": _safe_inline_text(source.title, limit=240)

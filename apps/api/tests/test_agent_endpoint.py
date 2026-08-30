@@ -137,5 +137,8 @@ async def test_forced_submit_run_emits_run_error(app):
     # Public message only — no implementation details.
     assert "Traceback" not in error["message"]
     assert "Exception" not in error["message"]
-    # No assistant text was produced.
-    assert "TEXT_MESSAGE_START" not in types
+    # The assistant message lifecycle is opened once and closed even when the
+    # run produces no public answer text.
+    assert types.count("TEXT_MESSAGE_START") == 1
+    assert types.count("TEXT_MESSAGE_CONTENT") == 0
+    assert types.count("TEXT_MESSAGE_END") == 1

@@ -262,3 +262,39 @@ async def test_staged_engine_uses_dspy_planner_critic_and_synthesizer():
         isinstance(event, StepCompleted) and event.step_id == "step-critique"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_staged_model_budget_is_enforced_at_phase_boundaries():
+    # DSPy's with_callbacks swallows exceptions raised inside start
+    # callbacks, so the model budget must be enforced outside them.
+    loop = asyncio.get_running_loop()
+    bus = RunEventBus(loop)
+    plan = {
+        "plan_json": json.dumps(
+            {"tasks": [{"title": "One source", "task": "Find evidence"}]}
+        ),
+        "verification_required": True,
+    }
+    lm = ScriptedLM([{"calls": [], "content": json.dumps(plan)}])
+    engine = StagedDspyEngine(
+        lm=lm,
+        adapter=dspy.JSONAdapter(use_native_function_calling=True),
+        registry=ToolRegistry([]),
+        bus=bus,
+        max_parallel_tasks=1,
+        max_model_calls=1,  # the planner call consumes the whole budget
+        max_tool_calls=4,
+        task_timeout_seconds=2,
+        researcher_max_iters=1,
+    )
+
+    result = await _run_engine(engine)
+    events = await _drain(bus)
+
+    assert result.status == "failed"
+    assert result.termination_reason == "model_call_budget_exhausted"
+    assert any(
+        isinstance(event, StepFailed) and event.step_id == "step-synthesis"
+        for event in events
+    )

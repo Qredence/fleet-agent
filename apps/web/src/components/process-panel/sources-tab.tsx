@@ -1,6 +1,7 @@
-import { Copy, ExternalLink } from 'lucide-react'
+import { Copy, ExternalLink, FolderSearch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
+import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AgentSource } from '@/contracts/generated'
@@ -32,7 +33,13 @@ export function SourcesTab({
   }, [sources.length])
 
   if (sources.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">No sources yet.</p>
+    return (
+      <EmptyTabState
+        icon={FolderSearch}
+        title="No sources discovered"
+        description="Sources referenced during agent runs will appear here."
+      />
+    )
   }
 
   return (

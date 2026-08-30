@@ -14,12 +14,20 @@ _LLM_LIVE_KEYS = (
     "FLEET_AGENT_LLM_BASE_URL",
     "FLEET_AGENT_LLM_API_KEY",
 )
+# Ambient local provider defaults (Settings reads these unprefixed) must not
+# leak from the developer's shell into the test suite.
+_MODAL_AMBIENT_KEYS = (
+    "MODAL_API_KEY",
+    "MODAL_BASE_URL",
+    "MODAL_MODEL_ID",
+)
 _TEST_DB_URL = "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test"
 
 
 def purge_ambient_settings_env() -> None:
-    """Remove ambient FLEET_AGENT_* from os.environ so Settings defaults dominate.
-    RUN_ENGINE_LIVE_TEST=1 keeps LLM credentials (live provider smoke only)."""
+    """Remove ambient FLEET_AGENT_*/MODAL_* from os.environ so Settings
+    defaults dominate. RUN_ENGINE_LIVE_TEST=1 keeps LLM credentials (live
+    provider smoke only)."""
     keep_llm = bool(os.environ.get("RUN_ENGINE_LIVE_TEST"))
     for key in [k for k in os.environ if k.startswith("FLEET_AGENT_")]:
         if key == "FLEET_AGENT_ENV_FILE":
@@ -27,6 +35,9 @@ def purge_ambient_settings_env() -> None:
         if keep_llm and key in _LLM_LIVE_KEYS:
             continue
         os.environ.pop(key, None)
+    if not keep_llm:
+        for key in _MODAL_AMBIENT_KEYS:
+            os.environ.pop(key, None)
     os.environ["FLEET_AGENT_ENV_FILE"] = "/dev/null"
     os.environ["FLEET_AGENT_DATABASE_URL"] = _TEST_DB_URL
 

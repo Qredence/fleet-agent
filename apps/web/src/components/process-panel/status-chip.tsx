@@ -38,6 +38,7 @@ const ICONS: Record<AnyStatus, ReactNode> = {
       className="size-3 text-foreground/90 motion-safe:animate-spin"
     />
   ),
+  interrupted: <CircleSlashIcon className="size-3 text-amber-500" />,
   completed: <CheckIcon className="size-3 text-emerald-500" />,
   accepted: <CheckIcon className="size-3 text-emerald-500" />,
   ready: <CheckIcon className="size-3 text-emerald-500" />,
@@ -53,6 +54,7 @@ const LABELS: Record<AnyStatus, string> = {
   considering: 'Considering',
   generating: 'Generating',
   running: 'Running',
+  interrupted: 'Waiting for approval',
   completed: 'Completed',
   accepted: 'Accepted',
   ready: 'Ready',
@@ -93,6 +95,8 @@ export function StatusChip({
       ? 'text-red-600 dark:text-red-400'
       : status === 'completed' || status === 'accepted' || status === 'ready'
         ? 'text-emerald-600 dark:text-emerald-400'
+        : status === 'interrupted'
+          ? 'text-amber-600 dark:text-amber-400'
         : status === 'running' || status === 'generating'
           ? 'text-foreground/60'
           : 'text-foreground/45'

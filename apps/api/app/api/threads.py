@@ -41,6 +41,9 @@ _SAFE_TERMINATION_REASONS = frozenset(
         "timeout",
         "cancelled",
         "server_restart",
+        "approval_required",
+        "approval_expired",
+        "approval_invalid",
     }
 )
 

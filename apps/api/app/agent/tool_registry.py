@@ -7,10 +7,12 @@ results around the validated ``dspy.Tool`` objects built by ``tooling.py``.
 from __future__ import annotations
 
 import asyncio
+import functools
+import inspect
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_type_hints
 
 import dspy
 from pydantic import BaseModel, ConfigDict, Field
@@ -26,6 +28,15 @@ from app.agent.tooling import (
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.contracts.domain import ArtifactResult, SourceResult
 
+ToolCapability = Literal[
+    "retrieval",
+    "utility",
+    "artifact",
+    "workspace_read",
+    "workspace_write",
+    "shell",
+]
+
 
 class ToolMetadata(BaseModel):
     """Execution policy for one registered tool."""
@@ -33,11 +44,14 @@ class ToolMetadata(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(pattern=TOOL_NAME_PATTERN)
+    capability: ToolCapability = "utility"
     read_only: bool = True
     idempotent: bool = True
     timeout_seconds: float = Field(default=30.0, gt=0)
     parallelizable: bool = True
     max_output_chars: int = Field(default=2000, gt=0)
+    # Executable by the approval-aware ReAct boundary before the tool is called.
+    requires_approval: bool = False
 
 
 class ToolExecutionResult(BaseModel):
@@ -110,6 +124,10 @@ class ToolRegistry:
     def names(self) -> tuple[str, ...]:
         return tuple(self._tools)
 
+    def approval_policy(self) -> dict[str, ToolMetadata]:
+        """Return the immutable approval policy for the registered tools."""
+        return {name: registered.metadata for name, registered in self._tools.items()}
+
     def dspy_tools(
         self,
         *,
@@ -152,6 +170,16 @@ class ToolRegistry:
                 raise TypeError(f"isolated tool {name!r} unexpectedly became async")
             result.append(cloned)
         return result
+
+    def dspy_tools_for_capabilities(
+        self, capabilities: set[ToolCapability]
+    ) -> list[dspy.Tool]:
+        """Return registered tools whose policy grants a capability."""
+        return [
+            registered.tool
+            for registered in self._tools.values()
+            if registered.metadata.capability in capabilities
+        ]
 
     def execute(
         self,
@@ -297,6 +325,34 @@ def _clone_for_worker(
     return clone
 
 
+def wrap_tool_with_guard(tool: dspy.Tool, guard: Callable[[], None]) -> dspy.Tool:
+    """Return a clone of ``tool`` whose calls run ``guard`` first.
+
+    DSPy 3.3.1's ``with_callbacks`` swallows exceptions raised inside start
+    callbacks, so budget and cancellation hooks cannot abort a call from
+    ``BaseCallback`` handlers. Wrapping the callable puts the check on the
+    real execution path while preserving the original signature, type hints,
+    and JSON schema so DSPy tool inference is unchanged.
+    """
+    original = tool.func
+    hints_target = (
+        original
+        if inspect.isfunction(original) or inspect.ismethod(original)
+        else type(original).__call__
+    )
+
+    @functools.wraps(original)
+    def guarded(**kwargs: Any) -> Any:
+        guard()
+        return original(**kwargs)
+
+    # Preserve the real signature and annotations: clone_dspy_tool's
+    # validation and DSPy's schema inference must see the original contract.
+    guarded.__annotations__ = dict(get_type_hints(hints_target))
+    guarded.__signature__ = inspect.signature(hints_target)  # type: ignore[attr-defined]
+    return clone_dspy_tool(tool, guarded)
+
+
 def _bounded_output(value: Any, limit: int) -> str:
     if isinstance(value, str):
         return preview(value)[:limit]
@@ -312,4 +368,5 @@ def _execution_metadata(metadata: ToolMetadata, started: float) -> dict[str, Any
         "durationMs": int((time.monotonic() - started) * 1000),
         "readOnly": metadata.read_only,
         "idempotent": metadata.idempotent,
+        "capability": metadata.capability,
     }

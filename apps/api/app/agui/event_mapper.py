@@ -7,8 +7,6 @@ from ag_ui.core import (
     CustomEvent,
     StateDeltaEvent,
     TextMessageContentEvent,
-    TextMessageEndEvent,
-    TextMessageStartEvent,
     ToolCallArgsEvent,
     ToolCallEndEvent,
     ToolCallResultEvent,
@@ -75,25 +73,22 @@ def chunk_text(text: str, *, chunk_size: int = _TEXT_CHUNK_SIZE) -> list[str]:
 def map_domain_event(
     event: AnyDomainEvent,
     *,
-    tools_message_id: str,
+    assistant_message_id: str,
     reducer: TraceReducer,
-    answer_message_id: str | None = None,
 ) -> list[BaseEvent]:
     """
     Convert a domain event into the corresponding AG-UI events and state updates.
 
     Parameters:
         event (AnyDomainEvent): The domain event to convert.
-        tools_message_id (str): The message identifier used for tool-related events.
-        answer_message_id (str | None): The message identifier used for final answer
-            events, when available.
+        assistant_message_id (str): The single assistant message for this run.
 
     Returns:
         list[BaseEvent]: The AG-UI events representing the domain event.
     """
     if isinstance(event, FinalFieldsReady):
         return map_final_fields_event(
-            event, answer_message_id=answer_message_id, reducer=reducer
+            event, assistant_message_id=assistant_message_id, reducer=reducer
         )
 
     if isinstance(event, InlineDataEvent):
@@ -102,7 +97,7 @@ def map_domain_event(
     ops = reducer.apply_event(event)
     if isinstance(event, (ToolStarted, ToolCompleted, ToolFailed)):
         return map_tool_event(
-            event, tools_message_id=tools_message_id, state_delta_ops=ops
+            event, assistant_message_id=assistant_message_id, state_delta_ops=ops
         )
 
     events: list[BaseEvent] = []
@@ -129,7 +124,7 @@ def map_domain_event(
 def map_tool_event(
     event: ToolStarted | ToolCompleted | ToolFailed,
     *,
-    tools_message_id: str,
+    assistant_message_id: str,
     state_delta_ops: list[JsonPatchOp],
 ) -> list[BaseEvent]:
     """
@@ -138,7 +133,7 @@ def map_tool_event(
 
     Parameters:
         event: The tool start, completion, or failure event to convert.
-        tools_message_id: The message identifier associated with the tool call.
+        assistant_message_id: The assistant message containing the tool call.
         state_delta_ops: State operations to include in the resulting events.
 
     Returns:
@@ -152,12 +147,12 @@ def map_tool_event(
             ToolCallStartEvent(
                 tool_call_id=event.tool_call_id,
                 tool_call_name=event.name,
-                parent_message_id=tools_message_id,
+                parent_message_id=assistant_message_id,
             )
         )
         events.append(
             ToolCallArgsEvent(
-                tool_call_id=event.tool_call_id, delta=event.input_preview
+                tool_call_id=event.tool_call_id, delta=event.arguments_json
             )
         )
         events.append(ToolCallEndEvent(tool_call_id=event.tool_call_id))
@@ -169,7 +164,7 @@ def map_tool_event(
         )
         events.append(
             ToolCallResultEvent(
-                message_id=tools_message_id,
+                message_id=f"msg-tool-{event.tool_call_id}",
                 tool_call_id=event.tool_call_id,
                 content=content,
                 role="tool",
@@ -184,14 +179,14 @@ def map_tool_event(
 def map_final_fields_event(
     event: FinalFieldsReady,
     *,
-    answer_message_id: str | None,
+    assistant_message_id: str,
     reducer: TraceReducer,
 ) -> list[BaseEvent]:
     """Convert final answer and process summary fields into AG-UI events.
 
     Parameters:
         event (FinalFieldsReady): Final answer and process summary data.
-        answer_message_id (str | None): Identifier for the assistant message.
+        assistant_message_id (str): Identifier for the assistant message.
         reducer (TraceReducer): Reducer used to apply the process summary.
 
     Returns:
@@ -199,15 +194,11 @@ def map_final_fields_event(
     """
     events: list[BaseEvent] = []
 
-    if event.answer and answer_message_id:
-        events.append(
-            TextMessageStartEvent(message_id=answer_message_id, role="assistant")
-        )
+    if event.answer:
         for chunk in chunk_text(event.answer):
             events.append(
-                TextMessageContentEvent(message_id=answer_message_id, delta=chunk)
+                TextMessageContentEvent(message_id=assistant_message_id, delta=chunk)
             )
-        events.append(TextMessageEndEvent(message_id=answer_message_id))
 
     if event.process_summary:
         ops = reducer.live_synthesis_summary(event.process_summary)

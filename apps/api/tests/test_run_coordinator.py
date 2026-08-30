@@ -52,8 +52,8 @@ async def test_fixture_ids_are_rebound_to_client_ids():
     text_start = next(
         event for event in events if event["type"] == "TEXT_MESSAGE_START"
     )
-    assert tool_start["parentMessageId"] == "msg-tool-1-r-client"
-    assert tool_result["messageId"] == "msg-tool-1-r-client"
+    assert tool_start["parentMessageId"] == "msg-1-r-client"
+    assert tool_result["messageId"] == "msg-tool-tc-1-r-client"
     assert text_start["messageId"] == "msg-1-r-client"
 
 
@@ -113,4 +113,4 @@ async def test_timed_events_preserve_order_with_zero_time_scale():
     events = await collect(coordinator(load_fixture("tool-error-run")))
     types = [e["type"] for e in events]
     assert types[-1] == "RUN_FINISHED"
-    assert types.index("TOOL_CALL_RESULT") < types.index("TEXT_MESSAGE_START")
+    assert types.index("TEXT_MESSAGE_START") < types.index("TOOL_CALL_RESULT")

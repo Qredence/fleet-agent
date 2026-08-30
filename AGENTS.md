@@ -17,7 +17,10 @@ requests, deploy, or make other remote changes unless explicitly requested.
 
 - Never send raw DSPy `next_thought`, `dspy.History`, provider prompts, raw
   tool arguments, or stack traces to the browser. Expose only the intentional,
-  user-safe `AgentWorkspaceState` and public error codes.
+  user-safe `AgentWorkspaceState` and public error codes. The single
+  sanctioned exception: approval interrupts carry a bounded, single-line
+  preview of the gated action (e.g. the requested `bash` command) so the
+  approver can make an informed decision.
 - `packages/contracts/agent-workspace-state.schema.json` is the source of
   truth. Payloads include `schemaVersion`; generated TypeScript and Python
   models must be regenerated from the schema rather than handwritten.
@@ -28,6 +31,11 @@ requests, deploy, or make other remote changes unless explicitly requested.
   changing its version.
 - Do not log API keys, provider prompts, private user data, or unsanitized
   provider responses.
+- Browser-owned provider profiles (settings dialog) are the sanctioned BYOK
+  surface: `X-LLM-*` headers are accepted on `/api/agent` only. Base URLs are
+  validated server-side (http/https, private hosts rejected unless
+  `FLEET_AGENT_LLM_ALLOW_PRIVATE_BASE_URLS` is enabled) and keys are never
+  logged or persisted server-side.
 
 ## State ownership
 
@@ -52,9 +60,9 @@ linked to `CardTitle` or explicit labels). Maintain CSS logical properties
 (`marginInlineStart`, `paddingInlineStart`, `insetInlineStart`, etc.) across
 components and layouts for bidirectional (RTL) support.
 
-Agent run activity is projected inline within the assistant-ui message stream
-as collapsible step cards (`RunActivityInline`), while the desktop process
-panel focuses on Sources, Artifacts, and file exploration.
+Agent run activity is rendered in the desktop process panel as collapsible
+step cards (`RunActivityPanel`), alongside Sources, Artifacts, and file
+exploration.
 
 ## Backend and DSPy rules
 

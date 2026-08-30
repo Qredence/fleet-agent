@@ -20,6 +20,9 @@ class Settings(BaseSettings):
         env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
+        # Provider default fields use validation_alias (MODAL_*), so allow
+        # constructing Settings(modal_model_id=...) by field name in tests.
+        populate_by_name=True,
     )
 
     environment: str = Field(default="development")
@@ -36,8 +39,9 @@ class Settings(BaseSettings):
     llm_base_url: str | None = Field(
         default=None,
         description=(
-            "Optional OpenAI-compatible endpoint base URL (litellm api_base) "
-            "for proxies, Azure OpenAI, or local inference servers."
+            "Optional OpenAI-compatible endpoint base URL for proxies, Azure "
+            "OpenAI, or local inference servers. With a base URL set, the "
+            "model identifier is sent to the gateway verbatim."
         ),
     )
     llm_api_key: SecretStr | None = Field(
@@ -58,6 +62,47 @@ class Settings(BaseSettings):
             "support DSPy JSON tool calls but not native tool calls."
         ),
     )
+    llm_allow_private_base_urls: bool = Field(
+        default=False,
+        description=(
+            "Allow browser provider overrides to target loopback/private base "
+            "URLs, e.g. a local LLM server. Off by default: the browser must "
+            "not be able to direct the server at internal addresses."
+        ),
+    )
+    modal_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Default provider API key for local runs (reads MODAL_API_KEY). "
+            "Server-side default when the browser sends no provider override; "
+            "never logged or returned by the API."
+        ),
+        validation_alias="MODAL_API_KEY",
+    )
+    modal_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Default OpenAI-compatible endpoint base URL (reads MODAL_BASE_URL), "
+            "e.g. a Modal proxy gateway."
+        ),
+        validation_alias="MODAL_BASE_URL",
+    )
+    modal_model_id: str | None = Field(
+        default=None,
+        description=(
+            "Default model identifier (reads MODAL_MODEL_ID), sent to the "
+            "gateway verbatim. When set, the MODAL_* trio takes precedence "
+            "over FLEET_AGENT_LLM_* as the server-side default provider."
+        ),
+        validation_alias="MODAL_MODEL_ID",
+    )
+    openrouter_http_referer: str | None = Field(
+        default=None,
+        description=(
+            "Trusted server-side HTTP referer sent to OpenRouter for BYOK runs. "
+            "Never accept this value from browser request headers."
+        ),
+    )
 
     agent_mode: Literal["fixtures", "engine"] = Field(
         default="fixtures",
@@ -66,7 +111,7 @@ class Settings(BaseSettings):
             "default); 'engine' runs the live DSPy ReActV2 bridge (production)."
         ),
     )
-    reasoning_program: Literal["react", "staged"] = Field(
+    reasoning_program: Literal["react", "staged", "flex"] = Field(
         default="react",
         description="Reasoning strategy. Staged is opt-in while it is validated.",
     )
@@ -94,6 +139,33 @@ class Settings(BaseSettings):
         le=120.0,
         description="Server-capped timeout for one staged research task.",
     )
+
+    workspace_root: str | None = Field(
+        default=None,
+        description=(
+            "Workspace root available to filesystem tools. Development defaults "
+            "to the repository root; other environments must configure it."
+        ),
+    )
+    workspace_read_tools_enabled: bool = Field(default=True)
+    workspace_write_tools_enabled: bool = Field(default=False)
+    workspace_bash_tool_enabled: bool = Field(default=False)
+    workspace_max_read_bytes: int = Field(default=256 * 1024, gt=0)
+    workspace_max_write_bytes: int = Field(default=1024 * 1024, gt=0)
+    workspace_max_output_chars: int = Field(default=12_000, gt=0)
+    workspace_bash_default_timeout_seconds: int = Field(default=30, ge=1, le=120)
+    workspace_bash_max_timeout_seconds: int = Field(default=120, ge=1, le=300)
+
+    flex_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the experimental Flex runtime path explicitly. The "
+            "read-only Flex track requires a local Deno runtime "
+            "(>= 2.0.0, < 3.0.0) on PATH for the sandboxed interpreter."
+        ),
+    )
+    flex_allow_mutating_tools: bool = Field(default=False)
+    flex_max_predictor_calls: int = Field(default=12, ge=1, le=100)
 
     database_url: SecretStr = Field(
         default=SecretStr(

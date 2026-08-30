@@ -9,7 +9,6 @@ import { File } from "@/components/assistant-ui/file";
 import { ThreadFollowupSuggestions } from "@/components/assistant-ui/follow-up-suggestions";
 import { Image } from "@/components/assistant-ui/image";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
-import { RunActivityInline } from "@/components/process-panel/run-activity-inline";
 import {
   Reasoning,
   ReasoningContent,
@@ -27,6 +26,7 @@ import {
 } from "@/components/assistant-ui/tool-group";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import {
   ActionBarMorePrimitive,
@@ -267,6 +267,9 @@ const ThreadSuggestionItem: FC = () => {
 const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
   workspaceContext,
 }) => {
+  // The composer shell is a container-level surface on the shape ladder,
+  // matching the dialog and card step (24px in pill mode).
+  const shape = useShape();
   return (
     <ComposerPreferencesProvider>
       <ComposerPrimitive.Unstable_TriggerPopoverRoot>
@@ -276,7 +279,10 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
             render={
               <div
                 data-slot="aui_composer-shell"
-                className="border-border/40 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/20 dark:focus-within:border-muted-foreground/40 flex min-w-0 w-full cursor-text flex-col gap-2 rounded-2xl border bg-surface-2 p-3 shadow-surface-2 transition-[border-color] data-[dragging=true]:border-dashed"
+                className={cn(
+                  "border-border/40 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/20 dark:focus-within:border-muted-foreground/40 flex min-w-0 w-full cursor-text flex-col gap-2 border bg-surface-2 p-3 shadow-surface-2 transition-[border-color] data-[dragging=true]:border-dashed",
+                  shape.container,
+                )}
               />
             }
           >
@@ -484,7 +490,6 @@ const AssistantMessage: FC = () => {
           }}
         </MessagePrimitive.GroupedParts>
         <MessageError />
-        <RunActivityInline />
       </div>
 
       <div
@@ -608,6 +613,9 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
 );
 
 const UserMessage: FC = () => {
+  // The user bubble is an element-level surface: the `bg` step of the shape
+  // ladder (20px in pill mode), concentric with the composer's container step.
+  const shape = useShape();
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -617,7 +625,7 @@ const UserMessage: FC = () => {
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative max-w-[85%]">
-        <div className="aui-user-message-content peer bg-surface-2 shadow-surface-1 text-foreground rounded-2xl px-4 py-2 text-sm leading-relaxed wrap-break-word empty:hidden border border-border/30">
+        <div className={cn("aui-user-message-content peer bg-surface-2 shadow-surface-1 text-foreground px-4 py-2 text-sm leading-relaxed wrap-break-word empty:hidden border border-border/30", shape.bg)}>
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />

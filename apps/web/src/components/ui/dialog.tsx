@@ -5,6 +5,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { surfaceClasses } from "@/lib/surface-classes"
+import { useShape } from "@/lib/shape-context"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
@@ -62,13 +63,18 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  // Panel radius follows the global shape ladder (Fluid Functionalism), the
+  // same `container` step Card and the composer use — pill mode gets the
+  // fully rounded panel, rounded mode the 12px one.
+  const shape = useShape()
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl p-5 text-sm text-popover-foreground duration-150 outline-none sm:max-w-sm",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 p-5 text-sm text-popover-foreground duration-150 outline-none sm:max-w-sm",
+          shape.container,
           surfaceClasses(4, 4),
           "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
@@ -128,7 +134,9 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-5 -mb-5 flex flex-col-reverse gap-2 rounded-b-2xl border-t border-border/40 bg-muted/30 p-4 sm:flex-row sm:justify-end",
+        // Bleeds to the panel's edges, so its bottom corners inherit the
+        // panel's radius to stay concentric with it.
+        "-mx-5 -mb-5 flex flex-col-reverse gap-2 rounded-b-[inherit] border-t border-border/40 bg-muted/30 p-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

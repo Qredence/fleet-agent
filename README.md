@@ -38,9 +38,14 @@ The React frontend renders the conversation and the live process projection.
 
 - ReActV2 is the default live agent loop, with provider configuration kept in
   one server-side boundary.
+- The production `FleetAgent` class routes each request into a least-privileged
+  ReActV2 capability profile: direct, research, artifact, workspace read,
+  workspace write, or workspace shell.
 - An optional staged strategy uses DSPy modules for planning, parallel
   research, verification, and synthesis while keeping budgets and cancellation
   outside the model.
+- An opt-in Flex/GEPA track is kept separate from production ReActV2 and uses
+  only a sanitized conversation history plus restricted tools by default.
 - The agent uses typed tools such as bundled documentation search, current
   time, and report generation. Optional Tavily configuration adds bounded
   `web_search` and `fetch_page` tools.
@@ -64,8 +69,8 @@ The React frontend renders the conversation and the live process projection.
 - Reloading a thread restores its versioned bootstrap snapshot and branch-aware
   conversation history.
 - The responsive three-pane UI combines project/thread navigation, an
-  assistant-ui conversation with inline collapsible run activity, and an AG-UI
-  process panel with Sources and Artifacts tabs plus file exploration.
+  assistant-ui conversation with native text/tool parts, and an AG-UI process
+  panel with Activity, Sources, and Artifacts tabs plus file exploration.
 - Frontend components use `@base-ui/react` primitives and Fluid Functionalism
   design tokens, adhering to CSS logical properties for bidirectional (RTL)
   layout support.
@@ -180,9 +185,27 @@ FLEET_AGENT_LLM_MODEL=openai/gpt-4o-mini
 FLEET_AGENT_LLM_API_KEY=replace-me
 # Optional OpenAI-compatible endpoint:
 # FLEET_AGENT_LLM_BASE_URL=https://your-provider.example/v1
+# Local default provider (takes precedence over FLEET_AGENT_LLM_* when the
+# model id is set; browser provider profiles still take precedence). Model ids
+# are sent to custom gateways verbatim, so bare gateway ids work as-is:
+# MODAL_API_KEY=replace-me
+# MODAL_BASE_URL=https://fleet-proxy.modal.run/v1
+# MODAL_MODEL_ID=zai-org/GLM-5.3-Flash
 # Optional web tools:
 # FLEET_AGENT_TAVILY_API_KEY=replace-me
 ```
+
+### Providers and BYOK
+
+The settings dialog manages browser-owned provider profiles: name, API key,
+model ID, base URL, and the wire formats (chat completion format, response
+format, messages format). Profiles stay in the browser and are sent per run as
+`X-LLM-*` headers on the agent endpoint only; the server validates base URLs
+(http/https, no private hosts unless `FLEET_AGENT_LLM_ALLOW_PRIVATE_BASE_URLS`
+is enabled for local LLM servers) and never logs keys. OpenRouter remains a
+one-click OAuth preset. Provider resolution per run: browser profile, then the
+`MODAL_API_KEY` / `MODAL_BASE_URL` / `MODAL_MODEL_ID` trio (when the model id
+is set), then `FLEET_AGENT_LLM_*`.
 
 API settings load from `apps/api/.env`; environment variables override that
 file. The checked-in example contains the complete list. Common settings are:
@@ -190,13 +213,19 @@ file. The checked-in example contains the complete list. Common settings are:
 | Variable | Purpose |
 | --- | --- |
 | `FLEET_AGENT_AGENT_MODE` | `fixtures` or `engine`. |
-| `FLEET_AGENT_REASONING_PROGRAM` | `react` or opt-in `staged` reasoning. |
+| `FLEET_AGENT_REASONING_PROGRAM` | `react`, opt-in `staged`, or disabled-by-default `flex`. |
 | `FLEET_AGENT_CORS_ORIGINS` | JSON array of exact allowed browser origins. |
 | `FLEET_AGENT_DATABASE_URL` | PostgreSQL connection URL. |
-| `FLEET_AGENT_LLM_MODEL` | DSPy/LiteLLM model identifier. |
+| `FLEET_AGENT_LLM_MODEL` | Model identifier. With `FLEET_AGENT_LLM_BASE_URL` set it is sent to the gateway verbatim; without a base URL it follows DSPy/LiteLLM hosted-provider routing (`openai/gpt-4o-mini`). |
 | `FLEET_AGENT_LLM_BASE_URL` | Optional OpenAI-compatible provider endpoint. |
 | `FLEET_AGENT_LLM_API_KEY` | Provider credential; never log it. |
+| `MODAL_API_KEY`, `MODAL_BASE_URL`, `MODAL_MODEL_ID` | Local default provider trio; takes precedence over `FLEET_AGENT_LLM_*` when the model id is set. |
+| `FLEET_AGENT_LLM_ALLOW_PRIVATE_BASE_URLS` | Allows browser provider profiles to target local LLM servers (off by default). |
 | `FLEET_AGENT_TAVILY_API_KEY` | Enables bounded web search and page fetch tools. |
+| `FLEET_AGENT_WORKSPACE_ROOT` | Explicit filesystem root for workspace tools; development defaults to the repository root. |
+| `FLEET_AGENT_WORKSPACE_WRITE_TOOLS_ENABLED` | Enables `write` and `edit`; off by default. |
+| `FLEET_AGENT_WORKSPACE_BASH_TOOL_ENABLED` | Enables bounded `bash`; off by default. |
+| `FLEET_AGENT_FLEX_ENABLED` | Explicitly enables the experimental Flex runtime path. The read-only track needs a local Deno runtime (>= 2.0.0, < 3.0.0) on PATH. |
 | `FLEET_AGENT_API_KEY` | Optional shared `X-API-Key` for `/api/*`. |
 
 The web app reads `VITE_API_BASE_URL` for the API origin and `VITE_API_KEY` when

@@ -43,6 +43,7 @@
             "idle",
             "queued",
             "running",
+            "interrupted",
             "completed",
             "failed",
             "cancelled"

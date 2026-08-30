@@ -15,7 +15,21 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 import dspy
+from ag_ui.core import Interrupt, ResumeEntry
 from dspy.utils.callback import BaseCallback
+
+from app.agent.approval import (
+    APPROVAL_REGISTRY,
+    ApprovalContext,
+    ApprovalDecisionError,
+    ApprovalPause,
+    ApprovalRegistry,
+    ToolLifecycle,
+    reset_approval_context,
+    set_approval_context,
+)
+from app.agent.provider import ProviderOverride
+from app.agui.cancel_token import RunCancelToken
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +38,12 @@ logger = logging.getLogger(__name__)
 class AgentRunContext:
     thread_id: str
     run_id: str
+    assistant_message_id: str | None = None
 
 
 @dataclass(frozen=True)
 class AgentRunResult:
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "interrupted"]
     answer: str | None
     process_summary: str | None
     key_decisions: list[str] = field(default_factory=list)
@@ -38,6 +53,7 @@ class AgentRunResult:
     # Server-side only. Never serialize this field to the browser.
     history: Any | None = None
     usage: dict[str, int] = field(default_factory=dict)
+    interrupts: list[Interrupt] = field(default_factory=list)
 
 
 class AgentEngine(Protocol):
@@ -47,6 +63,7 @@ class AgentEngine(Protocol):
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
+        resume: list[ResumeEntry] | None = None,
     ) -> AgentRunResult: ...
 
 
@@ -136,16 +153,26 @@ class DspyAgentEngine:
         self,
         *,
         program_factory: ProgramFactory,
-        lm: dspy.LM,
+        lm: dspy.BaseLM,
         adapter: dspy.Adapter | None = None,
         callbacks: list[BaseCallback] | None = None,
         cleanup: Callable[[], None] | None = None,
+        approval_registry: ApprovalRegistry | None = None,
+        provider_override: ProviderOverride | None = None,
+        lifecycle: ToolLifecycle | None = None,
+        cancel_token: RunCancelToken | None = None,
     ) -> None:
         self._program_factory = program_factory
         self._lm = lm
         self._adapter = adapter
         self._callbacks = list(callbacks or [])
         self._cleanup = cleanup
+        self._approval_registry = approval_registry or APPROVAL_REGISTRY
+        self._provider_binding = (
+            provider_override.fingerprint if provider_override is not None else "server"
+        )
+        self._lifecycle = lifecycle
+        self._cancel_token = cancel_token
 
     async def run(
         self,
@@ -153,10 +180,11 @@ class DspyAgentEngine:
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
+        resume: list[ResumeEntry] | None = None,
     ) -> AgentRunResult:
-        del context  # run identity is consumed by the AG-UI bridge
-        prediction = await asyncio.to_thread(self._run_sync, user_request, history)
-        return _map_result(prediction)
+        return await asyncio.to_thread(
+            self._run_sync, user_request, history, context, resume
+        )
 
     async def stream(
         self,
@@ -164,6 +192,7 @@ class DspyAgentEngine:
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
+        resume: list[ResumeEntry] | None = None,
     ) -> AsyncIterator[AgentStreamUpdate]:
         """Emit settled public fields and then the authoritative result.
 
@@ -171,9 +200,9 @@ class DspyAgentEngine:
         The AG-UI contract stays unchanged, while the DSPy program remains a
         black box to the runtime adapter.
         """
-        del context
-        prediction = await asyncio.to_thread(self._run_sync, user_request, history)
-        result = _map_result(prediction)
+        result = await asyncio.to_thread(
+            self._run_sync, user_request, history, context, resume
+        )
 
         if result.answer is not None or result.process_summary is not None:
             yield AgentStreamUpdate(
@@ -187,20 +216,78 @@ class DspyAgentEngine:
         self,
         user_request: str,
         history: Any | None,
-    ) -> dspy.Prediction:
+        context: AgentRunContext,
+        resume: list[ResumeEntry] | None,
+    ) -> AgentRunResult:
+        approval_context = ApprovalContext(
+            thread_id=context.thread_id,
+            run_id=context.run_id,
+            provider_binding=self._provider_binding,
+            registry=self._approval_registry,
+            lifecycle=self._lifecycle,
+            cancel_token=self._cancel_token,
+            assistant_message_id=context.assistant_message_id,
+        )
+        approval_token = set_approval_context(approval_context)
         try:
+            approval_context.resumed = self._approval_registry.resolve(
+                resume,
+                thread_id=context.thread_id,
+                provider_binding=self._provider_binding,
+            )
+            if (
+                approval_context.resumed is not None
+                and approval_context.resumed.checkpoint.assistant_message_id
+                != context.assistant_message_id
+            ):
+                # The visible assistant message is the public binding for the
+                # hidden checkpoint.  A resume from another branch (or a
+                # forged/replayed payload without that id) must fail closed.
+                raise ApprovalDecisionError("approval_invalid")
             program = self._program_factory()
+            callbacks = (
+                []
+                if getattr(program, "application_tool_lifecycle", False)
+                else self._callbacks
+            )
             with dspy.context(
                 lm=self._lm,
                 adapter=self._adapter,
-                callbacks=self._callbacks,
+                callbacks=callbacks,
                 track_usage=True,
             ):
                 # Invoke the Module through __call__, never forward(), so DSPy
                 # usage tracking, callbacks, caller-module context, and future
                 # optimizer/runtime hooks remain active.
-                return program(user_request=user_request, history=history)
+                prediction = program(
+                    user_request=user_request,
+                    history=(
+                        approval_context.resumed.checkpoint.history
+                        if approval_context.resumed is not None
+                        else history
+                    ),
+                )
+            return _map_result(prediction)
+        except ApprovalPause as pause:
+            return AgentRunResult(
+                status="interrupted",
+                answer=None,
+                process_summary=(
+                    "The agent is waiting for approval before running an action."
+                ),
+                termination_reason="approval_required",
+                interrupts=[pause.interrupt],
+            )
+        except ApprovalDecisionError as exc:
+            return AgentRunResult(
+                status="failed",
+                answer=None,
+                process_summary="The approval response could not be applied.",
+                termination_reason=exc.code,
+                error_code=exc.code,
+            )
         finally:
+            reset_approval_context(approval_token)
             if self._cleanup is not None:
                 try:
                     self._cleanup()

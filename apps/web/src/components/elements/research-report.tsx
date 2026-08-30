@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react";
 import { CheckIcon, Loader2Icon, XIcon } from "lucide-react";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import { mono, paper } from "@/lib/surfaces";
 
@@ -30,13 +31,17 @@ export function ResearchReport({
   sourcesRead: number;
 }) {
   const done = sections.filter((section) => section.state === "done").length;
+  // Element-level stream card on the shape ladder's `bg` step — see
+  // tool-group.tsx.
+  const shape = useShape();
 
   return (
     <div
       data-slot="research-report"
       className={cn(
         paper,
-        "flex w-full max-w-sm flex-col gap-3 rounded-2xl p-4",
+        "flex w-full max-w-sm flex-col gap-3 p-4",
+        shape.bg,
         className,
       )}
 

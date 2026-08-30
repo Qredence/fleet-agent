@@ -1,6 +1,7 @@
 import { MessageSquare, Plug, Sparkles, Wrench } from 'lucide-react'
 import { NavLink, useParams } from 'react-router-dom'
 
+import { useShape } from '@/lib/shape-context'
 import { cn } from '@/lib/utils'
 
 interface ProjectNavTabsProps {
@@ -56,10 +57,16 @@ export function ProjectNavTabs({ className }: ProjectNavTabsProps) {
     },
   ]
 
+  // A segmented control on the shape ladder (Fluid Functionalism): the track
+  // takes the `container` step and its items the `item` step, so the nav
+  // reads as a sibling of Tabs and every other control in pill mode. With
+  // p-1 the two are exactly concentric (20 + 4 = 24).
+  const shape = useShape()
+
   return (
     <nav
       aria-label="Project sections"
-      className={cn('flex items-center gap-1 rounded-lg bg-muted/60 p-1', className)}
+      className={cn('flex items-center gap-1 bg-muted/60 p-[3px]', shape.container, className)}
     >
       {tabs.map((tab) => (
         <NavLink
@@ -67,7 +74,8 @@ export function ProjectNavTabs({ className }: ProjectNavTabsProps) {
           to={tab.path}
           className={({ isActive }) =>
             cn(
-              'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-colors',
+              shape.item,
               tab.isActive(window.location.pathname) || isActive
                 ? 'bg-background text-foreground shadow-xs font-semibold'
                 : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'

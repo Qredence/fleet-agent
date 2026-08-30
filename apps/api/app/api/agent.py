@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agent.provider import ProviderOverrideError, parse_provider_override
 from app.agui.live_coordinator import EngineBuilder, LiveDSPyCoordinator
 from app.agui.run_coordinator import RunCoordinator
 from app.contracts.error_codes import ERROR_MESSAGES
@@ -84,6 +85,19 @@ async def run_agent(input_data: RunAgentInput, request: Request) -> StreamingRes
     accept = request.headers.get("accept")
 
     if settings.agent_mode == "engine":
+        try:
+            # Validation may resolve the BYOK base URL host (SSRF guard), a
+            # blocking call that must stay off the event loop.
+            provider_override = await asyncio.to_thread(
+                parse_provider_override,
+                request.headers,
+                allow_private_base_urls=settings.llm_allow_private_base_urls,
+            )
+        except ProviderOverrideError:
+            raise HTTPException(
+                status_code=422,
+                detail=ERROR_MESSAGES["provider_override_invalid"],
+            ) from None
         sessions = get_sessions(request)
         # Runs must belong to a persisted thread (FK integrity + no
         # cross-thread writes). Fixtures mode stays thread-agnostic on purpose.
@@ -94,9 +108,10 @@ async def run_agent(input_data: RunAgentInput, request: Request) -> StreamingRes
             # Idempotency: an existing runId must not start again.
             existing_run = await RunsRepository(sessions).get(input_data.run_id)
             if existing_run is not None:
-                raise HTTPException(
-                    status_code=409, detail="A run with this ID already exists."
-                )
+                if not input_data.resume or existing_run.status != "interrupted":
+                    raise HTTPException(
+                        status_code=409, detail="A run with this ID already exists."
+                    )
         except HTTPException:
             raise
         except Exception:
@@ -121,7 +136,15 @@ async def run_agent(input_data: RunAgentInput, request: Request) -> StreamingRes
 
         persistence = RunPersistence(sessions)
         try:
-            await persistence.reserve_run(input_data=input_data)
+            if existing_run is not None:
+                reopened = await persistence.reopen_interrupted_run(
+                    thread_id=input_data.thread_id,
+                    run_id=input_data.run_id,
+                )
+                if not reopened:
+                    raise RunReservationError(ReservationErrorCode.RESERVATION_CONFLICT)
+            else:
+                await persistence.reserve_run(input_data=input_data)
         except RunReservationError as exc:
             semaphore.release()
             raise _reservation_http_error(exc) from None
@@ -144,6 +167,7 @@ async def run_agent(input_data: RunAgentInput, request: Request) -> StreamingRes
         stream = LiveDSPyCoordinator().stream(
             input_data=input_data,
             engine_builder=get_engine_builder(request),
+            provider_override=provider_override,
             accept=accept,
             is_disconnected=request.is_disconnected,
             persistence=persistence,

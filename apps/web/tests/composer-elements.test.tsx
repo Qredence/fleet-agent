@@ -25,6 +25,7 @@ import {
   ComposerAttachments,
 } from '@/components/assistant-ui/attachment'
 import { Thread } from '@/components/assistant-ui/thread'
+import { PROVIDERS_STORAGE_KEY } from '@/lib/providers'
 
 const noOpAdapter: ChatModelAdapter = {
   async *run() {},
@@ -76,7 +77,35 @@ function AttachmentRuntimeComposer({
 afterEach(cleanup)
 
 describe('composer preferences', () => {
-  it('keeps model, effort, speed, and access changes local to the composer session', async () => {
+  it('selects the run provider from the settings store while effort, speed, and access stay session-only', async () => {
+    localStorage.setItem(
+      PROVIDERS_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        profiles: [
+          {
+            id: 'openrouter',
+            name: 'OpenRouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            chatCompletionFormat: 'openai-chat-completions',
+            responseFormat: 'native_function_calling',
+            messagesFormat: 'system_role',
+          },
+          {
+            id: 'modal-gw',
+            name: 'Modal Gateway',
+            baseUrl: 'https://fleet-proxy.modal.run/v1',
+            apiKey: 'sk-test',
+            modelId: 'zai-org/GLM-5.3-Flash',
+            chatCompletionFormat: 'openai-chat-completions',
+            responseFormat: 'json_tool_calls',
+            messagesFormat: 'developer_role',
+          },
+        ],
+        activeProviderId: 'server',
+      }),
+    )
+
     const user = userEvent.setup()
     render(
       <ComposerPreferencesProvider>
@@ -87,18 +116,34 @@ describe('composer preferences', () => {
 
     const getModelTrigger = () =>
       screen.getByRole('button', { name: 'Model and reasoning preferences' })
-    expect(getModelTrigger()).toHaveTextContent('5.6 Luna High')
+    expect(getModelTrigger()).toHaveTextContent('Server default High')
     expect(screen.getByRole('button', { name: 'Access mode' })).toHaveTextContent(
       'Full access',
     )
 
     await user.click(getModelTrigger())
+    expect(
+      await screen.findByRole('menuitemradio', { name: /server default/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitemradio', { name: /openrouter/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitemradio', { name: /modal gateway/i }),
+    ).toBeInTheDocument()
+
     await user.click(
-      await screen.findByRole('menuitemradio', { name: /openai\/gpt-4o-mini/i }),
+      await screen.findByRole('menuitemradio', { name: /modal gateway/i }),
     )
-    expect(getModelTrigger()).toHaveTextContent('GPT-4o mini High')
+    expect(getModelTrigger()).toHaveTextContent('Modal Gateway High')
+
+    const stored = JSON.parse(
+      localStorage.getItem(PROVIDERS_STORAGE_KEY) ?? '{}',
+    ) as { activeProviderId?: string }
+    expect(stored.activeProviderId).toBe('modal-gw')
+
     await user.click(await screen.findByRole('menuitemradio', { name: /^Low/ }))
-    expect(getModelTrigger()).toHaveTextContent('GPT-4o mini Low')
+    expect(getModelTrigger()).toHaveTextContent('Modal Gateway Low')
 
     await user.click(await screen.findByRole('menuitem', { name: /fast mode/i }))
     expect(getModelTrigger()).toHaveTextContent('(Standard)')

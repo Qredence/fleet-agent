@@ -283,6 +283,22 @@ async def test_provider_rate_limit_maps_public_code():
     assert events[-1]["code"] == "rate_limited"
 
 
+async def test_dspy_rate_limit_maps_public_code():
+    import dspy
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input("t-rl2", "run-rl2")),
+        engine_builder=lambda bus, **kw: (_ for _ in ()).throw(
+            dspy.LMRateLimitError("boom", status=429)
+        ),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    events = [json.loads(c.removeprefix("data: ").strip()) async for c in stream]
+    assert events[-1]["type"] == "RUN_ERROR"
+    assert events[-1]["code"] == "rate_limited"
+
+
 # --- orphan reconciliation + metrics -------------------------------------------
 
 

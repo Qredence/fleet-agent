@@ -84,6 +84,14 @@ class RunPersistence:
         ]
         selected = user_message or _last_user_message_json(input_data)
         input_message_id, continuation_message_id = _branch_anchor(messages)
+        if input_data.resume:
+            # Native AG-UI resumes submit a fresh run id while carrying the
+            # assistant message that owns the live in-memory checkpoint. Use
+            # that message as the branch anchor so the interrupted public
+            # state is restored during the continuation.
+            resume_message_id = _resume_assistant_message_id(messages)
+            if resume_message_id is not None:
+                continuation_message_id = resume_message_id
         if selected is not None:
             input_message_id = str(
                 input_message_id or selected.get("id") or f"message-{input_data.run_id}"
@@ -200,6 +208,33 @@ class RunPersistence:
                     )
                 )
                 return run
+
+    async def reopen_interrupted_run(self, *, thread_id: str, run_id: str) -> bool:
+        """Requeue a same-id native resume without restoring hidden state."""
+
+        async with self._sessions() as session:
+            async with session.begin():
+                run = await session.get(Run, run_id, with_for_update=True)
+                if run is None or run.thread_id != thread_id:
+                    return False
+                if run.status != "interrupted":
+                    return False
+                run.status = "queued"
+                run.started_at = None
+                run.finished_at = None
+                run.termination_reason = None
+                run.error_code = None
+                run.output_message_id = None
+                await session.execute(
+                    update(Thread)
+                    .where(Thread.id == thread_id)
+                    .values(
+                        last_run_id=run_id,
+                        active_head_message_id=run.input_message_id,
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                return True
 
     async def mark_running(
         self, *, run_id: str, state_json: dict[str, Any] | None = None
@@ -393,6 +428,72 @@ class RunPersistence:
             result=result,
         )
 
+    async def settle_interrupted(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        result: AgentRunResult,
+        state_json: dict[str, Any],
+        assistant_message_id: str,
+    ) -> bool:
+        """Persist a public approval pause without hidden history.
+
+        The assistant fallback makes the branch anchor durable if the browser
+        submits its approval before its own history write reaches the API. It
+        contains only tool identity and empty/safe arguments; the real call
+        arguments and DSPy history remain in the live approval registry.
+        """
+
+        async with self._sessions() as session:
+            async with session.begin():
+                run = await session.get(Run, run_id, with_for_update=True)
+                if run is None or run.thread_id != thread_id:
+                    return False
+                if run.status not in {"queued", "running"}:
+                    return False
+                await MessagesRepository.upsert_in_session(
+                    session,
+                    thread_id=thread_id,
+                    role="assistant",
+                    message_json=_interrupted_assistant_message(
+                        assistant_message_id, result
+                    ),
+                    message_id=assistant_message_id,
+                    parent_message_id=run.input_message_id,
+                    format="ag-ui/v1",
+                )
+                changed = await RunsRepository.settle_in_session(
+                    session,
+                    run_id=run_id,
+                    status="interrupted",
+                    termination_reason=result.termination_reason or "approval_required",
+                    token_usage=result.usage or None,
+                    error_code=None,
+                    output_message_id=assistant_message_id,
+                )
+                if not changed:
+                    return False
+                await RunStatesRepository.upsert_in_session(
+                    session,
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    head_message_id=assistant_message_id,
+                    state_json=state_json,
+                )
+                await session.execute(
+                    update(Thread)
+                    .where(
+                        Thread.id == thread_id,
+                        Thread.active_head_message_id == run.input_message_id,
+                    )
+                    .values(
+                        active_head_message_id=assistant_message_id,
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                return True
+
     async def run_completed(
         self,
         *,
@@ -423,6 +524,23 @@ class RunPersistence:
             run_id=run_id,
             result=result,
             state_json=state_json,
+        )
+
+    async def run_interrupted(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        result: AgentRunResult,
+        state_json: dict[str, Any],
+        assistant_message_id: str,
+    ) -> bool:
+        return await self.settle_interrupted(
+            thread_id=thread_id,
+            run_id=run_id,
+            result=result,
+            state_json=state_json,
+            assistant_message_id=assistant_message_id,
         )
 
     async def run_cancelled(
@@ -561,17 +679,73 @@ def _last_user_message_json(input_data: RunAgentInput) -> dict[str, Any] | None:
     return None
 
 
+def _resume_assistant_message_id(
+    messages: Sequence[dict[str, Any]],
+) -> str | None:
+    for message in reversed(messages):
+        if message.get("role") != "assistant":
+            continue
+        message_id = message.get("id")
+        if isinstance(message_id, str) and message_id:
+            return message_id
+    return None
+
+
+def _interrupted_assistant_message(
+    assistant_message_id: str, result: AgentRunResult
+) -> dict[str, Any]:
+    """Build a minimal, non-sensitive fallback assistant branch node."""
+
+    content: list[dict[str, Any]] = []
+    for interrupt in result.interrupts:
+        if not interrupt.tool_call_id:
+            continue
+        tool_name = "tool"
+        metadata = interrupt.metadata
+        if isinstance(metadata, dict) and isinstance(metadata.get("toolName"), str):
+            tool_name = metadata["toolName"]
+        content.append(
+            {
+                "type": "tool-call",
+                "toolCallId": interrupt.tool_call_id,
+                "toolName": tool_name,
+                "args": {},
+                "argsText": "{}",
+            }
+        )
+    return {
+        "id": assistant_message_id,
+        "role": "assistant",
+        "content": content,
+        "status": {"type": "complete", "reason": "approval_required"},
+    }
+
+
 def _branch_anchor(
     messages: Sequence[dict[str, Any]],
 ) -> tuple[str | None, str | None]:
+    """Locate the last user message and its branchable parent.
+
+    The AG-UI payload interleaves frontend-only tool-result messages
+    (role "tool") between the assistant text and the next user turn. Only
+    user/assistant messages exist in the persisted branch, so the parent
+    anchor must skip everything else — anchoring on a tool message id
+    would fail reservation with MESSAGE_NOT_FOUND.
+    """
     for index in range(len(messages) - 1, -1, -1):
-        if messages[index].get("role") == "user":
-            message_id = messages[index].get("id")
-            parent_id = messages[index - 1].get("id") if index else None
-            return (
-                str(message_id) if message_id else None,
-                str(parent_id) if parent_id else None,
-            )
+        if messages[index].get("role") != "user":
+            continue
+        message_id = messages[index].get("id")
+        parent_id: str | None = None
+        for predecessor in range(index - 1, -1, -1):
+            if messages[predecessor].get("role") in ("user", "assistant"):
+                raw_parent = messages[predecessor].get("id")
+                parent_id = str(raw_parent) if raw_parent else None
+                break
+        return (
+            str(message_id) if message_id else None,
+            parent_id,
+        )
     return None, None
 
 

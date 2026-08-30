@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.agent.approval import APPROVAL_REGISTRY
 from app.agent.factory import make_engine_builder
 from app.api.agent import router as agent_router
 from app.api.artifacts import router as artifacts_router
@@ -27,10 +28,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Server-restart reconciliation: orphaned "running" runs are interrupted.
+    # Server-restart reconciliation: live and paused runs cannot resume after
+    # the in-memory approval registry is lost.
+    APPROVAL_REGISTRY.clear()
     orphaned = await RunsRepository(app.state.db_sessions).mark_orphaned_interrupted()
     if orphaned:
-        logger.warning("marked %d orphaned running runs as interrupted", orphaned)
+        logger.warning("marked %d orphaned runs as failed", orphaned)
     if app.state.settings.api_key is None:
         logger.warning(
             "FLEET_AGENT_API_KEY is unset — the API runs in open local mode. "
@@ -73,7 +76,20 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Accept", "Content-Type", "Authorization", "X-API-Key"],
+        allow_headers=[
+            "Accept",
+            "Content-Type",
+            "X-API-Key",
+            "X-OpenRouter-Key",
+            "X-OpenRouter-Model",
+            # BYOK provider overrides parsed by app/api/provider.py and sent
+            # by the web client on every browser-owned provider run.
+            "X-LLM-Key",
+            "X-LLM-Base-Url",
+            "X-LLM-Model",
+            "X-LLM-Response-Format",
+            "X-LLM-Messages-Format",
+        ],
     )
 
     app.include_router(health_router)

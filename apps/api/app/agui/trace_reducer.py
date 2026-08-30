@@ -10,6 +10,7 @@ Enriched at completion with the model-written process_summary, key_decisions,
 and caveats. Never contains raw reasoning — only curated public fields.
 """
 
+import copy
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -51,10 +52,13 @@ class TraceReducer:
         run_id: str,
         prior_state: dict[str, Any] | None = None,
         run_scoped_decisions: bool = False,
+        resume_interrupted: bool = False,
     ) -> None:
         self.thread_id = thread_id
         self.run_id = run_id
         self._run_scoped_decisions = run_scoped_decisions
+        self._resume_interrupted = resume_interrupted
+        self._resuming_paused_state = False
         self._monotonic_start = time.monotonic()
         base: dict[str, Any] = {
             "schemaVersion": 1,
@@ -92,6 +96,19 @@ class TraceReducer:
                 for decision in _unique_by_id(prior_state.get("decisions") or [])
                 if decision.get("status") in (None, "accepted")
             ]
+            if (
+                resume_interrupted
+                and prior_state.get("run", {}).get("status") == "interrupted"
+            ):
+                self._resuming_paused_state = True
+                base["steps"] = copy.deepcopy(prior_state.get("steps") or base["steps"])
+                base["toolCalls"] = copy.deepcopy(prior_state.get("toolCalls") or [])
+                base["metrics"] = copy.deepcopy(
+                    prior_state.get("metrics") or base["metrics"]
+                )
+                active_step_id = prior_state.get("run", {}).get("activeStepId")
+                if isinstance(active_step_id, str):
+                    base["run"]["activeStepId"] = active_step_id
         self.state: dict[str, Any] = base
         self._tool_index: dict[str, int] = {
             str(tool.get("id")): index
@@ -123,6 +140,11 @@ class TraceReducer:
     def begin(self) -> list[JsonPatchOp]:
         """RUN_STARTED + snapshot are emitted by the coordinator; this is the
         first delta: understanding starts."""
+        if self._resuming_paused_state:
+            # The snapshot already contains the interrupted tool and its
+            # running parent step. Starting the understanding step again would
+            # make a continuation briefly point at the wrong phase.
+            return []
         return self._start_step("step-understand")
 
     def complete_understanding(self) -> list[JsonPatchOp]:
@@ -198,16 +220,6 @@ class TraceReducer:
         ops: list[JsonPatchOp] = []
         if "step-research" not in self._step_index:
             ops += self._complete_step("step-understand")
-            ops += self._add_step(
-                "step-plan",
-                phase="planning",
-                title="Selecting relevant tools",
-                status="running",
-            )
-            ops += self._start_step("step-plan")
-            ops += self._complete_step(
-                "step-plan", public_summary="Selected tools based on the request."
-            )
             ops += self._add_step(
                 "step-research",
                 phase="research",
@@ -319,6 +331,9 @@ class TraceReducer:
         Returns:
             list[JsonPatchOp]: JSON Patch operations describing the completed run.
         """
+        if result.status == "interrupted":
+            return self.interrupt_run(result)
+
         ops: list[JsonPatchOp] = []
         if "step-research" in self._step_index:
             ops += self._complete_step("step-research")
@@ -398,6 +413,44 @@ class TraceReducer:
             del run["activeStepId"]
             ops.append({"op": "remove", "path": "/run/activeStepId"})
 
+        return ops
+
+    def interrupt_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
+        """Mark a run paused for a native approval interrupt.
+
+        The gated tool remains ``running`` so a resumed reducer can settle the
+        same tool-call id.  No synthesis step or hidden continuation is
+        created here; the checkpoint remains owned by the in-memory registry.
+        """
+
+        run = self.state["run"]
+        run["status"] = "interrupted"
+        run["finishedAt"] = _utc_now()
+        run["terminationReason"] = result.termination_reason or "approval_required"
+        ops: list[JsonPatchOp] = [
+            {"op": "add", "path": "/run/status", "value": "interrupted"},
+            {"op": "add", "path": "/run/finishedAt", "value": run["finishedAt"]},
+            {
+                "op": "add",
+                "path": "/run/terminationReason",
+                "value": run["terminationReason"],
+            },
+        ]
+        if result.error_code:
+            run["errorCode"] = result.error_code
+            ops.append(
+                {"op": "add", "path": "/run/errorCode", "value": result.error_code}
+            )
+        self.state["metrics"]["durationMs"] = int(
+            (time.monotonic() - self._monotonic_start) * 1000
+        )
+        ops.append(
+            {
+                "op": "add",
+                "path": "/metrics/durationMs",
+                "value": self.state["metrics"]["durationMs"],
+            }
+        )
         return ops
 
     # -- helpers ---------------------------------------------------------

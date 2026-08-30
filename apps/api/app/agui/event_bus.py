@@ -3,6 +3,11 @@
 ReActV2 executes tools inside `asyncio.to_thread`, so instrumented tools
 publish via `loop.call_soon_threadsafe`; the SSE generator drains the queue.
 One bus per run — events can never leak across concurrent runs.
+
+All publishes (worker and loop side) append to the loop's callback queue at
+publish time, so delivery order always matches publication order: a direct
+`put_nowait` from the loop thread could otherwise overtake worker events that
+were scheduled earlier but have not run yet.
 """
 
 import asyncio
@@ -30,16 +35,20 @@ class RunEventBus:
         self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
 
     def publish_from_loop(self, event: DomainEvent) -> None:
-        """Publishes an event directly from the event loop.
+        """Schedule an event published from the event loop thread.
 
         Parameters:
             event (DomainEvent): The event to publish.
+
+        The event is scheduled through the loop's callback queue instead of
+        being put directly, so it can never overtake worker events that were
+        scheduled earlier (single FIFO order for both publish paths).
         """
-        self._queue.put_nowait(event)
+        self._loop.call_soon(self._queue.put_nowait, event)
 
     def close_from_loop(self) -> None:
-        """Signal that no more domain events will arrive."""
-        self._queue.put_nowait(_EVENT_SOURCE_DONE)
+        """Schedule the sentinel; pending worker events drain first."""
+        self._loop.call_soon(self._queue.put_nowait, _EVENT_SOURCE_DONE)
 
     async def next(self) -> DomainEvent | object:
         """Next domain event, or the sentinel when the source closed."""

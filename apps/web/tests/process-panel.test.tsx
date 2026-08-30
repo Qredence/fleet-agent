@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
+import { ProcessPanel } from '@/components/process-panel/process-panel'
 import { RunMetricsLine } from '@/components/process-panel/run-metrics'
 import { RunActivityInlineContent } from '@/components/process-panel/run-activity-inline'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
@@ -234,6 +235,23 @@ describe('RunActivityInlineContent', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders compact tool summaries for the Process panel variant', () => {
+    render(
+      <RunActivityInlineContent
+        state={runningState}
+        isRunning
+        variant="panel"
+        detailedTools={false}
+      />,
+    )
+
+    expect(screen.getByRole('article', { name: 'tool: search_docs' })).toHaveTextContent(
+      'search_docs',
+    )
+    expect(screen.queryByText('query="agent state"')).not.toBeInTheDocument()
+    expect(screen.queryByText('Found 3 relevant documents.')).not.toBeInTheDocument()
+  })
+
   it('keeps detail-less steps quiet and hides sub-100ms durations', async () => {
     const quietState: AgentWorkspaceState = {
       ...completedState,
@@ -368,6 +386,43 @@ describe('RunActivityInlineContent', () => {
   })
 })
 
+describe('ProcessPanel', () => {
+  // Rendered without AgUiRuntimePresenceProvider, so the presence context
+  // defaults to false: the panel must render its full chrome without calling
+  // any AG-UI hook (they throw without a mounted runtime).
+  it('renders tabs, empty states, and the file explorer without a runtime', async () => {
+    const user = userEvent.setup()
+    render(<ProcessPanel onClose={() => undefined} />)
+
+    expect(screen.getByRole('heading', { name: 'Process' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Close process panel' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Activity' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Sources' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Artifacts' }),
+    ).toBeInTheDocument()
+
+    // The active tab's body mounts; Base UI unmounts inactive panels.
+    expect(screen.getByText('No sources discovered')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Activity' }))
+    expect(screen.getByText('No activity yet')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Artifacts' }))
+    expect(screen.getByText('No artifacts generated')).toBeInTheDocument()
+
+    expect(
+      screen.getByRole('textbox', { name: 'Filter workspace files' }),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('ToolExecutionCard', () => {
   it('keeps long unbroken output from stretching the panel', () => {
     const longTool = {
@@ -407,7 +462,10 @@ describe('ToolExecutionCard', () => {
 describe('SourcesTab', () => {
   it('renders an empty state', () => {
     render(<SourcesTab sources={[]} />)
-    expect(screen.getByText('No sources yet.')).toBeInTheDocument()
+    expect(screen.getByText('No sources discovered')).toBeInTheDocument()
+    expect(
+      screen.getByText('Sources referenced during agent runs will appear here.'),
+    ).toBeInTheDocument()
   })
 
   it('renders sources with open links and copies citations', async () => {

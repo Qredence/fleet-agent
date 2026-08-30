@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { cn } from "@/lib/utils";
+import { useShape } from "@/lib/shape-context";
 import { codeScroll, codeSurface, mono, paper } from "@/lib/surfaces";
 
 interface TerminalBlockProps
@@ -37,10 +38,13 @@ export function TerminalBlock({
   className,
   ...props
 }: TerminalBlockProps) {
+  // Nested code surface: the shape ladder's middle (`mergedBg`) step, so it
+  // reads between the 8px rows and the 20px stream cards in pill mode.
+  const shape = useShape()
   return (
     <div
       data-slot="terminal-block"
-      className={cn(paper, "rounded-md", !bare && "overflow-hidden", className)}
+      className={cn(paper, shape.mergedBg, !bare && "overflow-hidden", className)}
       {...props}
     >
       {!bare && (

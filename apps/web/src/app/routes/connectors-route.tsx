@@ -1,10 +1,16 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Plug, Plus, Database, FolderGit2, Globe, Info } from 'lucide-react'
+import { Plug, Plus, Database, FolderGit2, Globe, Info, LogOut } from 'lucide-react'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
 import { useThreads } from '@/features/threads/use-threads'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { OpenRouterLogo } from '@/components/auth/openrouter-logo'
+import { OpenRouterButton } from '@/components/auth/openrouter-button'
+import { useOpenRouterAuth } from '@/hooks/use-openrouter-auth'
+import { SettingsDialog } from '@/components/settings/settings-dialog'
+import { maskApiKey } from '@/lib/openrouter-auth'
 
 const sampleConnectors = [
   {
@@ -45,6 +51,9 @@ export function ConnectorsRoute() {
   const { projectId } = useParams<{ projectId: string }>()
   const threads = useThreads(projectId)
   const thread = threads.data?.[0]
+  const { apiKey, isAuthenticated, signOut, selectedModel, customModelEnabled } =
+    useOpenRouterAuth()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <AgentWorkspace
@@ -78,6 +87,72 @@ export function ConnectorsRoute() {
             </div>
 
             <div className="space-y-3">
+              {/* LIVE OPENROUTER PROVIDER */}
+              <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-card p-4 hover:border-primary/50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <OpenRouterLogo className="size-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-semibold">OpenRouter AI Gateway</h2>
+                      {isAuthenticated ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                        >
+                          connected
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10"
+                        >
+                          ready to connect
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span>OAuth PKCE / REST LLM Gateway</span>
+                      <span>•</span>
+                      <code className="font-mono text-[11px]">
+                        {isAuthenticated
+                          ? `Key: ${maskApiKey(apiKey)} (${customModelEnabled ? selectedModel : 'server-default'})`
+                          : 'https://openrouter.ai'}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {isAuthenticated ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSettingsOpen(true)}
+                        className="text-xs"
+                      >
+                        Configure
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={signOut}
+                        className="text-xs text-destructive hover:bg-destructive/10"
+                      >
+                        <LogOut className="size-3.5 me-1" />
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : (
+                    <OpenRouterButton variant="cta" size="sm">
+                      Connect OpenRouter
+                    </OpenRouterButton>
+                  )}
+                </div>
+              </div>
+
               {sampleConnectors.map((connector) => (
                 <div key={connector.name} className="flex items-center justify-between rounded-xl border bg-card p-4 hover:border-primary/50 transition-colors">
                   <div className="flex items-center gap-3">
@@ -112,6 +187,7 @@ export function ConnectorsRoute() {
               ))}
             </div>
           </div>
+          <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         </main>
       }
     />

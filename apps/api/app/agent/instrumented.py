@@ -12,9 +12,10 @@ Each wrapped call:
 import functools
 import inspect
 import json
+import math
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, get_type_hints
 from urllib.parse import urlsplit
 
@@ -29,26 +30,79 @@ from app.contracts.domain import (
 )
 
 _SENSITIVE_KEY_PARTS = ("key", "token", "secret", "password", "auth", "credential")
-_MAX_VALUE_CHARS = 120
 _MAX_PREVIEW_CHARS = 300
 _MAX_RESULT_CHARS = 2000
+_MAX_PUBLIC_COLLECTION_ITEMS = 20
+
+
+def public_tool_args(tool_name: str, args: Mapping[str, Any]) -> dict[str, object]:
+    """Return bounded, redacted, JSON-compatible tool arguments.
+
+    The returned object is intentionally not truncated as a serialized string:
+    ``TOOL_CALL_ARGS`` must remain valid JSON after it is sent to assistant-ui.
+    Large values are summarized before serialization instead.
+    """
+    return {
+        str(key): _public_value(tool_name, str(key), value, depth=0)
+        for key, value in list(args.items())[:_MAX_PUBLIC_COLLECTION_ITEMS]
+    }
+
+
+def public_tool_args_json(tool_name: str, args: Mapping[str, Any]) -> str:
+    """Serialize public tool arguments without ever emitting invalid JSON."""
+    return json.dumps(
+        public_tool_args(tool_name, args),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _public_value(_tool_name: str, key: str, value: Any, *, depth: int) -> object:
+    lowered = key.lower()
+    if any(part in lowered for part in _SENSITIVE_KEY_PARTS):
+        return "***"
+
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else {"type": "number", "finite": False}
+    if isinstance(value, str):
+        return {"type": "string", "chars": len(value)}
+
+    if depth >= 2:
+        if isinstance(value, (bytes, bytearray)):
+            return {"type": "bytes", "bytes": len(value)}
+        return {"type": type(value).__name__}
+    if isinstance(value, Mapping):
+        return {
+            str(nested_key): _public_value(
+                _tool_name,
+                str(nested_key),
+                nested_value,
+                depth=depth + 1,
+            )
+            for nested_key, nested_value in list(value.items())[
+                :_MAX_PUBLIC_COLLECTION_ITEMS
+            ]
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [
+            _public_value(_tool_name, key, item, depth=depth + 1)
+            for item in list(value)[:_MAX_PUBLIC_COLLECTION_ITEMS]
+        ]
+    if isinstance(value, (bytes, bytearray)):
+        return {"type": "bytes", "bytes": len(value)}
+    return {"type": type(value).__name__}
 
 
 def sanitize_args(args: dict[str, Any]) -> str:
-    """JSON preview of arguments: secrets redacted, values and total capped."""
-    safe: dict[str, str] = {}
-    for key, value in args.items():
-        if any(part in key.lower() for part in _SENSITIVE_KEY_PARTS):
-            safe[key] = "***"
-        else:
-            rendered_value = str(value)
-            safe[key] = (
-                rendered_value[:_MAX_VALUE_CHARS] + "…"
-                if len(rendered_value) > _MAX_VALUE_CHARS
-                else rendered_value
-            )
-    rendered = json.dumps(safe, ensure_ascii=False)
-    return rendered[:400] + "…" if len(rendered) > 400 else rendered
+    """JSON preview of arguments: secrets redacted and total text capped.
+
+    This legacy helper remains a presentation preview. Callers that emit
+    protocol argument chunks must use :func:`public_tool_args_json` instead.
+    """
+    return preview(public_tool_args_json("", args), limit=400)
 
 
 def preview(text: str, limit: int = _MAX_PREVIEW_CHARS) -> str:
@@ -79,11 +133,14 @@ def instrument_tool(
         if cancel_token:
             cancel_token.check()  # no new tool starts after cancellation
         tool_call_id = f"tool_{uuid.uuid4().hex[:12]}"
+        tool_name = getattr(fn, "__name__", type(fn).__name__)
+        arguments_json = public_tool_args_json(tool_name, kwargs)
         bus.publish_from_worker(
             ToolStarted(
                 tool_call_id=tool_call_id,
-                name=fn.__name__,
-                input_preview=sanitize_args(kwargs),
+                name=tool_name,
+                arguments_json=arguments_json,
+                input_preview=preview(arguments_json),
             )
         )
         started = time.monotonic()
@@ -94,8 +151,8 @@ def instrument_tool(
             bus.publish_from_worker(
                 ToolFailed(
                     tool_call_id=tool_call_id,
-                    name=fn.__name__,
-                    error_message=f"The {fn.__name__} tool call failed.",
+                    name=tool_name,
+                    error_message=f"The {tool_name} tool call failed.",
                     duration_ms=duration_ms,
                 )
             )
@@ -104,7 +161,7 @@ def instrument_tool(
         bus.publish_from_worker(
             ToolCompleted(
                 tool_call_id=tool_call_id,
-                name=fn.__name__,
+                name=tool_name,
                 output_preview=preview(str(value)),
                 duration_ms=duration_ms,
             )

@@ -19,6 +19,9 @@ ERROR_MESSAGES = {
     "tool_unauthorized": "A tool was not permitted to perform that action.",
     "rate_limited": "The system is busy right now. Please retry in a moment.",
     "run_cancelled": "The run was cancelled.",
+    "provider_override_invalid": "The selected provider settings are invalid.",
+    "approval_expired": "The approval request is no longer available.",
+    "approval_invalid": "The approval response is invalid.",
     "internal_error": "The agent run failed.",
 }
 

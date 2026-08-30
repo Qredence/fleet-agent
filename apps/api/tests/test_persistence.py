@@ -3,11 +3,13 @@
 import json
 
 import dspy
-from ag_ui.core import RunAgentInput
+from ag_ui.core import Interrupt, RunAgentInput
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
 
+from app.agent.engine import AgentRunResult
 from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.trace_reducer import TraceReducer
 from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     MessagesRepository,
@@ -239,6 +241,60 @@ async def test_failed_run_keeps_user_message_only(db_sessions):
     assert state["run"]["status"] == "failed"
 
 
+async def test_interrupted_run_persists_safe_state_without_hidden_history(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+    input_data = RunAgentInput.model_validate(run_input(thread_id, "run-interrupted"))
+    await persistence.reserve_run(input_data=input_data)
+
+    reducer = TraceReducer(thread_id=thread_id, run_id="run-interrupted")
+    reducer.begin()
+    result = AgentRunResult(
+        status="interrupted",
+        answer=None,
+        process_summary="Waiting for approval.",
+        termination_reason="approval_required",
+        interrupts=[
+            Interrupt(
+                id="approval-test",
+                reason="tool_call",
+                message="Approval is required before this action can run.",
+                tool_call_id="call-write",
+                metadata={"toolName": "write", "action": "approval_required"},
+            )
+        ],
+    )
+
+    assert await persistence.run_interrupted(
+        thread_id=thread_id,
+        run_id="run-interrupted",
+        result=result,
+        state_json=reducer.state,
+        assistant_message_id="assistant-interrupted",
+    )
+
+    run = await RunsRepository(db_sessions).get("run-interrupted")
+    assert run is not None
+    assert run.status == "interrupted"
+    assert run.output_message_id == "assistant-interrupted"
+
+    messages = await MessagesRepository(db_sessions).list_for_thread(thread_id)
+    assistant = next(message for message in messages if message["role"] == "assistant")
+    assert assistant["content"][0]["toolName"] == "write"
+    assert assistant["content"][0]["args"] == {}
+    assert "call-write" in json.dumps(assistant)
+    assert "secret" not in json.dumps(assistant)
+
+    from app.persistence.repositories import DspyHistoriesRepository
+
+    assert await DspyHistoriesRepository(db_sessions).get(thread_id) is None
+    assert await persistence.reopen_interrupted_run(
+        thread_id=thread_id, run_id="run-interrupted"
+    )
+    reopened = await RunsRepository(db_sessions).get("run-interrupted")
+    assert reopened is not None and reopened.status == "queued"
+
+
 async def test_thread_isolation(db_sessions):
     _, thread_a = await seed_project_and_thread(db_sessions)
     _, thread_b = await seed_project_and_thread(db_sessions)
@@ -404,3 +460,79 @@ async def test_stale_user_branch_does_not_move_active_head(db_sessions):
     current = await ThreadsRepository(db_sessions).get(thread_id)
     assert current is not None
     assert current.active_head_message_id == "assistant-current"
+
+
+def test_branch_anchor_skips_frontend_tool_messages():
+    """Tool-result messages are frontend-only; the branch anchor must skip them."""
+    from app.services.run_persistence import _branch_anchor
+
+    messages = [
+        {"id": "user-1", "role": "user", "content": "first"},
+        {"id": "msg-run-1", "role": "assistant", "content": "answer"},
+        {"id": "msg-tool-call-1", "role": "tool", "content": "{}"},
+        {"id": "msg-tool-call-2", "role": "tool", "content": "{}"},
+        {"id": "user-2", "role": "user", "content": "second"},
+    ]
+    assert _branch_anchor(messages) == ("user-2", "msg-run-1")
+    # A trailing tool message after the last user turn is ignored too.
+    trailing = [*messages, {"id": "msg-tool-call-3", "role": "tool", "content": "{}"}]
+    assert _branch_anchor(trailing) == ("user-2", "msg-run-1")
+    # No branchable predecessor -> None parent, not a tool id.
+    assert _branch_anchor(messages[-1:]) == ("user-2", None)
+    assert _branch_anchor([]) == (None, None)
+
+
+@requires_db
+async def test_reservation_after_tool_turn_anchors_to_assistant(db_sessions):
+    """Regression: a follow-up turn whose payload contains frontend tool-result
+    messages must reserve cleanly instead of failing with MESSAGE_NOT_FOUND."""
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+
+    await drive_live_run(
+        None,
+        persistence,
+        [
+            [{"name": "search_docs", "args": {"query": "state sync"}}],
+            [submit_call(answer="Found it.")],
+        ],
+        thread_id,
+        "run-tools",
+    )
+
+    # The frontend sends the full local thread: user, assistant text, then the
+    # tool-result messages that only exist client-side, then the new user turn.
+    payload_messages = [
+        {"id": "m-user-run-tools", "role": "user", "content": "search"},
+        {"id": "msg-run-tools", "role": "assistant", "content": "Found it."},
+        {
+            "id": "msg-tool-call-a",
+            "role": "tool",
+            "content": "{}",
+            "toolCallId": "call_a",
+        },
+        {
+            "id": "msg-tool-call-b",
+            "role": "tool",
+            "content": "{}",
+            "toolCallId": "call_b",
+        },
+        {"id": "user-next", "role": "user", "content": "follow-up"},
+    ]
+    input_data = RunAgentInput.model_validate(
+        {
+            "threadId": thread_id,
+            "runId": "run-after-tools",
+            "state": None,
+            "messages": payload_messages,
+            "tools": [],
+            "context": [],
+            "forwardedProps": None,
+        }
+    )
+    await persistence.reserve_run(input_data=input_data)
+
+    async with db_sessions() as session:
+        run = await session.get(Run, "run-after-tools")
+        assert run is not None
+        assert run.continuation_message_id == "msg-run-tools"
