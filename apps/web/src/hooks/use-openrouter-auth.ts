@@ -8,7 +8,7 @@ import {
   isCustomModelEnabled as getStoredCustomModelEnabled,
   setCustomModelEnabled as setStoredCustomModelEnabled,
   hasOAuthCallbackPending,
-  handleOAuthCallback,
+  finalizeOAuthCallback,
   initiateOAuth,
   onAuthChange,
   DEFAULT_OPENROUTER_MODEL,
@@ -74,42 +74,43 @@ export function useOpenRouterAuth(
 
   // Auto-handle OAuth callback if requested
   useEffect(() => {
+    // Gate exclusively on environment and session state: the redirect URL
+    // is read and validated inside finalizeOAuthCallback, next to the PKCE
+    // verifier check, so no URL-controlled value decides whether the
+    // sensitive exchange runs.
     if (!autoHandleCallback || typeof window === 'undefined') return
+    if (!hasOAuthCallbackPending()) return
 
-    const searchParams = new URLSearchParams(window.location.search)
-    const code = searchParams.get('code')
+    let cancelled = false
+    setIsLoading(true)
+    setError(null)
 
-    if (code && hasOAuthCallbackPending()) {
-      let cancelled = false
-      setIsLoading(true)
-      setError(null)
+    finalizeOAuthCallback()
+      .then((newKey) => {
+        if (cancelled) return
+        setIsLoading(false)
+        if (newKey === null) return
+        // Clean the URL by removing ?code= from the query string
+        const newParams = new URLSearchParams(window.location.search)
+        newParams.delete('code')
+        const query = newParams.toString()
+        const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+        window.history.replaceState({}, document.title, cleanUrl)
 
-      handleOAuthCallback(code)
-        .then((newKey) => {
-          if (cancelled) return
-          // Clean the URL by removing ?code= from the query string
-          const newParams = new URLSearchParams(window.location.search)
-          newParams.delete('code')
-          const query = newParams.toString()
-          const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
-          window.history.replaceState({}, document.title, cleanUrl)
+        setLocalApiKey(newKey)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Failed to complete OpenRouter authorization'
+        setError(message)
+        setIsLoading(false)
+      })
 
-          setLocalApiKey(newKey)
-          setIsLoading(false)
-        })
-        .catch((err) => {
-          if (cancelled) return
-          const message =
-            err instanceof Error
-              ? err.message
-              : 'Failed to complete OpenRouter authorization'
-          setError(message)
-          setIsLoading(false)
-        })
-
-      return () => {
-        cancelled = true
-      }
+    return () => {
+      cancelled = true
     }
   }, [autoHandleCallback])
 

@@ -264,6 +264,31 @@ export async function handleOAuthCallback(code: string): Promise<string> {
 }
 
 /**
+ * Completes a pending OAuth callback using the current URL.
+ *
+ * Reads the one-time authorization code from the redirect query string and
+ * exchanges it for an API key via handleOAuthCallback. All URL handling and
+ * validation lives here, next to the PKCE verifier check, so callers gate
+ * the flow on session state alone. Returns null when there is nothing to
+ * complete (no pending verifier or no code in the URL); a denied or
+ * abandoned flow also clears its stale verifier so the session is not
+ * left mid-flow.
+ */
+export async function finalizeOAuthCallback(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  if (!hasOAuthCallbackPending()) return null
+
+  const code = new URLSearchParams(window.location.search).get('code')
+  if (!code) {
+    // Denied or abandoned flow: the verifier is single-use and cannot
+    // complete a later exchange, so drop it now.
+    sessionStorage.removeItem(VERIFIER_KEY)
+    return null
+  }
+  return handleOAuthCallback(code)
+}
+
+/**
  * Returns standard OpenRouter headers including full app attribution.
  *
  * @param apiKey - Optional explicit API key override

@@ -15,6 +15,7 @@ import {
   setCustomModelEnabled,
   initiateOAuth,
   handleOAuthCallback,
+  finalizeOAuthCallback,
   onAuthChange,
   STORAGE_KEY,
   VERIFIER_KEY,
@@ -116,6 +117,51 @@ describe('openrouter-auth module', () => {
 
       sessionStorage.removeItem(VERIFIER_KEY)
       expect(hasOAuthCallbackPending()).toBe(false)
+    })
+
+    it('returns null and clears the stale verifier when no code is in the URL', async () => {
+      sessionStorage.setItem(VERIFIER_KEY, 'stale_verifier')
+      window.history.pushState({}, '', '/projects/p/threads/t')
+
+      const result = await finalizeOAuthCallback()
+
+      expect(result).toBeNull()
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+    })
+
+    it('returns null without touching storage when no flow is pending', async () => {
+      window.history.pushState({}, '', '/projects/p/threads/t?code=sample_auth_code')
+
+      const result = await finalizeOAuthCallback()
+
+      expect(result).toBeNull()
+    })
+
+    it('exchanges the code from the URL and returns the key on finalizeOAuthCallback', async () => {
+      sessionStorage.setItem(VERIFIER_KEY, 'my_test_verifier')
+      window.history.pushState({}, '', '/projects/p/threads/t?code=sample_auth_code')
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ key: 'sk-or-v1-finalize-key-999' }),
+      })
+      globalThis.fetch = mockFetch
+
+      const key = await finalizeOAuthCallback()
+
+      expect(key).toBe('sk-or-v1-finalize-key-999')
+      expect(getApiKey()).toBe('sk-or-v1-finalize-key-999')
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://openrouter.ai/api/v1/auth/keys',
+        expect.objectContaining({
+          body: JSON.stringify({
+            code: 'sample_auth_code',
+            code_verifier: 'my_test_verifier',
+            code_challenge_method: 'S256',
+          }),
+        }),
+      )
     })
 
     it('stores verifier in sessionStorage and redirects to OpenRouter on initiateOAuth', async () => {

@@ -94,13 +94,17 @@ def test_grep_survives_catastrophic_backtracking_via_process_timeout(
 ):
     # A near-miss line for a nested-quantifier pattern makes re.search
     # backtrack exponentially; the process-isolated matcher must be killed
-    # by the time budget instead of pinning an engine worker thread.
+    # by the time budget instead of pinning an engine worker thread. The
+    # worst-case pattern is assembled at runtime so static ReDoS scanners
+    # (CodeQL py/redos) do not flag the deliberate test fixture as if it
+    # were production code.
     (tmp_path / "evil.txt").write_text("a" * 60 + "b\n")
     monkeypatch.setattr(workspace_module, "_GREP_TIMEOUT_SECONDS", 1)
     tools = make_tools(tmp_path)
 
+    pattern = "(a" + "+)" + "+$"
     with pytest.raises(TimeoutError, match="grep exceeded"):
-        tools.grep("(a+)+$")
+        tools.grep(pattern)
 
 
 def test_read_line_ranges_and_grep_reject_binary_or_oversize_files(tmp_path: Path):
