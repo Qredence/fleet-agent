@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -25,12 +26,43 @@ def test_sanitize_args_redacts_secret_looking_values():
     assert "bearer abc" not in result
     assert "hunter2" not in result
     assert result.count('"***"') == 3
-    assert "openai setup" in result
+    assert '"query":{"type":"string","chars":12}' in result
 
 
 def test_sanitize_args_caps_values_and_total():
     result = sanitize_args({"query": "x" * 1000})
     assert len(result) <= 401
+
+
+def test_public_mutating_args_are_bounded_but_valid_json():
+    from app.agent.instrumented import public_tool_args_json
+
+    encoded = public_tool_args_json(
+        "write",
+        {"path": "notes.md", "content": "x" * 5000},
+    )
+    public = json.loads(encoded)
+
+    assert public["path"] == {"type": "string", "chars": 8}
+    assert public["content"]["chars"] == 5000
+    assert "preview" not in public["content"]
+    assert "x" * 5000 not in encoded
+
+
+def test_public_args_convert_non_finite_numbers_to_valid_json():
+    from app.agent.instrumented import public_tool_args_json
+
+    encoded = public_tool_args_json("lookup", {"score": float("nan")})
+
+    assert json.loads(encoded)["score"] == {"type": "number", "finite": False}
+
+
+def test_public_args_preserve_finite_numbers():
+    from app.agent.instrumented import public_tool_args_json
+
+    encoded = public_tool_args_json("lookup", {"score": 0.75})
+
+    assert json.loads(encoded)["score"] == 0.75
 
 
 def test_preview_and_truncate_bounds():
@@ -66,10 +98,10 @@ async def test_instrument_tool_publishes_events_and_preserves_return():
     assert isinstance(completed, ToolCompleted)
     assert started.tool_call_id == completed.tool_call_id
     assert started.name == "lookup"
-    assert (
-        '"state deltas"' in started.input_preview
-        or "state deltas" in started.input_preview
-    )
+    assert json.loads(started.arguments_json)["query"] == {
+        "type": "string",
+        "chars": 12,
+    }
     assert "docs for state deltas" in completed.output_preview
     assert completed.duration_ms >= 0
 

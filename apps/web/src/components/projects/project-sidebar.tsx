@@ -68,6 +68,9 @@ import {
   deleteThread,
 } from '@/features/threads/threads-api'
 import { useWorkspaceStore } from '@/state/workspace-store'
+import { SettingsDialog } from '@/components/settings/settings-dialog'
+import { useShape } from '@/lib/shape-context'
+import { cn } from '@/lib/utils'
 
 const THREAD_PREVIEW_COUNT = 5
 
@@ -84,10 +87,14 @@ const PROJECT_ACTION_REVEAL =
 export function ProjectSidebar() {
   const projects = useProjects()
   const [createOpen, setCreateOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
   const { projectId } = useParams<{ projectId?: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  // Element-step radius for the bare icon chips this sidebar renders by hand
+  // (the SidebarMenu components pull their own shape classes).
+  const shape = useShape()
 
   const allProjects = projects.data ?? []
   const filteredProjects = searchFilter
@@ -188,7 +195,7 @@ export function ProjectSidebar() {
               type="button"
               aria-label="New project"
               onClick={() => setCreateOpen(true)}
-              className="p-1 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-colors"
+              className={cn('p-1 hover:bg-sidebar-accent text-muted-foreground hover:text-foreground transition-colors', shape.bg)}
             >
               <Plus className="size-3.5" />
             </button>
@@ -237,9 +244,7 @@ export function ProjectSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 icon={Settings}
-                disabled
-                title="Preview — coming soon"
-                className="disabled:opacity-50 disabled:pointer-events-none"
+                onClick={() => setSettingsOpen(true)}
               >
                 Settings
               </SidebarMenuButton>
@@ -264,6 +269,7 @@ export function ProjectSidebar() {
       </Sidebar>
 
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </SidebarProvider>
   )
 }

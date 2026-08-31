@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react";
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import { mono, paper, ShimmerLabel } from "@/lib/surfaces";
 
@@ -21,18 +22,23 @@ export function ArtifactCard({
   generating?: boolean;
   words?: number;
 }) {
+  // The canonical element-level stream card: the shape ladder's `bg` step
+  // (20px in pill mode). Its icon tile takes the same step, like the media
+  // tile on a Card.
+  const shape = useShape();
   return (
     <div
       data-slot="artifact-card"
       className={cn(
         paper,
-        "group flex w-full max-w-xs cursor-pointer items-center gap-3 rounded-[20px] p-3.5 transition-transform duration-150 hover:-translate-y-px active:scale-[0.96]",
+        "group flex w-full max-w-xs cursor-pointer items-center gap-3 p-3.5 transition-transform duration-150 hover:-translate-y-px active:scale-[0.96]",
+        shape.bg,
         className,
       )}
 
       {...props}
     >
-      <span className="bg-foreground/[0.05] text-foreground/45 flex size-9 shrink-0 items-center justify-center rounded-xl">
+      <span className={cn("bg-foreground/[0.05] text-foreground/45 flex size-9 shrink-0 items-center justify-center", shape.bg)}>
         <FileTextIcon
           className={cn(
             "size-4",

@@ -2,6 +2,7 @@ import { Download, FileBox } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { ArtifactMarkdown } from '@/features/artifacts/artifact-markdown'
+import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
 import { StatusChip } from '@/components/process-panel/status-chip'
 import { Button } from '@/components/ui/button'
 import { apiFetchText } from '@/lib/api-client'
@@ -99,7 +100,11 @@ export function ArtifactsTab({ artifacts, selectedArtifactId }: ArtifactsTabProp
 
   if (artifacts.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">No artifacts yet.</p>
+      <EmptyTabState
+        icon={FileBox}
+        title="No artifacts generated"
+        description="Files, reports, and code produced by the agent will be listed here."
+      />
     )
   }
 

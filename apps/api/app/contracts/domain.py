@@ -35,6 +35,8 @@ class InlineDataEvent(DomainEvent):
 class ToolStarted(DomainEvent):
     tool_call_id: str
     name: str
+    """Complete, redacted JSON used by the AG-UI tool-arguments channel."""
+    arguments_json: str
     """Redacted, size-limited argument preview (never raw args)."""
     input_preview: str
     step_id: str | None = None

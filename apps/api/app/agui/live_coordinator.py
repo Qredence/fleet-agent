@@ -12,6 +12,7 @@ from ag_ui.core import (
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
+    RunFinishedInterruptOutcome,
     RunStartedEvent,
     StateDeltaEvent,
     StateSnapshotEvent,
@@ -20,7 +21,7 @@ from ag_ui.core import (
     TextMessageStartEvent,
 )
 from ag_ui.encoder import EventEncoder
-from litellm.exceptions import RateLimitError
+from dspy import LMRateLimitError
 
 from app.agent.engine import (
     AgentEngine,
@@ -28,6 +29,7 @@ from app.agent.engine import (
     AgentRunResult,
     AgentStreamUpdate,
 )
+from app.agent.provider import ProviderOverride
 from app.agui.event_bus import DONE, RunEventBus
 from app.agui.event_mapper import chunk_text, map_domain_event
 from app.agui.trace_reducer import TraceReducer
@@ -50,7 +52,13 @@ _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
 
 
 class EngineBuilder(Protocol):
-    def __call__(self, bus: RunEventBus, *, thread_id: str) -> AgentEngine: ...
+    def __call__(
+        self,
+        bus: RunEventBus,
+        *,
+        thread_id: str,
+        provider_override: ProviderOverride | None = None,
+    ) -> AgentEngine: ...
 
 
 class LiveDSPyCoordinator:
@@ -61,6 +69,7 @@ class LiveDSPyCoordinator:
         engine_builder: EngineBuilder,
         accept: str | None,
         is_disconnected: Callable[[], Awaitable[bool]],
+        provider_override: ProviderOverride | None = None,
         persistence: RunPersistence | None = None,
         run_timeout_s: float = 300.0,
         metrics: MetricsRegistry | None = None,
@@ -95,7 +104,18 @@ class LiveDSPyCoordinator:
         run = await persistence.get_run(run_id) if persistence else None
         if persistence and run is None:
             run = await persistence.reserve_run(input_data=input_data)
-        continuation_head = run.continuation_message_id if run else None
+        # Native AG-UI approval resumes carry the assistant message that owns
+        # the live checkpoint, even when the client generated a fresh run id.
+        # Restore the public interrupted snapshot from that message so the
+        # resumed tool result can settle its existing call id.
+        resume_head = _assistant_message_id(input_data)
+        continuation_head = (
+            resume_head
+            if input_data.resume and resume_head is not None
+            else run.continuation_message_id
+            if run
+            else None
+        )
         prior_state = (
             await persistence.get_latest_state(thread_id, continuation_head)
             if persistence
@@ -106,9 +126,9 @@ class LiveDSPyCoordinator:
             run_id=run_id,
             prior_state=prior_state,
             run_scoped_decisions=persistence is not None,
+            resume_interrupted=bool(input_data.resume),
         )
-        tools_message_id = f"msg-tools-{run_id}"
-        answer_message_id = f"msg-{run_id}"
+        assistant_message_id = _assistant_message_id(input_data) or f"msg-{run_id}"
         started_monotonic = loop.time()
         if metrics:
             metrics.incr("agent_runs_total")
@@ -134,6 +154,25 @@ class LiveDSPyCoordinator:
             if error:
                 metrics.incr("agent_run_errors_total")
 
+        def log_terminal(
+            message: str,
+            *,
+            level: int,
+            termination_reason: str | None,
+        ) -> None:
+            """Log bounded run diagnostics without history or provider data."""
+            logger.log(
+                level,
+                message,
+                run_id,
+                thread_id,
+                extra={
+                    "tool_call_count": len(reducer.state.get("toolCalls", [])),
+                    "termination_reason": termination_reason,
+                    "forced_submit": termination_reason == "forced_submit",
+                },
+            )
+
         def complete_public_state(result: AgentRunResult) -> list[dict[str, object]]:
             """Finish the public reducer even if a mapper/reducer hook fails."""
 
@@ -147,7 +186,11 @@ class LiveDSPyCoordinator:
                 )
                 run_state = reducer.state.setdefault("run", {})
                 run_state["status"] = (
-                    "cancelled" if result.error_code == "run_cancelled" else "failed"
+                    "cancelled"
+                    if result.error_code == "run_cancelled"
+                    else "interrupted"
+                    if result.status == "interrupted"
+                    else "failed"
                 )
                 run_state["finishedAt"] = _utc_now()
                 if result.termination_reason:
@@ -193,7 +236,11 @@ class LiveDSPyCoordinator:
                 # terminal event into the same run.
                 terminal_settled = True
                 record_terminal_metrics(error=True)
-                logger.info("run %s cancelled (thread %s)", run_id, thread_id)
+                log_terminal(
+                    "run %s cancelled (thread %s)",
+                    level=logging.INFO,
+                    termination_reason=cancel_result.termination_reason,
+                )
                 return settled
 
         async def settle_cancelled_bounded() -> bool:
@@ -226,6 +273,7 @@ class LiveDSPyCoordinator:
             user_request: str,
             history: Any | None,
             context: AgentRunContext,
+            resume: list[Any] | None,
         ) -> Coroutine[Any, Any, AgentRunResult]:
             """Consume streaming engine updates and publish final answer fields.
 
@@ -252,11 +300,14 @@ class LiveDSPyCoordinator:
                     AgentRunResult: The completed agent run result.
                 """
                 result: AgentRunResult | None = None
-                async for update in stream_factory(
-                    user_request=user_request,
-                    history=history,
-                    context=context,
-                ):
+                stream_kwargs: dict[str, Any] = {
+                    "user_request": user_request,
+                    "history": history,
+                    "context": context,
+                }
+                if resume is not None:
+                    stream_kwargs["resume"] = resume
+                async for update in stream_factory(**stream_kwargs):
                     assert isinstance(update, AgentStreamUpdate)
                     if update.kind == "final_fields":
                         bus.publish_from_loop(
@@ -282,6 +333,12 @@ class LiveDSPyCoordinator:
                 return
 
             yield emit(RunStartedEvent(thread_id=thread_id, run_id=run_id))
+            yield emit(
+                TextMessageStartEvent(
+                    message_id=assistant_message_id,
+                    role="assistant",
+                )
+            )
             yield emit(StateSnapshotEvent(snapshot=reducer.state))
             logger.info("run %s started (thread %s)", run_id, thread_id)
 
@@ -292,8 +349,19 @@ class LiveDSPyCoordinator:
             )
             yield emit(StateDeltaEvent(delta=reducer.begin()))
 
-            context = AgentRunContext(thread_id=thread_id, run_id=run_id)
-            engine = engine_builder(bus, thread_id=thread_id)
+            context = AgentRunContext(
+                thread_id=thread_id,
+                run_id=run_id,
+                assistant_message_id=assistant_message_id,
+            )
+            if provider_override is None:
+                engine = engine_builder(bus, thread_id=thread_id)
+            else:
+                engine = engine_builder(
+                    bus,
+                    thread_id=thread_id,
+                    provider_override=provider_override,
+                )
             stream_factory = getattr(engine, "stream", None)
             if callable(stream_factory):
                 engine_task = asyncio.create_task(
@@ -302,16 +370,18 @@ class LiveDSPyCoordinator:
                         user_request=last_user_text(input_data),
                         history=continuation_history,
                         context=context,
+                        resume=input_data.resume,
                     )
                 )
             else:
-                engine_task = asyncio.create_task(
-                    engine.run(
-                        user_request=last_user_text(input_data),
-                        history=continuation_history,
-                        context=context,
-                    )
-                )
+                run_kwargs: dict[str, Any] = {
+                    "user_request": last_user_text(input_data),
+                    "history": continuation_history,
+                    "context": context,
+                }
+                if input_data.resume is not None:
+                    run_kwargs["resume"] = input_data.resume
+                engine_task = asyncio.create_task(engine.run(**run_kwargs))
             engine_task.add_done_callback(lambda _task: bus.close_from_loop())
 
             try:
@@ -330,9 +400,8 @@ class LiveDSPyCoordinator:
                             answer_streamed = True
                         agui_events = map_domain_event(
                             event,  # type: ignore[arg-type]
-                            tools_message_id=tools_message_id,
+                            assistant_message_id=assistant_message_id,
                             reducer=reducer,
-                            answer_message_id=answer_message_id,
                         )
                         if persistence and isinstance(
                             event,
@@ -368,8 +437,11 @@ class LiveDSPyCoordinator:
                     await engine_task
                 except asyncio.CancelledError:
                     pass
-                except Exception:
-                    logger.exception("engine cleanup failed after timeout")
+                except Exception as exc:
+                    logger.error(
+                        "engine cleanup failed after timeout (exception_type=%s)",
+                        type(exc).__name__,
+                    )
                 result = AgentRunResult(
                     status="failed",
                     answer=None,
@@ -379,21 +451,55 @@ class LiveDSPyCoordinator:
                 )
 
             delta = complete_public_state(result)
-            if result.status == "completed":
+            if result.status == "interrupted" and result.interrupts:
                 yield emit(StateDeltaEvent(delta=delta))
-                if not answer_streamed:
-                    yield emit(
-                        TextMessageStartEvent(
-                            message_id=answer_message_id, role="assistant"
+                yield emit(TextMessageEndEvent(message_id=assistant_message_id))
+                settled = (
+                    await _settle_with_retry(
+                        lambda: persistence.run_interrupted(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=reducer.state,
+                            assistant_message_id=assistant_message_id,
                         )
                     )
+                    if persistence
+                    else True
+                )
+                if not settled:
+                    logger.error(
+                        "interrupted run could not be persisted (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                terminal_settled = True
+                record_terminal_metrics(error=False)
+                terminal_emitted = True
+                yield emit(
+                    RunFinishedEvent(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        outcome=RunFinishedInterruptOutcome(
+                            interrupts=result.interrupts
+                        ),
+                    )
+                )
+                log_terminal(
+                    "run %s paused for approval (thread %s)",
+                    level=logging.INFO,
+                    termination_reason=result.termination_reason,
+                )
+            elif result.status == "completed":
+                yield emit(StateDeltaEvent(delta=delta))
+                if not answer_streamed:
                     for chunk in chunk_text(result.answer or ""):
                         yield emit(
                             TextMessageContentEvent(
-                                message_id=answer_message_id, delta=chunk
+                                message_id=assistant_message_id, delta=chunk
                             )
                         )
-                    yield emit(TextMessageEndEvent(message_id=answer_message_id))
+                yield emit(TextMessageEndEvent(message_id=assistant_message_id))
                 settled = (
                     await _settle_with_retry(
                         lambda: persistence.run_completed(
@@ -401,7 +507,7 @@ class LiveDSPyCoordinator:
                             run_id=run_id,
                             result=result,
                             state_json=reducer.state,
-                            assistant_message_id=answer_message_id,
+                            assistant_message_id=assistant_message_id,
                         )
                     )
                     if persistence
@@ -421,9 +527,14 @@ class LiveDSPyCoordinator:
                 record_terminal_metrics(error=False)
                 terminal_emitted = True
                 yield emit(RunFinishedEvent(thread_id=thread_id, run_id=run_id))
-                logger.info("run %s completed (thread %s)", run_id, thread_id)
+                log_terminal(
+                    "run %s completed (thread %s)",
+                    level=logging.INFO,
+                    termination_reason=result.termination_reason,
+                )
             else:
                 yield emit(StateDeltaEvent(delta=delta))
+                yield emit(TextMessageEndEvent(message_id=assistant_message_id))
                 settled = (
                     await _settle_with_retry(
                         lambda: persistence.run_failed(
@@ -445,7 +556,15 @@ class LiveDSPyCoordinator:
                 terminal_settled = True
                 code, message = public_error(result.error_code, "agent_no_output")
                 logger.warning(
-                    "run %s failed [%s] (thread %s)", run_id, code, thread_id
+                    "run %s failed [%s] (thread %s)",
+                    run_id,
+                    code,
+                    thread_id,
+                    extra={
+                        "tool_call_count": len(reducer.state.get("toolCalls", [])),
+                        "termination_reason": result.termination_reason,
+                        "forced_submit": result.termination_reason == "forced_submit",
+                    },
                 )
                 record_terminal_metrics(error=True)
                 terminal_emitted = True
@@ -475,7 +594,12 @@ class LiveDSPyCoordinator:
                 termination_reason="failed",
                 error_code=code,
             )
-            logger.exception("live run failed (thread %s, run %s)", thread_id, run_id)
+            logger.error(
+                "live run failed (thread %s, run %s, exception_type=%s)",
+                thread_id,
+                run_id,
+                type(exc).__name__,
+            )
             delta = complete_public_state(failure)
             settled = True
             if persistence:
@@ -488,13 +612,15 @@ class LiveDSPyCoordinator:
                             state_json=reducer.state,
                         )
                     )
-                except Exception:
+                except Exception as persist_exc:
                     # Keep the fallback terminal event safe even if a custom
                     # persistence implementation escapes the retry wrapper.
-                    logger.exception(
-                        "could not persist unexpected failure (thread %s, run %s)",
+                    logger.error(
+                        "could not persist unexpected failure "
+                        "(thread %s, run %s, exception_type=%s)",
                         thread_id,
                         run_id,
+                        type(persist_exc).__name__,
                     )
                     settled = False
             if not settled:
@@ -510,7 +636,13 @@ class LiveDSPyCoordinator:
             terminal_settled = True
             terminal_emitted = True
             record_terminal_metrics(error=True)
+            log_terminal(
+                "run %s ended with an unexpected failure (thread %s)",
+                level=logging.ERROR,
+                termination_reason=failure.termination_reason,
+            )
             yield emit(StateDeltaEvent(delta=delta))
+            yield emit(TextMessageEndEvent(message_id=assistant_message_id))
             yield emit(RunErrorEvent(message=message, code=code))
 
 
@@ -523,23 +655,46 @@ async def _settle_with_retry(
         try:
             result = await operation()
             return result is not False
-        except Exception:
+        except Exception as exc:
             if attempt == 0:
                 logger.warning(
-                    "terminal persistence failed; retrying with a fresh session",
-                    exc_info=True,
+                    "terminal persistence failed; retrying with a fresh session "
+                    "(exception_type=%s)",
+                    type(exc).__name__,
                 )
             else:
-                logger.exception("terminal persistence failed after retry")
+                logger.error(
+                    "terminal persistence failed after retry (exception_type=%s)",
+                    type(exc).__name__,
+                )
     return False
 
 
 def _code_for_exception(exc: Exception) -> tuple[str, str]:
     text = f"{type(exc).__name__} {exc}".lower()
-    if isinstance(exc, RateLimitError) or "rate limit" in text or "429" in text:
+    if (
+        isinstance(exc, LMRateLimitError)
+        or "rate limit" in text
+        or "ratelimit" in text
+        or "429" in text
+    ):
         return public_error("rate_limited")
     return public_error("internal_error")
 
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _assistant_message_id(input_data: RunAgentInput) -> str | None:
+    """Reuse the server message id carried by a native approval resume."""
+
+    if input_data.resume is None:
+        return None
+    for message in reversed(input_data.messages):
+        if getattr(message, "role", None) != "assistant":
+            continue
+        message_id = getattr(message, "id", None)
+        if isinstance(message_id, str) and message_id:
+            return message_id
+    return None

@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Wrench,
-  Check,
   FileCode,
   Search,
   Globe,
   Clock,
   AlertTriangle,
+  FolderSearch,
+  Terminal,
 } from 'lucide-react'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
@@ -38,6 +39,13 @@ const TOOL_META: Record<string, { icon: typeof Search; type: string }> = {
   web_search: { icon: Globe, type: 'Web Discovery' },
   fetch_page: { icon: Globe, type: 'Web Discovery' },
   get_current_time: { icon: Clock, type: 'Utility' },
+  ls: { icon: FolderSearch, type: 'Workspace inspection' },
+  find: { icon: FolderSearch, type: 'Workspace inspection' },
+  grep: { icon: Search, type: 'Workspace inspection' },
+  read: { icon: FileCode, type: 'Workspace inspection' },
+  write: { icon: FileCode, type: 'Workspace mutation' },
+  edit: { icon: FileCode, type: 'Workspace mutation' },
+  bash: { icon: Terminal, type: 'Workspace command' },
 }
 
 /**
@@ -59,6 +67,11 @@ function toolMeta(name: string) {
  */
 function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
   const { icon: Icon, type } = toolMeta(tool.name)
+  const capabilityLabel = tool.capability === 'shell'
+    ? 'Shell'
+    : tool.read_only
+      ? 'Read-only'
+      : 'Mutation'
   return (
     <Card index={index}>
       <CardHeader>
@@ -66,8 +79,8 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
         <CardTitle className="font-mono">{tool.name}</CardTitle>
         <CardDescription className="text-xs">{type}</CardDescription>
         <CardAction>
-          <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1">
-            <Check className="size-3" /> Active
+          <Badge variant="outline" className="text-xs">
+            {capabilityLabel}
           </Badge>
         </CardAction>
       </CardHeader>
@@ -92,6 +105,11 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
         {tool.idempotent && (
           <Badge variant="secondary" className="text-[10px] font-normal">
             Idempotent
+          </Badge>
+        )}
+        {tool.requires_approval && (
+          <Badge variant="outline" className="text-[10px] text-amber-400">
+            Approval metadata
           </Badge>
         )}
         <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">

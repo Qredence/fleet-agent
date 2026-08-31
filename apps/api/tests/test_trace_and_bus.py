@@ -50,7 +50,12 @@ async def test_bus_cross_thread_fifo_order():
     def worker() -> None:
         for i in range(5):
             bus.publish_from_worker(
-                ToolStarted(tool_call_id=f"tool_{i}", name="t", input_preview="{}")
+                ToolStarted(
+                    tool_call_id=f"tool_{i}",
+                    name="t",
+                    arguments_json="{}",
+                    input_preview="{}",
+                )
             )
         loop.call_soon_threadsafe(bus.close_from_loop)
 
@@ -90,12 +95,14 @@ def test_full_tool_run_stays_schema_valid_at_every_patch():
     assert state["steps"][0]["status"] == "running"
 
     started = ToolStarted(
-        tool_call_id="tool_a", name="search_docs", input_preview='{"query": "x"}'
+        tool_call_id="tool_a",
+        name="search_docs",
+        arguments_json='{"query":"x"}',
+        input_preview='{"query": "x"}',
     )
     state = _state_after(reducer, wire, reducer.apply_tool_event(started))
     assert [s["id"] for s in state["steps"]] == [
         "step-understand",
-        "step-plan",
         "step-research",
     ]
     assert state["run"]["activeStepId"] == "step-research"
@@ -147,7 +154,12 @@ def test_failed_tool_marks_tool_not_run():
     reducer = TraceReducer(thread_id="t-1", run_id="r-1")
     wire = WireConsumer(reducer)
     wire.feed(reducer.begin())
-    started = ToolStarted(tool_call_id="tool_a", name="search_docs", input_preview="{}")
+    started = ToolStarted(
+        tool_call_id="tool_a",
+        name="search_docs",
+        arguments_json="{}",
+        input_preview="{}",
+    )
     wire.feed(reducer.apply_tool_event(started))
     failed = ToolFailed(
         tool_call_id="tool_a",
@@ -254,6 +266,7 @@ def test_staged_child_steps_and_out_of_order_tools_stay_schema_valid():
                 ToolStarted(
                     tool_call_id=tool_id,
                     name="search_docs",
+                    arguments_json="{}",
                     input_preview="{}",
                     step_id=step_id,
                 )
@@ -301,7 +314,12 @@ def test_second_run_inherits_prior_evidence():
     wire = WireConsumer(reducer)
 
     wire.feed(reducer.begin())
-    started = ToolStarted(tool_call_id="tool_a", name="search_docs", input_preview="{}")
+    started = ToolStarted(
+        tool_call_id="tool_a",
+        name="search_docs",
+        arguments_json="{}",
+        input_preview="{}",
+    )
     wire.feed(reducer.apply_event(started))
     for source in (
         SourceDiscovered(

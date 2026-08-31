@@ -23,6 +23,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -231,6 +232,9 @@ function ToolFallbackArgs({
 }: React.ComponentProps<"div"> & {
   argsText?: string;
 }) {
+  // Nested code surface: the ladder's middle (`mergedBg`) step, matching
+  // the terminal block.
+  const shape = useShape();
   if (!argsText) return null;
 
   return (
@@ -239,7 +243,7 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap">
+      <pre className={cn("aui-tool-fallback-args-value bg-muted/50 text-foreground/90 p-2.5 text-xs whitespace-pre-wrap", shape.mergedBg)}>
         {argsText}
       </pre>
     </div>
@@ -253,6 +257,7 @@ function ToolFallbackResult({
 }: React.ComponentProps<"div"> & {
   result?: unknown;
 }) {
+  const shape = useShape();
   if (result === undefined) return null;
 
   return (
@@ -264,7 +269,7 @@ function ToolFallbackResult({
       <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
         Result:
       </p>
-      <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
+      <pre className={cn("aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 p-2.5 text-xs whitespace-pre-wrap", shape.mergedBg)}>
         {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
       </pre>
     </div>
@@ -306,6 +311,14 @@ function ToolFallbackError({
       </p>
     </div>
   );
+}
+
+function readInterruptPreview(interrupt: unknown): string | null {
+  if (typeof interrupt !== "object" || interrupt === null) return null
+  const metadata = (interrupt as { metadata?: unknown }).metadata
+  if (typeof metadata !== "object" || metadata === null) return null
+  const preview = (metadata as Record<string, unknown>).toolPreview
+  return typeof preview === "string" && preview.trim().length > 0 ? preview : null
 }
 
 const APPROVED_RESULT = "Approved by user";
@@ -367,6 +380,8 @@ function ToolFallbackApproval({
     return null;
 
   if (!offersInterruptAction(status, approval, interrupt)) return null;
+
+  const interruptPreview = readInterruptPreview(interrupt);
 
   // Custom (`_`-prefixed) kinds cannot be resolved to a boolean by the kit;
   // hosts using custom kinds render their own bar. A declared option list is
@@ -486,6 +501,15 @@ function ToolFallbackApproval({
         )}
         {...props}
       >
+        {interruptPreview && (
+          <p
+            data-slot="tool-fallback-approval-preview"
+            title={interruptPreview}
+            className="aui-tool-fallback-approval-preview w-full truncate text-[11px] text-muted-foreground"
+          >
+            <code className="font-mono">{interruptPreview}</code>
+          </p>
+        )}
         {[...allowOptions, ...rejectOptions].map((option) => (
           <Button
             key={option.id}
@@ -517,11 +541,20 @@ function ToolFallbackApproval({
     <div
       data-slot="tool-fallback-approval"
       className={cn(
-        "aui-tool-fallback-approval flex items-center gap-2 pt-1",
+        "aui-tool-fallback-approval flex flex-wrap items-center gap-2 pt-1",
         className,
       )}
       {...props}
     >
+      {interruptPreview && (
+        <p
+          data-slot="tool-fallback-approval-preview"
+          title={interruptPreview}
+          className="aui-tool-fallback-approval-preview w-full truncate text-[11px] text-muted-foreground"
+        >
+          <code className="font-mono">{interruptPreview}</code>
+        </p>
+      )}
       <Button
         size="sm"
         className={pressable}

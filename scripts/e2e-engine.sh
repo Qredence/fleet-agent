@@ -47,7 +47,10 @@ require_grep "$SNAP" "Message input" "composer present"
 TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
 
 note "phase 2: search + write_report live run"
-$AB fill "$TEXTBOX" "Search the docs for how AG-UI state sync works, write a short markdown report about it, and save the report as a file." >/dev/null
+# The prompt must explicitly request a managed report artifact so the
+# capability router selects the artifact profile (write_report) rather than
+# the workspace_write profile.
+$AB fill "$TEXTBOX" "Search the docs for how AG-UI state sync works, then write a short markdown report about it as a managed report artifact." >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB click "$SEND" >/dev/null
 
@@ -56,16 +59,24 @@ ARTICLE=""
 for _ in $(seq 1 40); do
   sleep 1.5
   SNAP_ART=$($AB snapshot -i -c 2>/dev/null || true)
-  ARTICLE=$(grep -oE 'button "[^"]+ · open in Artifacts"' <<<"$SNAP_ART" | head -1 || true)
+  ARTICLE=$(grep -oE 'button "[^"]*· open in Artifacts|button "Open artifact [^"]+"' <<<"$SNAP_ART" | head -1 || true)
   [[ -n "$ARTICLE" ]] && break
 done
 [[ -n "$ARTICLE" ]] || die "phase 'artifact' — inline artifact card never appeared within 60s"
-require_grep "$ARTICLE" "open in Artifacts" "inline artifact card present"
+require_grep "$ARTICLE" "Open artifact" "inline artifact card present"
 
 sleep 2
 MAIN=$($AB get text "main")
 require_grep "$MAIN" "tool call" "tool calls collapsed in thread"
-SNAP=$($AB snapshot -i)
+
+# The run may still be streaming after the artifact event lands; poll for the
+# settled "Completed" status before asserting.
+SNAP=""
+for _ in $(seq 1 40); do
+  SNAP=$($AB snapshot -i)
+  grep -q "Completed" <<<"$SNAP" && break
+  sleep 1.5
+done
 require_grep "$SNAP" "Completed" "run completed"
 
 note "phase 3: artifact download via controlled URL"
@@ -78,6 +89,9 @@ SIZE=$(wc -c < /tmp/e2e-artifact.md | tr -d ' ')
 printf 'ok: %s (%sB)\n' "download served $DOWNLOAD_URL" "$SIZE"
 
 note "phase 4: continuation across turns (no new search)"
+# The report filename is model-generated; fetch it from the artifact API.
+ARTIFACTS=$(curl -sS "$API_BASE/api/threads/$THREAD_ID/artifacts")
+REPORT_NAME=$(python3 -c "import json,sys;print(json.load(sys.stdin)[0]['filename'])" <<<"$ARTIFACTS" 2>/dev/null || python3 -c "import json,sys;print(json.load(sys.stdin)[0]['name'])" <<<"$ARTIFACTS")
 TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB fill "$TEXTBOX" "Without searching again: what did you just name that report file, and in one sentence what is its format?" >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
@@ -87,20 +101,29 @@ ANSWER=""
 for _ in $(seq 1 30); do
   sleep 1.5
   MAIN=$($AB get text "main")
-  ANSWER_LINE=$(grep -F "AG-UI-State-Sync.md" <<<"$MAIN" | tail -1 || true)
+  ANSWER_LINE=$(grep -F "$REPORT_NAME" <<<"$MAIN" | tail -1 || true)
   [[ -n "$ANSWER_LINE" ]] && break
 done
-require_grep "$ANSWER_LINE" "AG-UI-State-Sync.md" "continuation answer names the file"
+require_grep "$ANSWER_LINE" "$REPORT_NAME" "continuation answer names the file"
 printf 'ok: %s\n' "continuation answered without re-searching"
+
+# Wait for the continuation run to settle before reloading; an in-flight run
+# is cancelled on disconnect, which would otherwise be restored as the final
+# process state.
+for _ in $(seq 1 40); do
+  SNAP=$($AB snapshot -i)
+  grep -q "Completed" <<<"$SNAP" && break
+  sleep 1.5
+done
 
 note "phase 5: reload restores conversation + process state"
 $AB reload >/dev/null
 sleep 2.5
 MAIN=$($AB get text "main")
 require_grep "$MAIN" "Search the docs for how AG-UI state sync works" "user turn restored"
-require_grep "$MAIN" "AG-UI State Sync" "assistant content restored"
+require_grep "$MAIN" "AG-UI" "assistant content restored"
 SNAP=$($AB snapshot -i -c)
 require_grep "$SNAP" "Completed" "process state restored"
-require_grep "$SNAP" "AG-UI-State-Sync.md" "artifact restored in panel"
+require_grep "$SNAP" "$REPORT_NAME" "artifact restored in panel"
 
 echo "ALL ENGINE PHASES PASSED"

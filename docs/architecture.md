@@ -40,7 +40,7 @@ flowchart LR
 
     TOOLS -->|"search · report"| DOCS["documentation corpus"]
     TOOLS -->|"optional web"| TAV["Tavily web_search / fetch_page"]
-    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(via LiteLLM / dspy.LM)"]
+    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(OpenAI SDK gateway client / dspy.LM)"]
 
     subgraph DATA["Persistence"]
         PUBLIC --> PG[("PostgreSQL 17")]
@@ -111,7 +111,7 @@ sequenceDiagram
     participant A as /api/agent (FastAPI)
     participant LC as LiveCoordinator
     participant E as AgentEngine (DSPy)
-    participant LM as Model (LiteLLM)
+    participant LM as Model (OpenAI-compatible gateway / dspy.LM)
     participant P as PostgreSQL
 
     U->>A: POST /api/agent (AG-UI RunAgentInput, Accept: SSE)

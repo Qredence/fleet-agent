@@ -1,6 +1,8 @@
 import { useAssistantDataUI } from '@assistant-ui/react'
 
 import { ArtifactCard } from '@/components/elements/artifact-card'
+import { useShape } from '@/lib/shape-context'
+import { cn } from '@/lib/utils'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
 interface ArtifactData {
@@ -32,6 +34,9 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
   const openPanel = useWorkspaceStore((s) => s.setProcessPanelOpen)
   const setTab = useWorkspaceStore((s) => s.setProcessPanelTab)
   const select = useWorkspaceStore((s) => s.setSelectedArtifactId)
+  // The wrapper hugs the card edge-to-edge, so it shares the card's radius
+  // (the shape ladder's `bg` step) and the focus ring stays concentric.
+  const shape = useShape()
 
   if (!data) return null
 
@@ -44,7 +49,10 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
         setTab('artifacts')
         select(data.id)
       }}
-      className="mt-2 block w-full max-w-sm rounded-2xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        'mt-2 block w-full max-w-sm text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        shape.bg,
+      )}
     >
       <ArtifactCard
         title={data.name}

@@ -59,21 +59,23 @@ MAIN=$($AB get text "main")
 require_grep "$MAIN" "tool call" "tool call collapsible in the thread"
 require_grep "$MAIN" "JSON snapshot" "fixture answer text"
 
-SNAP=$($AB snapshot -i -c)
-require_grep "$SNAP" "Completed" "run status Completed in the Activity tab"
-require_grep "$SNAP" "search_docs" "tool execution card"
+$AB click $($AB snapshot -i | grep 'tab "Activity' | sed 's/.*ref=//; s/].*//' | head -1) >/dev/null 2>&1 || true
+sleep 0.3
+PANEL=$($AB get text "[data-slot=\"process-panel\"]")
+require_grep "$PANEL" "Completed" "run status Completed in the Activity tab"
+require_grep "$PANEL" "search_docs" "tool execution card"
 
-$AB click $($AB snapshot -i | grep 'tab "Sources"' | sed 's/.*ref=//; s/].*//' | head -1) >/dev/null
+$AB click $($AB snapshot -i | grep 'tab "Sources' | sed 's/.*ref=//; s/].*//' | head -1) >/dev/null
 sleep 0.4
-SNAP=$($AB snapshot -i -c)
-require_grep "$SNAP" "source:" "sources list present"
+PANEL=$($AB get text "[data-slot=\"process-panel\"]")
+require_grep "$PANEL" "docs.ag-ui.com" "sources list present"
 
 note "phase 3: cancel flow — stop during a run returns to idle"
 TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB fill "$TEXTBOX" "cancel timing probe" >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB click "$SEND" >/dev/null
-sleep 0.55
+sleep 0.2
 SNAP=$($AB snapshot -i)
 require_grep "$SNAP" "Stop generating" "stop button appears during a run"
 CLICKED=$($AB eval "(() => { const b = document.querySelector('button[aria-label=\"Stop generating\"]'); if (!b) return 'gone'; b.click(); return 'clicked'; })()" 2>&1 | tail -1)

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 
 import dspy
 
@@ -128,7 +129,8 @@ async def test_settlement_failure_after_answer_still_finishes_once():
     assert apply_state(events)["run"]["status"] == "completed"
 
 
-async def test_unexpected_failure_still_emits_terminal_when_settlement_fails():
+async def test_unexpected_failure_still_emits_terminal_when_settlement_fails(caplog):
+    caplog.set_level(logging.ERROR)
     from types import SimpleNamespace
 
     from ag_ui.core import RunAgentInput
@@ -173,6 +175,7 @@ async def test_unexpected_failure_still_emits_terminal_when_settlement_fails():
     assert types[-1] == "RUN_ERROR"
     assert "sensitive persistence detail" not in json.dumps(events)
     assert "provider stack trace" not in json.dumps(events)
+    assert "provider stack trace" not in caplog.text
 
 
 async def test_tool_activity_streams_before_final_answer():
@@ -184,11 +187,14 @@ async def test_tool_activity_streams_before_final_answer():
     types = [e["type"] for e in events]
 
     assert types[0] == "RUN_STARTED"
-    assert types[1] == "STATE_SNAPSHOT"
-    assert types.index("STATE_DELTA") == 2  # understanding starts
+    assert types[1] == "TEXT_MESSAGE_START"
+    assert types[2] == "STATE_SNAPSHOT"
+    assert types.index("STATE_DELTA") == 3  # understanding starts
     # Tool lifecycle completes before any assistant text.
-    assert types.index("TOOL_CALL_START") < types.index("TEXT_MESSAGE_START")
-    assert types.index("TOOL_CALL_RESULT") < types.index("TEXT_MESSAGE_START")
+    assert types.index("TEXT_MESSAGE_START") < types.index("TOOL_CALL_START")
+    assert types.index("TOOL_CALL_RESULT") < types.index("TEXT_MESSAGE_CONTENT")
+    assert types.count("TEXT_MESSAGE_START") == 1
+    assert types.count("TEXT_MESSAGE_END") == 1
     assert types[-1] == "RUN_FINISHED"
     assert "RUN_ERROR" not in types
 
@@ -501,7 +507,7 @@ async def test_run_only_engine_falls_back_to_completion_time_answer():
     assert len(starts) == 1
     assert starts[0] is not None
     deltas = [i for i, t in enumerate(types) if t == "STATE_DELTA"]
-    assert types.index("TEXT_MESSAGE_START") > deltas[-1]
+    assert types.index("TEXT_MESSAGE_START") < deltas[-1]
     assert types[-1] == "RUN_FINISHED"
     content = [e for e in events if e["type"] == "TEXT_MESSAGE_CONTENT"]
     assert "".join(e["delta"] for e in content) == "Fallback answer."

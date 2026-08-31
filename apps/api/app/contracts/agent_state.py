@@ -13,6 +13,7 @@ class RunStatus(StrEnum):
     idle = "idle"
     queued = "queued"
     running = "running"
+    interrupted = "interrupted"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"

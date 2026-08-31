@@ -60,7 +60,7 @@ export function WebSearch({
         {take(results, visibleResults).map((result, index) => (
           <div
             key={`${cycle}-${index}-${result.domain}-${result.title}`}
-            className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both hover:bg-foreground/[0.03] -mx-2.5 flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors duration-300"
+            className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both hover:bg-foreground/[0.03] -mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors duration-300"
           >
             <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-medium">
               {result.domain.charAt(0).toUpperCase()}

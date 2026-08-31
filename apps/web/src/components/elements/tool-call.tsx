@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import {
   collapsePanel,
@@ -38,6 +39,10 @@ export function ToolCall({
   onOpenChange,
   className,
 }: ToolCallProps) {
+  // Trigger and chip take the dense-row step (8px, the radius FF keeps for
+  // rows-in-cards); the expanded request/result field is an element-level
+  // card on the shape ladder's `bg` step like the other stream cards.
+  const shape = useShape()
   return (
     <Collapsible
       data-slot="tool-call"
@@ -45,7 +50,7 @@ export function ToolCall({
       onOpenChange={onOpenChange}
       className={cn("w-full max-w-sm", className)}
     >
-      <CollapsibleTrigger className="group/trigger text-foreground/55 hover:text-foreground/90 flex items-center gap-2 rounded-md py-1 text-[13.5px] transition-colors outline-none">
+      <CollapsibleTrigger className="group/trigger text-foreground/55 hover:text-foreground/90 flex items-center gap-2 rounded-lg py-1 text-[13.5px] transition-colors outline-none">
         <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-open/trigger:rotate-90 group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none" />
         <SwapLabel active={running ? 0 : 1} className="text-start">
           <ShimmerLabel
@@ -59,7 +64,7 @@ export function ToolCall({
         <span
           className={cn(
             mono,
-            "bg-foreground/[0.06] text-foreground/70 rounded-md px-1.5 py-0.5",
+            "bg-foreground/[0.06] text-foreground/70 rounded-lg px-1.5 py-0.5",
           )}
         >
           {query}
@@ -71,7 +76,7 @@ export function ToolCall({
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className={cn(collapsePanel, "outline-none")}>
-        <div className={cn(field, "mt-2 overflow-hidden rounded-2xl text-xs")}>
+        <div className={cn(field, shape.bg, "mt-2 overflow-hidden text-xs")}>
           <div className="px-3.5 pt-2.5 pb-2">
             <p className={cn(mono, "text-foreground/35 mb-1")}>Request</p>
             <p className="text-foreground/55 font-mono">{request}</p>

@@ -1,7 +1,8 @@
 from pydantic import SecretStr
 
 from app.agent.engine import DspyAgentEngine
-from app.agent.factory import build_dspy_engine
+from app.agent.factory import _FleetLM, build_dspy_engine
+from app.agent.openai_compatible import OpenAICompatibleLM
 from app.settings import Settings
 
 
@@ -28,9 +29,18 @@ def test_api_key_never_appears_in_reprs():
     assert "sk-test-123" not in repr(engine)
 
 
-def test_base_url_passes_through_to_litellm():
+def test_custom_base_url_uses_the_openai_compatible_client():
     engine = build_dspy_engine(make_settings(llm_base_url="http://localhost:4000/v1"))  # type: ignore[arg-type]
-    assert engine._lm.kwargs["api_base"] == "http://localhost:4000/v1"
+    assert isinstance(engine._lm, OpenAICompatibleLM)
+    assert engine._lm.api_base == "http://localhost:4000/v1"
+    # Model ids reach custom gateways verbatim, with no LiteLLM prefixing.
+    assert engine._lm._gateway_model_id == "test-model"
+
+
+def test_hosted_models_without_a_base_url_keep_litellm_routing():
+    engine = build_dspy_engine(make_settings())
+    assert isinstance(engine._lm, _FleetLM)
+    assert engine._lm.kwargs.get("api_base") is None
 
 
 def test_custom_gateway_advertises_function_calling():
@@ -61,10 +71,7 @@ def test_web_tool_bundle_is_optional_and_owns_cleanup():
 
 
 def test_base_url_defaults_to_none():
-    make = make_settings()
-    print("\nmake llm_base_url:", repr(make.llm_base_url))
-    engine = build_dspy_engine(make)
-    print("engine kwargs api_base:", engine._lm.kwargs.get("api_base"))
+    engine = build_dspy_engine(make_settings())
     assert engine._lm.kwargs.get("api_base") is None
 
 

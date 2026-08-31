@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import {
   collapsePanel,
@@ -32,6 +33,9 @@ export function Sources({
   onOpenChange,
   className,
 }: SourcesProps) {
+  // Each source tile is an element-level card on the shape ladder's `bg`
+  // step (20px in pill mode), matching the artifact and tool cards.
+  const shape = useShape()
   return (
     <Collapsible
       data-slot="sources"
@@ -58,7 +62,8 @@ export function Sources({
               key={`${index}-${source.domain}-${source.title}`}
               className={cn(
                 paper,
-                "flex flex-col gap-1.5 rounded-2xl p-3 transition-transform hover:-translate-y-px",
+                "flex flex-col gap-1.5 p-3 transition-transform hover:-translate-y-px",
+                shape.bg,
               )}
             >
               <div className="flex items-center gap-1.5">

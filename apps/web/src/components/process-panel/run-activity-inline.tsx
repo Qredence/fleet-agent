@@ -12,6 +12,7 @@ import {
   TerminationNotice,
 } from '@/components/process-panel/run-metrics'
 import {
+  StatusIcon,
   StatusChip,
   formatDuration,
 } from '@/components/process-panel/status-chip'
@@ -22,35 +23,38 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import type { AgentWorkspaceState } from '@/contracts/generated'
-import { useHasAgUiRuntime } from '@/features/agent-runtime/ag-ui-presence'
 import { collapsePanel, mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 
 /**
- * Renders the current (latest) agent run's sanitized activity inline, next to
- * the latest assistant message, inside the assistant-ui message tree.
- *
- * `AgentWorkspaceState` is live-only, per-thread, latest-run state: the card
- * always tracks the current run and renders nothing before the first run of
- * the session (restored threads carry no per-message workspace state).
+ * Renders the latest AG-UI activity in the desktop/mobile Process panel.
+ * Unlike the legacy inline projection, this is not tied to the last message:
+ * process state belongs to the AG-UI runtime and is visible independently of
+ * the transcript.
  */
-export function RunActivityInline() {
-  const hasRuntime = useHasAgUiRuntime()
-  const isLast = useAuiState((state) => state.message.isLast)
+export function RunActivityPanel() {
   const isRunning = useAuiState((state) => state.thread.isRunning)
-
-  if (!hasRuntime || !isLast) return null
-  return <RunActivityInlineSubscription isRunning={isRunning} />
-}
-
-/**
- * Subscribes to the AG-UI agent state. Split from {@link RunActivityInline}
- * so `useAgUiState` is only called under an AG-UI runtime (preview routes
- * have none, where the hook would throw).
- */
-function RunActivityInlineSubscription({ isRunning }: { isRunning: boolean }) {
   const agentState = useAgUiState<AgentWorkspaceState>()
-  return <RunActivityInlineContent state={agentState} isRunning={isRunning} />
+
+  if (!hasRunActivity(agentState)) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        Activity from the latest agent run will appear here.
+      </p>
+    )
+  }
+
+  return (
+    <section aria-label="Activity" className="h-full overflow-y-auto p-4">
+      <h3 className={cn(mono, 'mb-2 text-foreground/45 font-normal')}>Activity</h3>
+      <RunActivityInlineContent
+        state={agentState}
+        isRunning={isRunning}
+        variant="panel"
+        detailedTools={false}
+      />
+    </section>
+  )
 }
 
 /**
@@ -59,21 +63,20 @@ function RunActivityInlineSubscription({ isRunning }: { isRunning: boolean }) {
  *
  * @param state - The sanitized agent workspace state for the latest run.
  * @param isRunning - Whether the agent run is currently streaming.
+ * @param detailedTools - Whether to show bounded input/output tool previews.
  */
 export function RunActivityInlineContent({
   state,
   isRunning,
+  variant = 'inline',
+  detailedTools = true,
 }: {
   state: AgentWorkspaceState | undefined
   isRunning: boolean
+  variant?: 'inline' | 'panel'
+  detailedTools?: boolean
 }) {
-  const hasActivity =
-    state !== undefined &&
-    (state.run.status !== 'idle' ||
-      state.steps.length > 0 ||
-      state.decisions.length > 0 ||
-      state.toolCalls.length > 0 ||
-      (state.caveats?.length ?? 0) > 0)
+  const hasActivity = hasRunActivity(state)
 
   // Live elapsed clock: ticks once per second while the run is active so the
   // trigger shows real elapsed time instead of freezing at the last state
@@ -93,6 +96,10 @@ export function RunActivityInlineContent({
   useEffect(() => {
     if (isRunning) setUserOpen(null)
   }, [isRunning])
+
+  // The Process panel owns its own collapsible state: unlike inline cards it
+  // stays mounted across runs, so it does not reset on the next run.
+  const [panelOpen, setPanelOpen] = useState(true)
 
   const toolNamesById = useMemo(
     () => new Map(state?.toolCalls.map((tool) => [tool.id, tool.name]) ?? []),
@@ -128,19 +135,20 @@ export function RunActivityInlineContent({
       ? formatDuration(Math.max(0, nowMs - Date.parse(state.run.startedAt)))
       : formatDuration(state.metrics.durationMs)
   const busy = isRunning || state.run.status === 'queued'
+  const panel = variant === 'panel'
 
   return (
     <Collapsible
       data-slot="run-activity-root"
       aria-label="Run activity"
       aria-busy={busy || undefined}
-      open={userOpen ?? isRunning}
-      onOpenChange={(open) => setUserOpen(open)}
-      className="mt-3 mb-0 w-full"
+      open={panel ? panelOpen : (userOpen ?? isRunning)}
+      onOpenChange={(open) => (panel ? setPanelOpen(open) : setUserOpen(open))}
+      className={cn(!panel && 'mt-3', 'mb-0 w-full')}
     >
       <CollapsibleTrigger
         data-slot="run-activity-trigger"
-        className="group/trigger text-foreground/55 hover:text-foreground/90 data-open:text-foreground/90 flex w-full items-center gap-2.5 rounded-md py-1.5 text-start transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-1 focus-visible:ring-foreground/20"
+        className="group/trigger text-foreground/55 hover:text-foreground/90 data-open:text-foreground/90 flex w-full items-center gap-2.5 rounded-lg py-1.5 text-start transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-1 focus-visible:ring-foreground/20"
       >
         <span className="inline-flex size-3 shrink-0 rtl:-scale-x-100">
           <ChevronRightIcon
@@ -217,9 +225,13 @@ export function RunActivityInlineContent({
                 Tool calls
               </h3>
               <div className="mt-1 flex flex-col">
-                {state.toolCalls.map((tool) => (
-                  <ToolExecutionCard key={tool.id} tool={tool} />
-                ))}
+                {detailedTools
+                  ? state.toolCalls.map((tool) => (
+                      <ToolExecutionCard key={tool.id} tool={tool} />
+                    ))
+                  : state.toolCalls.map((tool) => (
+                      <ToolExecutionSummary key={tool.id} tool={tool} />
+                    ))}
               </div>
             </section>
           )}
@@ -243,5 +255,42 @@ export function RunActivityInlineContent({
         </div>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+function ToolExecutionSummary({
+  tool,
+}: {
+  tool: AgentWorkspaceState['toolCalls'][number]
+}) {
+  return (
+    <article
+      aria-label={`tool: ${tool.name}`}
+      className="flex items-center gap-2.5 py-1"
+    >
+      <StatusIcon status={tool.status} />
+      <code className={cn(mono, 'min-w-0 flex-1 truncate text-foreground/60')}>
+        {tool.name}
+      </code>
+      <span className="shrink-0 text-xs capitalize text-foreground/35">
+        {tool.status}
+      </span>
+      <span className={cn(mono, 'shrink-0 text-foreground/25 tabular-nums')}>
+        {formatDuration(tool.durationMs)}
+      </span>
+    </article>
+  )
+}
+
+function hasRunActivity(
+  state: AgentWorkspaceState | undefined,
+): state is AgentWorkspaceState {
+  return (
+    state !== undefined &&
+    (state.run.status !== 'idle' ||
+      state.steps.length > 0 ||
+      state.decisions.length > 0 ||
+      state.toolCalls.length > 0 ||
+      (state.caveats?.length ?? 0) > 0)
   )
 }

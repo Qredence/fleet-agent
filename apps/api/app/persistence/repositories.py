@@ -459,13 +459,14 @@ class RunsRepository:
             return rows.scalars().first()
 
     async def mark_orphaned_interrupted(self) -> int:
-        """Server-restart reconciliation: runs still marked running/queued are
-        interrupted. Returns how many were marked."""
+        """Fail live and paused runs whose in-memory state was lost."""
         async with self._sessions() as session:
             orphaned = list(
                 (
                     await session.execute(
-                        select(Run).where(Run.status.in_(["running", "queued"]))
+                        select(Run).where(
+                            Run.status.in_(["running", "queued", "interrupted"])
+                        )
                     )
                 ).scalars()
             )
@@ -473,7 +474,7 @@ class RunsRepository:
                 return 0
             result = await session.execute(
                 update(Run)
-                .where(Run.status.in_(["running", "queued"]))
+                .where(Run.status.in_(["running", "queued", "interrupted"]))
                 .values(
                     status="failed",
                     termination_reason="server_restart",

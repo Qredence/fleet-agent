@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, Loader2Icon, XIcon } from "lucide-react";
+import { useShape } from "@/lib/shape-context";
 import { cn } from "@/lib/utils";
 import { mono, paper } from "@/lib/surfaces";
 
@@ -33,13 +34,18 @@ export function ToolGroup({
 }) {
   const running = tools.filter((tool) => tool.state === "running").length;
   const failed = tools.filter((tool) => tool.state === "failed").length;
+  // Element-level stream card: the shape ladder's `bg` step (20px in pill
+  // mode), matching the artifact card so every card in the message stream
+  // shares one radius.
+  const shape = useShape();
 
   return (
     <div
       data-slot="tool-group"
       className={cn(
         paper,
-        "flex w-full max-w-sm flex-col overflow-hidden rounded-2xl",
+        "flex w-full max-w-sm flex-col overflow-hidden",
+        shape.bg,
         className,
       )}
 

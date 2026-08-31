@@ -1,11 +1,13 @@
-import { FileBox, FolderSearch, X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { Activity, X } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
-import { SourcesTab } from '@/components/process-panel/sources-tab'
+import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
 import { FileExplorer } from '@/components/process-panel/file-explorer'
+import { RunActivityPanel } from '@/components/process-panel/run-activity-inline'
+import { SourcesTab } from '@/components/process-panel/sources-tab'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AgentWorkspaceState } from '@/contracts/generated'
@@ -18,6 +20,7 @@ import {
 } from '@/state/workspace-store'
 
 const TABS: { value: ProcessPanelTab; label: string }[] = [
+  { value: 'activity', label: 'Activity' },
   { value: 'sources', label: 'Sources' },
   { value: 'artifacts', label: 'Artifacts' },
 ]
@@ -25,6 +28,8 @@ const TABS: { value: ProcessPanelTab; label: string }[] = [
 /**
  * Minimal process header: a plain heading and a close action. The file path
  * lives with the file explorer; no breadcrumb, copy, or open actions.
+ *
+ * @param onClose - Callback invoked when closing the process panel.
  */
 function ProcessHeader({ onClose }: { onClose: () => void }) {
   return (
@@ -49,7 +54,12 @@ function ProcessHeader({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Renders the process panel showing sources, artifacts, and file exploration.
+ * Renders the process panel showing run activity, sources, artifacts, and
+ * file exploration.
+ *
+ * The shell is shared by the live runtime and runtime-less preview routes;
+ * only the tab bodies differ, and AG-UI hooks are confined to the `Active*`
+ * components below because they throw without a mounted runtime.
  *
  * @param onClose - Callback invoked when closing the process panel.
  * @param customContent - Optional custom content to render instead of the standard tabs.
@@ -61,206 +71,156 @@ export function ProcessPanel({
   onClose: () => void
   customContent?: ReactNode
 }) {
+  return (
+    <aside
+      data-slot="process-panel"
+      aria-labelledby="process-heading"
+      className={cn('flex h-full min-w-0 flex-col border-s', surfaceClasses(1))}
+    >
+      <ProcessHeader onClose={onClose} />
+
+      {customContent ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {customContent}
+        </div>
+      ) : (
+        <ProcessPanelBody />
+      )}
+    </aside>
+  )
+}
+
+/** Tab strip, tab bodies, and the docked file explorer. */
+function ProcessPanelBody() {
   const hasAgUi = useHasAgUiRuntime()
-  return hasAgUi ? (
-    <ActiveProcessPanel onClose={onClose} customContent={customContent} />
-  ) : (
-    <FallbackProcessPanel onClose={onClose} customContent={customContent} />
-  )
-}
-
-function ActiveProcessPanel({
-  onClose,
-  customContent,
-}: {
-  onClose: () => void
-  customContent?: ReactNode
-}) {
-  const [selectedFilePath, setSelectedFilePath] = useState('README.md')
   const activeTab = useWorkspaceStore((s) => s.processPanelTab)
   const setActiveTab = useWorkspaceStore((s) => s.setProcessPanelTab)
-
-  const state = useAgUiState<AgentWorkspaceState>()
-
-  const sources = state?.sources ?? []
-  const artifacts = state?.artifacts ?? []
-
-  return (
-    <aside
-      data-slot="process-panel"
-      aria-labelledby="process-heading"
-      className={cn('flex h-full min-w-0 flex-col border-s', surfaceClasses(1))}
-    >
-      <ProcessHeader onClose={onClose} />
-
-      {customContent ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {customContent}
-        </div>
-      ) : (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as ProcessPanelTab)}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="flex shrink-0 items-center justify-between border-b px-4">
-            <TabsList className="h-10 gap-4 bg-transparent p-0">
-              {TABS.map(({ value, label }) => {
-                const count =
-                  value === 'sources' ? sources.length : artifacts.length
-                return (
-                  <TabsTrigger
-                    key={value}
-                    value={value}
-                    className="relative h-10 rounded-none border-b-2 border-transparent px-1 pb-2 pt-2 text-xs font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                  >
-                    {label}
-                    {count > 0 && (
-                      <span className="ms-1.5 rounded-full bg-muted px-1.5 py-0.2 text-[10px] font-semibold text-muted-foreground">
-                        {count}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                )
-              })}
-            </TabsList>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <TabsContent
-              value="sources"
-              className="mt-0 h-full p-4 data-[state=inactive]:hidden"
-            >
-              {sources.length === 0 ? (
-                <EmptyTabState
-                  icon={FolderSearch}
-                  title="No sources discovered"
-                  description="Sources referenced during agent runs will appear here."
-                />
-              ) : (
-                <SourcesTab sources={sources} />
-              )}
-            </TabsContent>
-
-            <TabsContent
-              value="artifacts"
-              className="mt-0 h-full p-4 data-[state=inactive]:hidden"
-            >
-              {artifacts.length === 0 ? (
-                <EmptyTabState
-                  icon={FileBox}
-                  title="No artifacts generated"
-                  description="Files, reports, and code produced by the agent will be listed here."
-                />
-              ) : (
-                <ArtifactsTab artifacts={artifacts} />
-              )}
-            </TabsContent>
-          </div>
-
-          <FileExplorer
-            selectedPath={selectedFilePath}
-            onSelectPath={setSelectedFilePath}
-          />
-        </Tabs>
-      )}
-    </aside>
-  )
-}
-
-function FallbackProcessPanel({
-  onClose,
-  customContent,
-}: {
-  onClose: () => void
-  customContent?: ReactNode
-}) {
   const [selectedFilePath, setSelectedFilePath] = useState('README.md')
-  const activeTab = useWorkspaceStore((s) => s.processPanelTab)
-  const setActiveTab = useWorkspaceStore((s) => s.setProcessPanelTab)
 
   return (
-    <aside
-      data-slot="process-panel"
-      aria-labelledby="process-heading"
-      className={cn('flex h-full min-w-0 flex-col border-s', surfaceClasses(1))}
-    >
-      <ProcessHeader onClose={onClose} />
-
-      {customContent ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {customContent}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as ProcessPanelTab)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="flex shrink-0 items-center border-b px-4">
+          <TabsList
+            variant="line"
+            className="h-10 w-full justify-start gap-4 rounded-none bg-transparent p-0"
+          >
+            {TABS.map(({ value, label }) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="h-full rounded-none border-none px-1 pb-2 pt-2 text-xs font-medium text-muted-foreground"
+              >
+                {label}
+                <TabCountBadge hasAgUi={hasAgUi} tab={value} />
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
-      ) : (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as ProcessPanelTab)}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <div className="flex shrink-0 items-center justify-between border-b px-4">
-            <TabsList className="h-10 gap-4 bg-transparent p-0">
-              {TABS.map(({ value, label }) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="relative h-10 rounded-none border-b-2 border-transparent px-1 pb-2 pt-2 text-xs font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                >
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <TabsContent
-              value="sources"
-              className="mt-0 h-full p-4 data-[state=inactive]:hidden"
-            >
-              <EmptyTabState
-                icon={FolderSearch}
-                title="No sources discovered"
-                description="Sources referenced during agent runs will appear here."
-              />
-            </TabsContent>
+        <TabsContent value="activity" className="mt-0 h-full">
+          {hasAgUi ? (
+            <RunActivityPanel />
+          ) : (
+            <EmptyTabState
+              icon={Activity}
+              title="No activity yet"
+              description="Activity from the latest agent run will appear here."
+            />
+          )}
+        </TabsContent>
 
-            <TabsContent
-              value="artifacts"
-              className="mt-0 h-full p-4 data-[state=inactive]:hidden"
-            >
-              <EmptyTabState
-                icon={FileBox}
-                title="No artifacts generated"
-                description="Files, reports, and code produced by the agent will be listed here."
-              />
-            </TabsContent>
-          </div>
+        <TabsContent value="sources" className="mt-0 h-full">
+          {hasAgUi ? (
+            <ActiveSourcesTab />
+          ) : (
+            <SourcesTab sources={[]} />
+          )}
+        </TabsContent>
 
-          <FileExplorer
-            selectedPath={selectedFilePath}
-            onSelectPath={setSelectedFilePath}
-          />
-        </Tabs>
-      )}
-    </aside>
-  )
-}
+        <TabsContent value="artifacts" className="mt-0 h-full">
+          {hasAgUi ? (
+            <ActiveArtifactsTab />
+          ) : (
+            <ArtifactsTab artifacts={[]} />
+          )}
+        </TabsContent>
+      </Tabs>
 
-function EmptyTabState({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: typeof FolderSearch
-  title: string
-  description: string
-}) {
-  return (
-    <div className="flex h-48 flex-col items-center justify-center gap-2 text-center">
-      <Icon className="size-6 text-muted-foreground" />
-      <div className="space-y-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
+      <FileExplorer
+        selectedPath={selectedFilePath}
+        onSelectPath={setSelectedFilePath}
+      />
     </div>
+  )
+}
+
+/**
+ * Count pill for a tab trigger. AG-UI state is only readable with a mounted
+ * runtime, so the hook lives in a component that renders only when one is.
+ *
+ * @param hasAgUi - Whether an AG-UI runtime is mounted above the panel.
+ * @param tab - The tab the count belongs to.
+ */
+function TabCountBadge({
+  hasAgUi,
+  tab,
+}: {
+  hasAgUi: boolean
+  tab: ProcessPanelTab
+}) {
+  if (!hasAgUi) return null
+  return <AgUiTabCount tab={tab} />
+}
+
+function AgUiTabCount({ tab }: { tab: ProcessPanelTab }) {
+  const state = useAgUiState<AgentWorkspaceState>()
+  const count =
+    tab === 'sources'
+      ? (state?.sources.length ?? 0)
+      : tab === 'artifacts'
+        ? (state?.artifacts.length ?? 0)
+        : 0
+
+  if (count === 0) return null
+
+  return (
+    <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">
+      {count}
+    </span>
+  )
+}
+
+/** Sources from the live AG-UI state, enriched with tool attribution. */
+function ActiveSourcesTab() {
+  const state = useAgUiState<AgentWorkspaceState>()
+  const toolNamesById = useMemo(
+    () =>
+      new Map((state?.toolCalls ?? []).map((tool) => [tool.id, tool.name])),
+    [state?.toolCalls],
+  )
+
+  return (
+    <SourcesTab
+      sources={state?.sources ?? []}
+      toolNamesById={toolNamesById}
+    />
+  )
+}
+
+/** Artifacts from the live AG-UI state. */
+function ActiveArtifactsTab() {
+  const state = useAgUiState<AgentWorkspaceState>()
+  const selectedArtifactId = useWorkspaceStore((s) => s.selectedArtifactId)
+
+  return (
+    <ArtifactsTab
+      artifacts={state?.artifacts ?? []}
+      selectedArtifactId={selectedArtifactId}
+    />
   )
 }

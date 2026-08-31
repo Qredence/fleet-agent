@@ -17,13 +17,14 @@ from dataclasses import replace
 from typing import Any, cast
 
 import dspy
+from ag_ui.core import ResumeEntry
 from pydantic import BaseModel, Field
 
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentRunContext, AgentRunResult, _map_result
-from app.agent.instrumented import sanitize_args
+from app.agent.instrumented import preview, public_tool_args_json
 from app.agent.signature import AgentSignature
-from app.agent.tool_registry import ToolRegistry
+from app.agent.tool_registry import ToolRegistry, wrap_tool_with_guard
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
@@ -125,6 +126,23 @@ class _Budget:
                 raise _BudgetExceeded("tool_call_budget_exhausted")
             self.tool_calls += 1
 
+    def ensure_model(self) -> None:
+        """Abort at an orchestrator-owned boundary once the cap is hit.
+
+        DSPy 3.3.1's ``with_callbacks`` swallows exceptions raised inside
+        start callbacks, so the ``before_model``/``before_tool`` hooks keep
+        counting but can never stop a call. These checks run outside DSPy
+        where the raise actually propagates.
+        """
+        with self._lock:
+            if self.model_calls >= self.max_model_calls:
+                raise _BudgetExceeded("model_call_budget_exhausted")
+
+    def ensure_tool(self) -> None:
+        with self._lock:
+            if self.tool_calls >= self.max_tool_calls:
+                raise _BudgetExceeded("tool_call_budget_exhausted")
+
 
 class _BudgetExceeded(RuntimeError):
     def __init__(self, code: str) -> None:
@@ -225,8 +243,11 @@ class _ParallelResearchModule(dspy.Module):  # type: ignore[misc]
                     error_code="task_timeout",
                     error_message="The research task exceeded its time limit.",
                 )
-            except Exception:
-                logger.exception("staged research task failed")
+            except Exception as exc:
+                logger.error(
+                    "staged research task failed (exception_type=%s)",
+                    type(exc).__name__,
+                )
                 outcome = _WorkerOutcome(
                     task=self._task,
                     status="failed",
@@ -266,7 +287,7 @@ class StagedDspyEngine:
     def __init__(
         self,
         *,
-        lm: dspy.LM,
+        lm: dspy.BaseLM,
         adapter: dspy.Adapter | None,
         registry: ToolRegistry,
         bus: RunEventBus,
@@ -312,8 +333,17 @@ class StagedDspyEngine:
         user_request: str,
         history: Any | None,
         context: AgentRunContext,
+        resume: list[ResumeEntry] | None = None,
     ) -> AgentRunResult:
         del context
+        if resume is not None:
+            return AgentRunResult(
+                status="failed",
+                answer=None,
+                process_summary="The approval response could not be applied.",
+                termination_reason="approval_invalid",
+                error_code="approval_invalid",
+            )
         # Keep the entire staged lifecycle in one worker thread.  In
         # particular, per-run HTTP clients are closed there after nested DSPy
         # workers have finished, even if the outer asyncio task is cancelled.
@@ -337,8 +367,11 @@ class StagedDspyEngine:
                 termination_reason="cancelled",
                 error_code="run_cancelled",
             )
-        except Exception:
-            logger.exception("staged DSPy run failed")
+        except Exception as exc:
+            logger.error(
+                "staged DSPy run failed (exception_type=%s)",
+                type(exc).__name__,
+            )
             self._fail_open_steps("The staged reasoning step failed.")
             return AgentRunResult(
                 status="failed",
@@ -351,8 +384,11 @@ class StagedDspyEngine:
             if self._cleanup is not None:
                 try:
                     self._cleanup()
-                except Exception:
-                    logger.exception("staged agent resource cleanup failed")
+                except Exception as exc:
+                    logger.error(
+                        "staged agent resource cleanup failed (exception_type=%s)",
+                        type(exc).__name__,
+                    )
 
     async def _run_async(
         self, user_request: str, cancel_token: RunCancelToken
@@ -622,6 +658,7 @@ class StagedDspyEngine:
             )
 
     async def _plan_async(self, user_request: str) -> ResearchPlan:
+        self._ensure_budget_model()
         # Preserve the synchronous override seam used by provider-free tests
         # and integrations while the production path uses DSPy's asyncify.
         if type(self)._plan_sync is not StagedDspyEngine._plan_sync:
@@ -693,6 +730,7 @@ class StagedDspyEngine:
         cancel_token: RunCancelToken,
     ) -> _WorkerOutcome:
         cancel_token.check()
+        self._ensure_budget_for_researcher()
         allowed = [
             name
             for name in task.tools
@@ -721,9 +759,7 @@ class StagedDspyEngine:
         )
         worker = dspy.ReActV2(
             AgentSignature,
-            tools=self._registry.dspy_tools(
-                read_only_only=True, allowed_names=allowed, isolate=True
-            ),
+            tools=self._guarded_research_tools(allowed, cancel_token),
             max_iters=self._researcher_max_iters,
         )
         with dspy.context(
@@ -754,6 +790,7 @@ class StagedDspyEngine:
         )
 
     async def _critic_async(self, user_request: str, evidence: str) -> str:
+        self._ensure_budget_model()
         if type(self)._critic_sync is not StagedDspyEngine._critic_sync:
             return await asyncio.to_thread(self._critic_sync, user_request, evidence)
         module = dspy.Predict(CriticSignature)
@@ -783,6 +820,7 @@ class StagedDspyEngine:
     async def _synthesize_async(
         self, user_request: str, evidence: str, critique: str
     ) -> AgentRunResult:
+        self._ensure_budget_model()
         if type(self)._synthesize_sync is not StagedDspyEngine._synthesize_sync:
             return await asyncio.to_thread(
                 self._synthesize_sync, user_request, evidence, critique
@@ -854,13 +892,16 @@ class StagedDspyEngine:
             )
         tool_call_id = "staged-write-report"
         self._set_report_status("export", "writing")
+        arguments_json = public_tool_args_json(
+            "write_report",
+            {"title": "Agent report", "content": result.answer or ""},
+        )
         self._publish(
             ToolStarted(
                 tool_call_id=tool_call_id,
                 name="write_report",
-                input_preview=sanitize_args(
-                    {"title": "Agent report", "content": result.answer or ""}
-                ),
+                arguments_json=arguments_json,
+                input_preview=preview(arguments_json),
                 step_id="step-synthesis",
             )
         )
@@ -1051,6 +1092,41 @@ class StagedDspyEngine:
         if phase is not None:
             self._publish_inline_progress()
             self._publish_report_snapshot()
+
+    def _ensure_budget_model(self) -> None:
+        """Stop a phase before it starts once the model budget is exhausted."""
+        if self._active_budget is not None:
+            self._active_budget.ensure_model()
+
+    def _ensure_budget_for_researcher(self) -> None:
+        """Fail a researcher before it starts once a budget is exhausted."""
+        budget = self._active_budget
+        if budget is None:
+            return
+        budget.ensure_model()
+        budget.ensure_tool()
+
+    def _guarded_research_tools(
+        self, allowed: list[str], cancel_token: RunCancelToken
+    ) -> list[dspy.Tool]:
+        """Guard researcher tools so budget and cancel checks abort work.
+
+        Exceptions raised from DSPy start callbacks are swallowed, but a
+        guard on the tool callable stops real tool work (fetches, searches)
+        the moment the budget is exhausted or the run is cancelled.
+        """
+        budget = self._active_budget
+        tools = self._registry.dspy_tools(
+            read_only_only=True, allowed_names=allowed, isolate=True
+        )
+        if budget is None:
+            return tools
+
+        def guard() -> None:
+            budget.ensure_tool()
+            cancel_token.check()
+
+        return [wrap_tool_with_guard(tool, guard) for tool in tools]
 
     def _budget_callbacks(self) -> list[AgUiRunCallback]:
         return [

@@ -130,6 +130,7 @@ export function persistThreadMessage(
 export function persistThreadHead(
   threadId: string,
   headId: string | null,
+  init: Pick<RequestInit, 'signal'> = {},
 ): Promise<{ headId: string | null }> {
   return apiFetch<{ headId: string | null }>(
     `/api/threads/${threadId}/history/head`,
@@ -137,6 +138,7 @@ export function persistThreadHead(
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ headId }),
+      ...init,
     },
   )
 }

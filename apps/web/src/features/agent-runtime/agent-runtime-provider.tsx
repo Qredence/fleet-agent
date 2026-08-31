@@ -19,10 +19,47 @@ import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-pres
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
+import { getAgentProviderHeaders } from '@/lib/providers'
 
 const AGENT_URL = `${
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 }/api/agent`
+const AGENT_PATHNAME = new URL(AGENT_URL).pathname
+
+function isAgentRunRequest(url: string | URL, requestInit: RequestInit): boolean {
+  if (requestInit.method?.toUpperCase() !== 'POST') return false
+  try {
+    // Compare against the agent URL's own pathname so path-prefixed API
+    // base URLs (e.g. VITE_API_BASE_URL="https://host/fleet") still match.
+    return new URL(String(url), AGENT_URL).pathname === AGENT_PATHNAME
+  } catch {
+    return String(url)
+      .split('?', 1)[0]
+      .endsWith(AGENT_PATHNAME)
+  }
+}
+
+/** Add browser-owned provider headers only to the agent POST request. */
+export function createAgentFetch(
+  threadId?: string,
+): (url: string, requestInit: RequestInit) => Promise<Response> {
+  return async (url, requestInit) => {
+    const isAgentRequest = isAgentRunRequest(url, requestInit)
+    if (threadId && isAgentRequest) {
+      await waitForThreadHistoryWrites(threadId)
+    }
+    const headers = new Headers(requestInit.headers)
+    if (isAgentRequest) {
+      // Browser-owned provider profile headers (BYOK): only ever attached to
+      // the agent run POST, never to other Fleet API resources.
+      const providerHeaders = getAgentProviderHeaders()
+      for (const [k, v] of Object.entries(providerHeaders)) {
+        headers.set(k, v)
+      }
+    }
+    return fetch(url, { ...requestInit, headers })
+  }
+}
 
 const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 
@@ -75,16 +112,7 @@ export function AgentRuntimeProvider({
     () =>
       new HttpAgent({
         url: AGENT_URL,
-        fetch: async (url, requestInit) => {
-          if (
-            threadId &&
-            requestInit.method?.toUpperCase() === 'POST' &&
-            url.includes('/api/agent')
-          ) {
-            await waitForThreadHistoryWrites(threadId)
-          }
-          return fetch(url, requestInit)
-        },
+        fetch: createAgentFetch(threadId),
         ...(API_KEY ? { headers: { 'X-API-Key': API_KEY } } : {}),
       }),
     [threadId],

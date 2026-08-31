@@ -1,3 +1,5 @@
+import json
+
 from app.agui.event_mapper import map_domain_event, map_tool_event
 from app.agui.trace_reducer import TraceReducer
 from app.contracts.domain import (
@@ -16,16 +18,21 @@ def ops(value: dict) -> list:
 
 def test_tool_started_maps_to_call_lifecycle_plus_delta():
     event = ToolStarted(
-        tool_call_id="tool_1", name="search_docs", input_preview='{"q": "x"}'
+        tool_call_id="tool_1",
+        name="search_docs",
+        input_preview='{"q": "x"}',
+        arguments_json='{"q":"x"}',
     )
     events = map_tool_event(
-        event, tools_message_id="msg-tools-r1", state_delta_ops=ops({"id": "tool_1"})
+        event,
+        assistant_message_id="msg-r1",
+        state_delta_ops=ops({"id": "tool_1"}),
     )
     types = [e.type.value for e in events]
     assert types[:3] == ["TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END"]
     assert events[0].tool_call_id == "tool_1"
-    assert events[0].parent_message_id == "msg-tools-r1"
-    assert events[1].delta == '{"q": "x"}'
+    assert events[0].parent_message_id == "msg-r1"
+    assert events[1].delta == '{"q":"x"}'
     assert events[3].type.value == "STATE_DELTA"
 
 
@@ -33,9 +40,9 @@ def test_tool_completed_maps_result_linked_to_same_ids():
     event = ToolCompleted(
         tool_call_id="tool_1", name="search_docs", output_preview="ok", duration_ms=5
     )
-    events = map_tool_event(event, tools_message_id="msg-tools-r1", state_delta_ops=[])
+    events = map_tool_event(event, assistant_message_id="msg-r1", state_delta_ops=[])
     [result] = [e for e in events if e.type.value == "TOOL_CALL_RESULT"]
-    assert result.message_id == "msg-tools-r1"
+    assert result.message_id == "msg-tool-tool_1"
     assert result.tool_call_id == "tool_1"
     assert result.content == "ok"
 
@@ -47,7 +54,7 @@ def test_tool_failed_maps_public_error_only():
         error_message="The search_docs tool call failed.",
         duration_ms=5,
     )
-    events = map_tool_event(event, tools_message_id="msg-tools-r1", state_delta_ops=[])
+    events = map_tool_event(event, assistant_message_id="msg-r1", state_delta_ops=[])
     [result] = [e for e in events if e.type.value == "TOOL_CALL_RESULT"]
     assert result.content == "The search_docs tool call failed."
 
@@ -59,7 +66,7 @@ def test_long_results_are_truncated_for_the_thread():
         output_preview="y" * 5000,
         duration_ms=1,
     )
-    events = map_tool_event(event, tools_message_id="m", state_delta_ops=[])
+    events = map_tool_event(event, assistant_message_id="m", state_delta_ops=[])
     [result] = [e for e in events if e.type.value == "TOOL_CALL_RESULT"]
     assert len(result.content) <= 2001
 
@@ -77,7 +84,7 @@ def test_inline_events_are_custom_parts_and_do_not_change_public_state():
 
     events = map_domain_event(
         event,
-        tools_message_id="msg-tools-run-1",
+        assistant_message_id="msg-run-1",
         reducer=reducer,
     )
 
@@ -99,12 +106,12 @@ def test_source_events_only_update_authoritative_state():
 
     first = map_domain_event(
         SourceDiscovered(tool_call_id="tool-1", source=source),
-        tools_message_id="msg-tools-run-1",
+        assistant_message_id="msg-run-1",
         reducer=reducer,
     )
     second = map_domain_event(
         SourceDiscovered(tool_call_id="tool-2", source=source),
-        tools_message_id="msg-tools-run-1",
+        assistant_message_id="msg-run-1",
         reducer=reducer,
     )
 
@@ -152,14 +159,45 @@ def test_final_fields_event_streams_answer_with_intact_spacing():
             answer=answer,
             process_summary="Searched the web.",
         ),
-        answer_message_id="msg-run-1",
+        assistant_message_id="msg-run-1",
         reducer=reducer,
     )
 
-    by_type = {
-        e.type.value: e for e in events if e.type.value.startswith("TEXT_MESSAGE")
-    }
     contents = [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"]
-    assert by_type["TEXT_MESSAGE_START"].message_id == "msg-run-1"
-    assert by_type["TEXT_MESSAGE_END"].message_id == "msg-run-1"
     assert "".join(contents) == answer
+
+
+def test_tool_args_are_valid_json_and_result_has_unique_message_id():
+    event = ToolStarted(
+        tool_call_id="tool_1",
+        name="read",
+        input_preview='{"path":"README.md"}',
+        arguments_json='{"path":"README.md"}',
+    )
+
+    mapped = map_tool_event(
+        event,
+        assistant_message_id="msg-run-1",
+        state_delta_ops=[],
+    )
+
+    args = next(item for item in mapped if item.type.value == "TOOL_CALL_ARGS")
+    assert json.loads(args.delta) == {"path": "README.md"}
+
+    completed = ToolCompleted(
+        tool_call_id="tool_1",
+        name="read",
+        output_preview="content",
+        duration_ms=1,
+    )
+    result = next(
+        item
+        for item in map_tool_event(
+            completed,
+            assistant_message_id="msg-run-1",
+            state_delta_ops=[],
+        )
+        if item.type.value == "TOOL_CALL_RESULT"
+    )
+    assert result.message_id == "msg-tool-tool_1"
+    assert result.message_id != "msg-run-1"

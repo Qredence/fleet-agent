@@ -35,6 +35,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useProviders } from "@/hooks/use-providers";
+import { SERVER_DEFAULT_ID } from "@/lib/providers";
 import {
   ComposerPrimitive,
   type Unstable_DirectiveFormatter,
@@ -52,15 +54,7 @@ export type EffortLevel = "Low" | "Medium" | "High";
 export type ComposerSpeed = "Fast" | "Standard";
 export type ComposerAccess = "Full access" | "Read-only";
 
-export interface ModelOption {
-  id: string;
-  name: string;
-  shortName: string;
-  meta: string;
-}
-
 export interface ComposerPreferences {
-  model: ModelOption;
   effort: EffortLevel;
   speed: ComposerSpeed;
   access: ComposerAccess;
@@ -103,25 +97,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-const AVAILABLE_MODELS: ModelOption[] = [
-  { id: "luna", name: "5.6 Luna", shortName: "5.6 Luna", meta: "Default • Fast" },
-  {
-    id: "gpt-4o-mini",
-    name: "openai/gpt-4o-mini",
-    shortName: "GPT-4o mini",
-    meta: "OpenAI • Balanced",
-  },
-  { id: "o3-mini", name: "openai/o3-mini", shortName: "o3-mini", meta: "Reasoning • Staged" },
-  {
-    id: "claude-3-5",
-    name: "anthropic/claude-3-5-sonnet",
-    shortName: "Claude 3.5",
-    meta: "Anthropic • Deep",
-  },
-];
-
 const DEFAULT_PREFERENCES: ComposerPreferences = {
-  model: AVAILABLE_MODELS[0]!,
   effort: "High",
   speed: "Fast",
   access: "Full access",
@@ -129,7 +105,6 @@ const DEFAULT_PREFERENCES: ComposerPreferences = {
 
 interface ComposerPreferencesContextValue {
   preferences: ComposerPreferences;
-  setModel: (model: ModelOption) => void;
   setEffort: (effort: EffortLevel) => void;
   setSpeed: (speed: ComposerSpeed) => void;
   setAccess: (access: ComposerAccess) => void;
@@ -146,20 +121,18 @@ const ComposerPreferencesContext =
 export function ComposerPreferencesProvider({
   children,
 }: PropsWithChildren) {
-  const [model, setModel] = useState(DEFAULT_PREFERENCES.model);
   const [effort, setEffort] = useState<EffortLevel>(DEFAULT_PREFERENCES.effort);
   const [speed, setSpeed] = useState<ComposerSpeed>(DEFAULT_PREFERENCES.speed);
   const [access, setAccess] = useState<ComposerAccess>(DEFAULT_PREFERENCES.access);
 
   const value = useMemo<ComposerPreferencesContextValue>(
     () => ({
-      preferences: { model, effort, speed, access },
-      setModel,
+      preferences: { effort, speed, access },
       setEffort,
       setSpeed,
       setAccess,
     }),
-    [model, effort, speed, access],
+    [effort, speed, access],
   );
 
   return (
@@ -186,10 +159,14 @@ function useComposerPreferences(): ComposerPreferencesContextValue {
 }
 
 export const ComposerModelPicker: FC = () => {
-  const { preferences, setModel, setEffort, setSpeed } = useComposerPreferences();
+  const { preferences, setEffort, setSpeed } = useComposerPreferences();
   const [open, setOpen] = useState(false);
+  const { profiles, activeProviderId, setActiveProviderId } = useProviders();
 
-  const triggerLabel = `${preferences.model.shortName} ${preferences.effort}${
+  const activeProfile = profiles.find((entry) => entry.id === activeProviderId);
+  const providerLabel = activeProfile ? activeProfile.name : "Server default";
+
+  const triggerLabel = `${providerLabel} ${preferences.effort}${
     preferences.speed === "Fast" ? "" : " (Standard)"
   }`;
 
@@ -208,28 +185,42 @@ export const ComposerModelPicker: FC = () => {
       <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-1rem)] space-y-1 p-1.5 text-xs">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Model
+            Provider
           </DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={preferences.model.id}
-            onValueChange={(value) => {
-              const model = AVAILABLE_MODELS.find((entry) => entry.id === value);
-              if (model) setModel(model);
-            }}
+            value={activeProviderId}
+            onValueChange={(value) => setActiveProviderId(value)}
           >
-            {AVAILABLE_MODELS.map((model) => (
+            <DropdownMenuRadioItem
+              value={SERVER_DEFAULT_ID}
+              className="flex cursor-pointer items-center justify-between py-1.5"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-medium">Server default</span>
+                <span className="text-[10px] text-muted-foreground">
+                  Server-configured model
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+            {profiles.map((profile) => (
               <DropdownMenuRadioItem
-                key={model.id}
-                value={model.id}
+                key={profile.id}
+                value={profile.id}
                 className="flex cursor-pointer items-center justify-between py-1.5"
               >
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">{model.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{model.meta}</span>
+                  <span className="truncate font-medium">{profile.name}</span>
+                  <span className="truncate text-[10px] text-muted-foreground">
+                    {profile.modelId || profile.baseUrl}
+                  </span>
                 </span>
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
+          <p className="px-2 pb-1 pt-1.5 text-[10px] leading-4 text-muted-foreground">
+            The selected provider routes engine runs. Manage keys and models in
+            Settings → Providers &amp; Models.
+          </p>
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

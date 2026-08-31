@@ -80,7 +80,7 @@ export function ProcessStepCard({
           type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded((open) => !open)}
-          className="flex w-full items-start gap-2.5 rounded-md py-1.5 pe-1 text-start transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-1 focus-visible:ring-foreground/20"
+          className="flex w-full items-start gap-2.5 rounded-lg py-1.5 pe-1 text-start transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-1 focus-visible:ring-foreground/20"
         >
           {row}
         </button>
