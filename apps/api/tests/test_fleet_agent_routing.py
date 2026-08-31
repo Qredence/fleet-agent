@@ -106,17 +106,30 @@ def test_selected_profile_receives_history_without_rebuilding_modules(monkeypatc
         lambda **kwargs: dspy.Prediction(route="workspace_read"),
     )
 
-    def fake_forward(**kwargs):
+    def fake_evidence(**kwargs):
         captured.update(kwargs)
-        return dspy.Prediction(answer="done")
+        return dspy.Prediction(history=history, termination_reason="evidence_submit")
 
-    monkeypatch.setattr(program.workspace_read_agent, "forward", fake_forward)
+    monkeypatch.setattr(program.workspace_read_agent, "forward", fake_evidence)
+    monkeypatch.setattr(
+        program.synthesizer,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            answer="done",
+            process_summary="inspected",
+            key_decisions=[],
+            caveats=[],
+        ),
+    )
     prediction = program(user_request="inspect files", history=history)
 
     assert prediction.answer == "done"
     assert captured["user_request"] == "inspect files"
     assert captured["history"] is history
     assert prediction.agent_route == "workspace_read"
+    # The evidence loop's history rides on the final prediction for
+    # continuation; the synthesizer never sees the raw next_thought text.
+    assert prediction.history is history
 
 
 def test_invalid_router_output_falls_back_to_direct_without_escalation(monkeypatch):
@@ -128,11 +141,21 @@ def test_invalid_router_output_falls_back_to_direct_without_escalation(monkeypat
         lambda **kwargs: dspy.Prediction(route="not-a-route"),
     )
 
-    def fake_direct(**kwargs):
+    def fake_evidence(**kwargs):
         captured.update(kwargs)
-        return dspy.Prediction(answer="direct")
+        return dspy.Prediction(history=None, termination_reason="evidence_submit")
 
-    monkeypatch.setattr(program.direct_agent, "forward", fake_direct)
+    monkeypatch.setattr(program.direct_agent, "forward", fake_evidence)
+    monkeypatch.setattr(
+        program.synthesizer,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            answer="direct",
+            process_summary="answered directly",
+            key_decisions=[],
+            caveats=[],
+        ),
+    )
     prediction = program(user_request="explain pytest", history=None)
 
     assert prediction.answer == "direct"

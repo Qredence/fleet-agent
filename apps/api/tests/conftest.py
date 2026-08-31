@@ -96,8 +96,8 @@ async def db_sessions(db_settings):
     # Start each test from empty tables (fast: truncate, not drop).
     async with engine.begin() as connection:
         await connection.exec_driver_sql(
-            "TRUNCATE messages, runs, run_states, dspy_histories, threads, projects "
-            "RESTART IDENTITY CASCADE"
+            "TRUNCATE messages, runs, run_states, dspy_histories, threads, projects, "
+            "approval_checkpoints RESTART IDENTITY CASCADE"
         )
     yield sessions
     await engine.dispose()

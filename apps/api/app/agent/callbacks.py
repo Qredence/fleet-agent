@@ -23,6 +23,7 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
+from app.services.content_safety import scrub_public_text
 
 
 class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
@@ -93,13 +94,16 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                     },
                 )
             )
-        arguments_json = public_tool_args_json(name, kwargs)
+        # Scrub before publication: arguments_json feeds the AG-UI
+        # tool-arguments channel verbatim, and the mask never introduces
+        # characters that could break JSON validity.
+        arguments_json = scrub_public_text(public_tool_args_json(name, kwargs))
         self._bus.publish_from_worker(
             ToolStarted(
                 tool_call_id=event_call_id,
                 name=name,
                 arguments_json=arguments_json,
-                input_preview=preview(arguments_json),
+                input_preview=scrub_public_text(preview(arguments_json)),
                 step_id=self._step_id,
             )
         )
@@ -144,7 +148,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 ToolCompleted(
                     tool_call_id=event_call_id,
                     name=name,
-                    output_preview=preview(str(outputs)),
+                    output_preview=scrub_public_text(preview(str(outputs))),
                     duration_ms=duration_ms,
                 )
             )

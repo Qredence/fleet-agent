@@ -167,6 +167,34 @@ class Settings(BaseSettings):
     flex_allow_mutating_tools: bool = Field(default=False)
     flex_max_predictor_calls: int = Field(default=12, ge=1, le=100)
 
+    router_state_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to a promoted Flex router state JSON produced by "
+            "`python -m evals.optimize`. When set, the routed program loads "
+            "the GEPA-evolved router (Deno-sandboxed, fail-fast) instead of "
+            "the baseline Predict. Unset keeps the baseline router."
+        ),
+    )
+
+    mlflow_tracing_enabled: bool = Field(
+        default=False,
+        description=(
+            "Opt-in MLflow tracing of live dspy runs (predictor, ReAct, tool "
+            "spans) via mlflow.dspy.autolog. Off by default: traces capture "
+            "LLM prompts/completions by design, so enabling is an explicit "
+            "operator decision for their own observability store."
+        ),
+    )
+    mlflow_tracking_uri: str | None = Field(
+        default=None,
+        description=(
+            "MLflow tracking URI (defaults to the local gitignored file "
+            "store under .artifacts/mlflow). FLEET_AGENT_MLFLOW_TRACKING_URI "
+            "and MLFLOW_TRACKING_URI env vars take precedence."
+        ),
+    )
+
     database_url: SecretStr = Field(
         default=SecretStr(
             "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent"

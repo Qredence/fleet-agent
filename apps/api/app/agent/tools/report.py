@@ -16,6 +16,7 @@ from app.contracts.domain import (
     ArtifactStarted,
 )
 from app.services.artifact_storage import ArtifactStorage, sanitize_artifact_name
+from app.services.content_safety import scrub_public_text
 
 _DOWNLOAD_PREFIX = "/api/artifacts"
 
@@ -40,6 +41,10 @@ class WriteReportTool:
 
     def __call__(self, title: str, content: str) -> str:
         """Write a short markdown report and return it as a downloadable artifact."""
+        # Artifacts are public surface: scrub before anything is persisted
+        # or echoed back, while the tool's callers keep the original text.
+        title = scrub_public_text(title)
+        content = scrub_public_text(content)
         artifact_id = f"artifact_{uuid.uuid4().hex[:12]}"
         name = sanitize_artifact_name(title)
         if not name.endswith(".md"):

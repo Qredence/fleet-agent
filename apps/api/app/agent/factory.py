@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 
 import dspy
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentEngine, DspyAgentEngine
 from app.agent.flex_program import FlexFleetAgent, ensure_deno_runtime
+from app.agent.flex_router import load_flex_router
 from app.agent.openai_compatible import OpenAICompatibleLM
 from app.agent.program import FleetAgent
 from app.agent.provider import (
@@ -35,7 +39,27 @@ from app.agent.tools_catalog import tool_catalog_by_name
 from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import EngineBuilder
 from app.services.artifact_storage import ArtifactStorage
+from app.services.durable_approvals import DurableApprovalRegistry
 from app.settings import Settings
+
+logger = logging.getLogger(__name__)
+
+
+def _promoted_router_src(settings: Settings) -> str | None:
+    """Validate the operator-pinned router state once, at startup.
+
+    Returns the promoted ``module_src`` (the only state a Flex router
+    carries), or ``None`` when no artifact is pinned. A malformed artifact or
+    a missing Deno runtime fails here, at engine-builder construction, rather
+    than on the first routed request.
+    """
+    if not settings.router_state_path:
+        return None
+    from app.agent.flex_router import load_flex_router_from_file
+
+    router = load_flex_router_from_file(settings.router_state_path)
+    logger.info("loaded promoted Flex router state from %s", settings.router_state_path)
+    return router.module_src()
 
 
 class _FleetLM(dspy.LM):  # type: ignore[misc]
@@ -253,14 +277,31 @@ def _build_web_tools(settings: Settings) -> WebToolBundle | None:
 
 
 def make_engine_builder(
-    settings: Settings, *, storage: ArtifactStorage
+    settings: Settings,
+    *,
+    storage: ArtifactStorage,
+    sessions: async_sessionmaker[AsyncSession] | None = None,
 ) -> EngineBuilder:
     """Create run-scoped programs sharing immutable tool configuration.
 
     The LM and adapter are built per run inside ``build`` because a browser
     provider override (key, base URL, response format, messages format) can
-    change them for a single request.
+    change them for a single request.  When ``sessions`` is provided, engine
+    runs persist approval checkpoints durably so a paused run survives a
+    server restart.
     """
+    sessions_final = sessions
+    router_src = _promoted_router_src(settings)
+
+    def _build_router() -> dspy.Module | None:
+        """Fresh Flex router per run-scoped program, or None for baseline.
+
+        The promoted source is validated once above; rebuilding the module
+        per program keeps run-scoped programs from sharing bridge state.
+        """
+        if router_src is None:
+            return None
+        return load_flex_router({"module_src": router_src})
 
     def build(
         bus: RunEventBus,
@@ -270,6 +311,13 @@ def make_engine_builder(
     ) -> AgentEngine:
         lm = _build_lm(settings, provider_override)
         adapter = _build_adapter(settings, provider_override)
+        approval_registry = (
+            DurableApprovalRegistry(
+                sessions=sessions_final, loop=asyncio.get_running_loop()
+            )
+            if sessions_final is not None
+            else None
+        )
         docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(
             storage=storage,
@@ -364,6 +412,7 @@ def make_engine_builder(
                     provider_override=provider_override,
                     lifecycle=callback,
                     cancel_token=bus.cancel_token,
+                    approval_registry=approval_registry,
                     cleanup=web_bundle.close if web_bundle else None,
                 )
 
@@ -393,6 +442,7 @@ def make_engine_builder(
                 max_iters=settings.llm_max_iters,
                 approval_policy=approval_policy,
                 lifecycle=callback,
+                router=_build_router(),
             )
 
         return DspyAgentEngine(
@@ -403,6 +453,7 @@ def make_engine_builder(
             provider_override=provider_override,
             lifecycle=callback,
             cancel_token=bus.cancel_token,
+            approval_registry=approval_registry,
             cleanup=web_bundle.close if web_bundle else None,
         )
 

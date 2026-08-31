@@ -8,13 +8,17 @@ pause signal, and resumes the same hidden turn after AG-UI supplies a boolean
 decision.
 
 Only interrupt identity and generic action text leave this module.  The
-checkpoint contains the real history and arguments solely in process memory;
-it is never serialized, logged, or included in an AgentRunResult.
+checkpoint contains the real history and arguments solely on the server: the
+in-process registry keeps it in memory, and the DB-backed registry
+(``app.services.durable_approvals``) persists it server-side so a paused run
+survives a restart.  Either way it is never logged, exposed through an API,
+or included in an AgentRunResult.
 """
 
 from __future__ import annotations
 
 import copy
+import json
 import threading
 import time
 import uuid
@@ -22,22 +26,22 @@ from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import dspy
 from ag_ui.core import Interrupt, ResumeEntry
-from dspy.predict.react_v2 import (
+
+from app.agent.dspy_compat import (
     AdapterParseError,
     ContextWindowExceededError,
     ToolCallResults,
     ToolCalls,
-    _append_history_event,
-    _coerce_history,
-    _coerce_tool_calls,
-    _ensure_tool_call_ids,
+    append_history_event,
+    coerce_history,
+    coerce_tool_calls,
+    ensure_tool_call_ids,
     format_error_for_lm,
 )
-
 from app.agent.tool_registry import ToolMetadata
 from app.agui.cancel_token import RunCancelToken
 
@@ -110,11 +114,121 @@ class ApprovalCheckpoint:
     assistant_message_id: str | None
 
 
+CHECKPOINT_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class _RestoredPrediction:
+    """The only prediction surface ``_history_event`` reads."""
+
+    next_thought: Any = None
+
+
+def _json_safe(value: Any) -> Any:
+    """Best-effort JSON-compatible reduction for tool batch values."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (dict, list)):
+        try:
+            json.dumps(value)
+        except TypeError:
+            return str(value)
+        return value
+    return str(value)
+
+
+def _next_thought_to_json(prediction: Any) -> Any:
+    value = getattr(prediction, "next_thought", None)
+    if value is None or isinstance(value, str):
+        return value
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        try:
+            return dump(mode="json")
+        except TypeError:
+            return dump()
+    return str(value)
+
+
+def checkpoint_to_json(checkpoint: ApprovalCheckpoint) -> dict[str, Any]:
+    """Serialize a hidden continuation for server-side persistence.
+
+    The prediction reduces to its ``next_thought`` (the only field the
+    history-event builder reads) and ToolCalls ids are preserved
+    explicitly because ``ToolCalls.model_dump`` drops them.
+    """
+    return {
+        "schemaVersion": CHECKPOINT_SCHEMA_VERSION,
+        "profileName": checkpoint.profile_name,
+        "history": checkpoint.history.model_dump(mode="json"),
+        "pendingInputs": checkpoint.pending_inputs,
+        "nextThought": _next_thought_to_json(checkpoint.prediction),
+        "toolCalls": [
+            {"id": call.id, "name": call.name, "args": call.args or {}}
+            for call in checkpoint.tool_calls.tool_calls
+        ],
+        "values": [_json_safe(value) for value in checkpoint.values],
+        "errors": list(checkpoint.errors),
+        "nextIndex": checkpoint.next_index,
+        "turnIndex": checkpoint.turn_index,
+        "toolName": checkpoint.tool_name,
+        "toolCallId": checkpoint.tool_call_id,
+        "assistantMessageId": checkpoint.assistant_message_id,
+    }
+
+
+def checkpoint_from_json(data: dict[str, Any]) -> ApprovalCheckpoint:
+    """Rebuild a checkpoint from its persisted JSON form.
+
+    Any shape mismatch raises ``ValueError``; callers map that to
+    ``approval_invalid`` so a corrupt row fails closed.
+    """
+    if data.get("schemaVersion") != CHECKPOINT_SCHEMA_VERSION:
+        raise ValueError("unsupported checkpoint schema version")
+    for key in (
+        "profileName",
+        "history",
+        "pendingInputs",
+        "toolCalls",
+        "nextIndex",
+        "turnIndex",
+        "toolName",
+        "toolCallId",
+    ):
+        if key not in data:
+            raise ValueError(f"checkpoint field missing: {key}")
+    tool_calls = ToolCalls(
+        tool_calls=[
+            ToolCalls.ToolCall(
+                id=call.get("id"),
+                name=str(call.get("name") or ""),
+                args=dict(call.get("args") or {}),
+            )
+            for call in data["toolCalls"]
+        ]
+    )
+    return ApprovalCheckpoint(
+        profile_name=str(data["profileName"]),
+        history=coerce_history(data["history"]),
+        pending_inputs=dict(data["pendingInputs"] or {}),
+        prediction=_RestoredPrediction(next_thought=data.get("nextThought")),
+        tool_calls=tool_calls,
+        values=tuple(data.get("values") or []),
+        errors=tuple(bool(flag) for flag in data.get("errors") or []),
+        next_index=int(data["nextIndex"]),
+        turn_index=int(data["turnIndex"]),
+        tool_name=str(data["toolName"]),
+        tool_call_id=str(data["toolCallId"]),
+        assistant_message_id=data.get("assistantMessageId"),
+    )
+
+
 @dataclass(frozen=True)
 class _PendingApproval:
     interrupt: Interrupt
     checkpoint: ApprovalCheckpoint
     thread_id: str
+    run_id: str
     provider_binding: str
     expires_monotonic: float
     expires_at: str
@@ -125,6 +239,87 @@ class ResolvedApproval:
     checkpoint: ApprovalCheckpoint
     approved: bool
     interrupt_id: str
+
+
+@runtime_checkable
+class ApprovalRegistryProtocol(Protocol):
+    """Registry surface consumed by the engine and the approval loop.
+
+    Implemented by the in-process ``ApprovalRegistry`` and by the
+    DB-backed ``DurableApprovalRegistry``; both must keep the no-oracle
+    and consume-before-execute semantics asserted in the approval tests.
+    """
+
+    def create(
+        self,
+        *,
+        checkpoint: ApprovalCheckpoint,
+        thread_id: str,
+        run_id: str,
+        provider_binding: str,
+        action_preview: str,
+    ) -> Interrupt: ...
+
+    def resolve(
+        self,
+        entries: list[ResumeEntry] | None,
+        *,
+        thread_id: str,
+        provider_binding: str,
+    ) -> ResolvedApproval | None: ...
+
+    def clear(self) -> None: ...
+
+
+def build_approval_interrupt(
+    *,
+    checkpoint: ApprovalCheckpoint,
+    interrupt_id: str,
+    expires_at: str,
+    action_preview: str,
+) -> Interrupt:
+    """The safe public interrupt shared by every registry implementation.
+
+    ``action_preview`` is the bounded, single-line description of the gated
+    action the approver is deciding on; it is the only sanctioned
+    tool-argument text exposed to the browser.
+    """
+    return Interrupt(
+        id=interrupt_id,
+        reason="tool_call",
+        message="Approval is required before this action can run.",
+        tool_call_id=checkpoint.tool_call_id,
+        expires_at=expires_at,
+        metadata={
+            "toolName": checkpoint.tool_name,
+            "action": "approval_required",
+            "toolPreview": action_preview,
+        },
+    )
+
+
+def validated_resume_entry(
+    entries: list[ResumeEntry],
+) -> tuple[str, bool]:
+    """Validate exactly one resolved AG-UI resume entry.
+
+    Returns the (interrupt_id, approved) pair; every malformed shape raises
+    ``approval_invalid`` so registries stay non-oracle.
+    """
+    if len(entries) != 1:
+        raise ApprovalDecisionError("approval_invalid")
+    entry = entries[0]
+    interrupt_id = entry.interrupt_id
+    if entry.status != "resolved":
+        raise ApprovalDecisionError("approval_invalid")
+    payload = entry.payload
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"approved"}
+        or not isinstance(payload.get("approved"), bool)
+    ):
+        raise ApprovalDecisionError("approval_invalid")
+    return interrupt_id, payload["approved"]
 
 
 class ApprovalRegistry:
@@ -143,41 +338,37 @@ class ApprovalRegistry:
         *,
         checkpoint: ApprovalCheckpoint,
         thread_id: str,
+        run_id: str,
         provider_binding: str,
         action_preview: str,
     ) -> Interrupt:
-        """Store a hidden checkpoint and return its safe public interrupt.
-
-        ``action_preview`` is the bounded, single-line description of the
-        gated action the approver is deciding on; it is the only sanctioned
-        tool-argument text exposed to the browser.
-        """
+        """Store a hidden checkpoint and return its safe public interrupt."""
 
         now = time.monotonic()
         expires_at = datetime.now(UTC) + timedelta(seconds=self._ttl_seconds)
         interrupt_id = f"approval_{uuid.uuid4().hex}"
-        interrupt = Interrupt(
-            id=interrupt_id,
-            reason="tool_call",
-            message="Approval is required before this action can run.",
-            tool_call_id=checkpoint.tool_call_id,
+        interrupt = build_approval_interrupt(
+            checkpoint=checkpoint,
+            interrupt_id=interrupt_id,
             expires_at=expires_at.isoformat().replace("+00:00", "Z"),
-            metadata={
-                "toolName": checkpoint.tool_name,
-                "action": "approval_required",
-                "toolPreview": action_preview,
-            },
+            action_preview=action_preview,
         )
         pending = _PendingApproval(
             interrupt=interrupt,
             checkpoint=checkpoint,
             thread_id=thread_id,
+            run_id=run_id,
             provider_binding=provider_binding,
             expires_monotonic=now + self._ttl_seconds,
             expires_at=interrupt.expires_at or "",
         )
         with self._lock:
             self._cleanup_locked(now)
+            # One live pause per run: an earlier pending checkpoint from the
+            # same run is unreachable once this one replaces it.
+            for prior_id, prior in list(self._pending.items()):
+                if prior.run_id == run_id:
+                    self._pending.pop(prior_id, None)
             self._pending[interrupt_id] = pending
         return interrupt
 
@@ -192,20 +383,7 @@ class ApprovalRegistry:
 
         if entries is None:
             return None
-        if len(entries) != 1:
-            raise ApprovalDecisionError("approval_invalid")
-
-        entry = entries[0]
-        interrupt_id = entry.interrupt_id
-        if entry.status != "resolved":
-            raise ApprovalDecisionError("approval_invalid")
-        payload = entry.payload
-        if (
-            not isinstance(payload, dict)
-            or set(payload) != {"approved"}
-            or not isinstance(payload.get("approved"), bool)
-        ):
-            raise ApprovalDecisionError("approval_invalid")
+        interrupt_id, approved = validated_resume_entry(entries)
 
         now = time.monotonic()
         with self._lock:
@@ -233,7 +411,7 @@ class ApprovalRegistry:
 
         return ResolvedApproval(
             checkpoint=pending.checkpoint,
-            approved=payload["approved"],
+            approved=approved,
             interrupt_id=interrupt_id,
         )
 
@@ -268,7 +446,7 @@ class ApprovalContext:
     thread_id: str
     run_id: str
     provider_binding: str
-    registry: ApprovalRegistry
+    registry: ApprovalRegistryProtocol
     lifecycle: ToolLifecycle | None = None
     cancel_token: RunCancelToken | None = None
     assistant_message_id: str | None = None
@@ -306,7 +484,12 @@ def reset_approval_context(token: Any) -> None:
 
 
 class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
-    """ReActV2 loop that pauses before policy-gated tool execution."""
+    """ReActV2 loop that pauses before policy-gated tool execution.
+
+    ``evidence_only`` turns the loop into a pure evidence gatherer: it never
+    forces a final ``submit`` and returns the accumulated history for the
+    synthesis stage instead of user-facing output fields.
+    """
 
     def __init__(
         self,
@@ -316,14 +499,16 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
         max_iters: int = 20,
         profile_name: str,
         approval_policy: Mapping[str, ToolMetadata | bool],
+        evidence_only: bool = False,
     ) -> None:
         super().__init__(signature, tools=tools, max_iters=max_iters)
         self.profile_name = profile_name
         self.approval_policy = dict(approval_policy)
+        self.evidence_only = evidence_only
 
     def forward(self, **input_args: Any) -> dspy.Prediction:
         max_iters = input_args.pop("max_iters", self.max_iters)
-        history = _coerce_history(input_args.pop("history", None))
+        history = coerce_history(input_args.pop("history", None))
         pending_inputs = {
             name: input_args[name]
             for name in self.signature.input_fields
@@ -361,7 +546,7 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
                     tools=list(self.tools.values()),
                     **pending_inputs,
                 )
-                tool_calls = _coerce_tool_calls(getattr(pred, "tool_calls", None))
+                tool_calls = coerce_tool_calls(getattr(pred, "tool_calls", None))
             except (AdapterParseError, ValueError):
                 break_reason = "parse_error"
                 break
@@ -373,7 +558,7 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
                 break_reason = "empty_tool_calls"
                 break
 
-            tool_calls = _ensure_tool_call_ids(tool_calls, turn_index)
+            tool_calls = ensure_tool_call_ids(tool_calls, turn_index)
             values, errors, final_outputs = self._execute_or_pause(
                 context=context,
                 pending_inputs=pending_inputs,
@@ -393,7 +578,7 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
             )
             if final_outputs is not None:
                 event.update(final_outputs)
-            _append_history_event(history, event)
+            append_history_event(history, event)
             pending_inputs = {}
 
             if final_outputs is not None:
@@ -401,6 +586,12 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
                     **final_outputs, history=history, termination_reason="submit"
                 )
 
+        if self.evidence_only:
+            # The synthesis stage writes the public fields; the evidence loop
+            # just hands over the accumulated history.
+            return dspy.Prediction(
+                history=history, termination_reason=f"evidence_{break_reason}"
+            )
         return self._forced_submit(history, pending_inputs, break_reason, max_iters)
 
     def _finish_tool_batch(
@@ -432,7 +623,7 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
         )
         if final_outputs is not None:
             event.update(final_outputs)
-        _append_history_event(checkpoint.history, event)
+        append_history_event(checkpoint.history, event)
         if final_outputs is not None:
             return dspy.Prediction(
                 **final_outputs,
@@ -521,6 +712,7 @@ class ApprovalAwareReActV2(dspy.ReActV2):  # type: ignore[misc]
                 interrupt = context.registry.create(
                     checkpoint=checkpoint,
                     thread_id=context.thread_id,
+                    run_id=context.run_id,
                     provider_binding=context.provider_binding,
                     action_preview=_action_preview(call.name, call.args or {}),
                 )

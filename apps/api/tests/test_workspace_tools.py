@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 import app.agent.tools.workspace as workspace_module
-from app.agent.tools.workspace import WorkspacePolicy, WorkspaceTools
+from app.agent.tools.workspace import (
+    _BASH_PATH_ALLOWLIST,
+    WorkspacePolicy,
+    WorkspaceTools,
+)
 
 
 def make_tools(
@@ -197,3 +201,25 @@ def test_bash_bounds_stdout_and_stderr_and_kills_the_process_group(tmp_path: Pat
     assert len(result) <= 257  # one safe truncation marker is allowed
     assert result.startswith("exit_code=")
     assert result.endswith("…")
+
+
+def test_bash_environment_is_pinned_to_the_system_allowlist(tmp_path: Path):
+    """Model-controlled commands must never resolve against the server PATH."""
+    tools = make_tools(tmp_path, allow_bash=True)
+
+    path_result = tools.bash('printf %s "$PATH"')
+    assert path_result == f"exit_code=0\n{_BASH_PATH_ALLOWLIST}"
+
+    home_result = tools.bash('printf %s "$HOME"')
+    assert home_result == f"exit_code=0\n{tmp_path}"
+
+    # No inherited environment rides along: only the pinned variables plus
+    # bash's own runtime shell variables (PWD/SHLVL/_) may exist.
+    env_dump = tools.bash("env | cut -d= -f1 | sort | tr '\\n' ' '")
+    names = set(env_dump.removeprefix("exit_code=0\n").split())
+    assert names <= {"HOME", "LANG", "LC_ALL", "PATH", "PWD", "SHLVL", "_"}
+
+    # Tools that exist only on the operator's PATH (mise/uv shims) stay
+    # unreachable; the failure is the plain shell "command not found".
+    missing = tools.bash("command -v mise || echo missing")
+    assert missing.endswith("missing")

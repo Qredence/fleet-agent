@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ from app.persistence.repositories import (
     SourcesRepository,
     ThreadsRepository,
 )
+from app.services.content_safety import scrub_json_strings
 from app.services.history_safety import MessageWrite, sanitize_message_content
 
 router = APIRouter(prefix="/api", tags=["threads"])
@@ -93,7 +94,10 @@ def _safe_bootstrap_agent_state(
         run.pop("terminationReason", None)
     for source in safe["sources"]:
         source["excerpt"] = _cap_excerpt(source.get("excerpt"))
-    return safe
+    # Legacy rows persisted before emission-time scrubbing get the same
+    # treatment on read; new rows are already scrubbed at the source.
+    scrubbed = scrub_json_strings(safe)
+    return cast("dict[str, Any]", scrubbed)
 
 
 def _safe_latest_run_payload(run: Run | None) -> dict[str, Any] | None:

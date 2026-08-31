@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentRunContext, AgentRunResult, _map_result
 from app.agent.instrumented import preview, public_tool_args_json
-from app.agent.signature import AgentSignature
+from app.agent.signature import AgentSignature, SynthesisSignature
 from app.agent.tool_registry import ToolRegistry, wrap_tool_with_guard
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.agui.event_bus import RunEventBus
@@ -72,18 +72,6 @@ class CriticSignature(dspy.Signature):  # type: ignore[misc]
     user_request: str = dspy.InputField(desc="The user's request.")
     evidence_json: str = dspy.InputField(desc="Bounded research evidence.")
     critique: str = dspy.OutputField(desc="Concise evidence-quality assessment.")
-
-
-class SynthesisSignature(dspy.Signature):  # type: ignore[misc]
-    """Produce the same safe public fields as the default ReAct path."""
-
-    user_request: str = dspy.InputField(desc="The user's request.")
-    evidence_json: str = dspy.InputField(desc="Bounded successful and failed evidence.")
-    critique: str = dspy.InputField(desc="Bounded optional evidence critique.")
-    answer: str = dspy.OutputField(desc="Direct final answer to the user.")
-    process_summary: str = dspy.OutputField(desc="Concise user-safe process summary.")
-    key_decisions: list[str] = dspy.OutputField(desc="Important decisions made.")
-    caveats: list[str] = dspy.OutputField(desc="Remaining uncertainty or limitations.")
 
 
 class ResearchTask(BaseModel):

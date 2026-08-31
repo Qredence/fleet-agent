@@ -65,6 +65,12 @@ _MAX_LINE_RANGE = 1000
 _MAX_COMMAND_CHARS = 4000
 _GREP_TIMEOUT_SECONDS = 10
 
+# Commands resolve only against standard system directories: the API server's
+# full PATH (version managers, node/uv shims, local overrides) must never be
+# reachable from model-controlled shell commands. Keep the allowlist minimal
+# and deterministic; tools outside it fail with "command not found".
+_BASH_PATH_ALLOWLIST = "/usr/bin:/bin:/usr/local/bin"
+
 # Fixed matcher run with ``sys.executable -I -c``: the model-controlled
 # pattern is matched inside a short-lived process group so a pathological
 # regular expression is killed by the timeout instead of pinning an engine
@@ -363,7 +369,7 @@ class WorkspaceTools:
         )
         timeout = min(max(1, requested_timeout), self._policy.bash_max_timeout_seconds)
         env = {
-            "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+            "PATH": _BASH_PATH_ALLOWLIST,
             "HOME": str(self._root),
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
