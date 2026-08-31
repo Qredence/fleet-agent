@@ -489,3 +489,96 @@ def test_pinned_private_react_v2_symbols_exist() -> None:
 
     ensure = inspect.signature(react_v2._ensure_tool_call_ids)
     assert len(ensure.parameters) == 2
+
+
+def test_checkpoint_serde_roundtrip_preserves_hidden_state() -> None:
+    """The persisted JSON form must carry every field the resume loop reads.
+
+    This is the contract the DB-backed registry depends on: ToolCall ids in
+    particular are dropped by ``ToolCalls.model_dump``, so they are stored
+    explicitly; the prediction reduces to ``next_thought`` because that is
+    the only prediction surface ``_history_event`` reads.
+    """
+    from app.agent.approval import (
+        ApprovalCheckpoint,
+        checkpoint_from_json,
+        checkpoint_to_json,
+    )
+
+    history = dspy.History(
+        messages=[
+            {"role": "user", "content": "save this"},
+            {
+                "role": "assistant",
+                "content": "Working on it.",
+                "tool_calls": {
+                    "tool_calls": [
+                        {"id": "call_0_0", "name": "write", "args": {"path": "f.txt"}}
+                    ],
+                    "tool_call_results": [],
+                },
+            },
+        ]
+    )
+    checkpoint = ApprovalCheckpoint(
+        profile_name="workspace_write_agent",
+        history=history,
+        pending_inputs={"user_request": "save this"},
+        prediction=dspy.Prediction(next_thought="working"),
+        tool_calls=dspy.ToolCalls(
+            tool_calls=[
+                dspy.ToolCalls.ToolCall(
+                    id="call_0_0", name="write", args={"path": "f.txt", "content": "s"}
+                )
+            ]
+        ),
+        values=(),
+        errors=(),
+        next_index=0,
+        turn_index=0,
+        tool_name="write",
+        tool_call_id="call_0_0",
+        assistant_message_id="assistant-serde",
+    )
+
+    data = checkpoint_to_json(checkpoint)
+    assert data["schemaVersion"] == 1
+    # Tool-call ids survive serialization even though model_dump drops them.
+    assert data["toolCalls"][0]["id"] == "call_0_0"
+
+    restored = checkpoint_from_json(data)
+    assert restored.profile_name == checkpoint.profile_name
+    assert restored.tool_call_id == "call_0_0"
+    assert [call.id for call in restored.tool_calls.tool_calls] == ["call_0_0"]
+    assert restored.tool_calls.tool_calls[0].args == {
+        "path": "f.txt",
+        "content": "s",
+    }
+    assert restored.pending_inputs == {"user_request": "save this"}
+    assert restored.prediction.next_thought is not None
+    assert restored.next_index == 0
+    assert restored.turn_index == 0
+    assert restored.tool_name == "write"
+    assert restored.assistant_message_id == "assistant-serde"
+    assert restored.history.messages[0]["role"] == "user"
+    assert (
+        restored.history.messages[1]["tool_calls"]["tool_calls"][0]["id"] == "call_0_0"
+    )
+
+    # The JSON form stays JSON-clean (safe for a JSONB column round trip).
+    json.dumps(data)
+
+    # Corrupt or future rows fail closed instead of resuming garbage.
+    with pytest.raises(ValueError):
+        checkpoint_from_json({**data, "schemaVersion": 99})
+    with pytest.raises(ValueError):
+        checkpoint_from_json({k: v for k, v in data.items() if k != "toolName"})
+
+
+def test_registry_protocol_shape_is_stable() -> None:
+    """Both registry implementations satisfy the engine's protocol seam."""
+    from app.agent.approval import ApprovalRegistry, ApprovalRegistryProtocol
+    from app.services.durable_approvals import DurableApprovalRegistry
+
+    assert issubclass(ApprovalRegistry, ApprovalRegistryProtocol)
+    assert issubclass(DurableApprovalRegistry, ApprovalRegistryProtocol)

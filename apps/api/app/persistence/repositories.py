@@ -5,10 +5,12 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlalchemy import delete, select, update
+from sqlalchemy import true as sa_true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.persistence.models import (
+    ApprovalCheckpointRow,
     Artifact,
     DspyHistory,
     Message,
@@ -458,14 +460,22 @@ class RunsRepository:
             )
             return rows.scalars().first()
 
-    async def mark_orphaned_interrupted(self) -> int:
-        """Fail live and paused runs whose in-memory state was lost."""
+    async def mark_orphaned_interrupted(
+        self, *, keep_run_ids: set[str] | None = None
+    ) -> int:
+        """Fail live and paused runs whose continuation state was lost.
+
+        ``keep_run_ids`` names runs that still own a resumable (durable)
+        approval checkpoint; those stay ``interrupted`` across a restart.
+        """
+        keep = keep_run_ids or set()
         async with self._sessions() as session:
             orphaned = list(
                 (
                     await session.execute(
                         select(Run).where(
-                            Run.status.in_(["running", "queued", "interrupted"])
+                            Run.status.in_(["running", "queued", "interrupted"]),
+                            Run.id.notin_(keep) if keep else sa_true(),
                         )
                     )
                 ).scalars()
@@ -474,7 +484,10 @@ class RunsRepository:
                 return 0
             result = await session.execute(
                 update(Run)
-                .where(Run.status.in_(["running", "queued", "interrupted"]))
+                .where(
+                    Run.status.in_(["running", "queued", "interrupted"]),
+                    Run.id.notin_(keep) if keep else sa_true(),
+                )
                 .values(
                     status="failed",
                     termination_reason="server_restart",
@@ -899,3 +912,33 @@ class ArtifactsRepository:
                 delete(Artifact).where(Artifact.thread_id == thread_id)
             )
             await session.commit()
+
+
+class ApprovalCheckpointsRepository:
+    """Typed access to the durable approval checkpoint table.
+
+    These helpers take a bound session so callers compose them inside a
+    single transaction (for example terminal run settlement deleting the
+    dead continuation in the same commit that closes the run).
+    """
+
+    @staticmethod
+    async def delete_pending_for_run_in_session(
+        session: AsyncSession, *, run_id: str
+    ) -> None:
+        await session.execute(
+            delete(ApprovalCheckpointRow).where(
+                ApprovalCheckpointRow.run_id == run_id,
+                ApprovalCheckpointRow.status == "pending",
+            )
+        )
+
+    @staticmethod
+    async def delete_pending_for_run(
+        sessions: async_sessionmaker[AsyncSession], *, run_id: str
+    ) -> None:
+        async with sessions() as session:
+            async with session.begin():
+                await ApprovalCheckpointsRepository.delete_pending_for_run_in_session(
+                    session, run_id=run_id
+                )

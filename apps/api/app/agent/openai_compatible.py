@@ -233,15 +233,130 @@ class OpenAICompatibleLM(dspy.BaseLM):  # type: ignore[misc]
     ) -> Any:
         """Call the gateway's chat-completions endpoint.
 
-        OpenAI SDK exceptions are wrapped in DSPy's structured LM error
-        hierarchy, mirroring ``dspy.LM``'s error boundary.
+        When DSPy opens a stream (``dspy.settings.send_stream`` set by
+        ``dspy.streamify`` for a listener-target predictor), the gateway
+        response is streamed delta-by-delta into that stream as
+        litellm-shaped chunks carrying the caller's predict id, and the full
+        completion is still returned for the adapter to parse. OpenAI SDK
+        exceptions are wrapped in DSPy's structured LM error hierarchy,
+        mirroring ``dspy.LM``'s error boundary.
         """
+        from dspy.dsp.utils.settings import settings as dspy_settings
+
+        stream = dspy_settings.send_stream
+        if stream is not None:
+            return self._forward_streaming(
+                stream,
+                dspy_settings,
+                prompt=prompt,
+                messages=messages,
+                **kwargs,
+            )
         cache = kwargs.pop("cache", self.cache)
         request = self._build_request(prompt=prompt, messages=messages, **kwargs)
         completion_fn = self._get_completion_fn(cache)
         response = completion_fn(request=request)
         self._check_truncation(response)
         return response
+
+    def _forward_streaming(
+        self,
+        stream: Any,
+        dspy_settings: Any,
+        *,
+        prompt: str | None,
+        messages: list[dict[str, Any]] | None,
+        **kwargs: Any,
+    ) -> Any:
+        """Serve one streamed completion into DSPy's open stream.
+
+        Only content deltas are forwarded (StreamListener parses
+        ``choices[0].delta.content``); tool-call deltas never appear here
+        because non-target predictors run with ``send_stream`` disabled.
+        The full response is rebuilt from the accumulated content so the
+        adapter's parse path stays identical to a non-streamed call.
+        """
+        # Streaming responses are never served from the DSPy cache.
+        kwargs.pop("cache", None)
+        from dspy.streaming.messages import sync_send_to_stream
+        from litellm import ModelResponse, ModelResponseStream
+        from litellm.types.utils import (
+            Choices,
+            Delta,
+            Message,
+            StreamingChoices,
+            Usage,
+        )
+
+        request = self._build_request(prompt=prompt, messages=messages, **kwargs)
+        request["stream"] = True
+        request["stream_options"] = {"include_usage": True}
+        caller_predict_id = (
+            id(dspy_settings.caller_predict) if dspy_settings.caller_predict else None
+        )
+
+        content_parts: list[str] = []
+        finish_reason: str | None = None
+        usage: Usage | None = None
+        try:
+            response = self._ensure_client().chat.completions.create(
+                **request,
+                extra_headers=self._extra_headers,
+            )
+            for chunk in response:
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    usage = chunk_usage
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                reason = getattr(choice, "finish_reason", None)
+                if reason:
+                    finish_reason = str(reason)
+                delta = getattr(choice, "delta", None)
+                delta_content = getattr(delta, "content", None)
+                if not delta_content:
+                    continue
+                content_parts.append(delta_content)
+                wrapped = ModelResponseStream(
+                    id="chatcmpl-stream",
+                    object="chat.completion.chunk",
+                    created=0,
+                    model=self.model,
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(role="assistant", content=delta_content),
+                            finish_reason=None,
+                        )
+                    ],
+                )
+                if caller_predict_id:
+                    wrapped.predict_id = caller_predict_id
+                sync_send_to_stream(stream, wrapped)
+        except Exception as exc:
+            if isinstance(exc, dspy.LMError):
+                raise
+            raise self._wrap_gateway_error(exc) from exc
+
+        message = Message(role="assistant", content="".join(content_parts))
+        full = ModelResponse(
+            id="chatcmpl-stream",
+            object="chat.completion",
+            created=0,
+            model=self.model,
+            choices=[
+                Choices(
+                    index=0,
+                    message=message,
+                    finish_reason=finish_reason or "stop",
+                )
+            ],
+            usage=usage,
+        )
+        self._check_truncation(full)
+        return full
 
     async def aforward(
         self,

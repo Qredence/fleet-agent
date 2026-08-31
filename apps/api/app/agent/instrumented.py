@@ -28,6 +28,7 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
+from app.services.content_safety import scrub_public_text
 
 _SENSITIVE_KEY_PARTS = ("key", "token", "secret", "password", "auth", "credential")
 _MAX_PREVIEW_CHARS = 300
@@ -102,7 +103,7 @@ def sanitize_args(args: dict[str, Any]) -> str:
     This legacy helper remains a presentation preview. Callers that emit
     protocol argument chunks must use :func:`public_tool_args_json` instead.
     """
-    return preview(public_tool_args_json("", args), limit=400)
+    return scrub_public_text(preview(public_tool_args_json("", args), limit=400))
 
 
 def preview(text: str, limit: int = _MAX_PREVIEW_CHARS) -> str:
@@ -134,13 +135,13 @@ def instrument_tool(
             cancel_token.check()  # no new tool starts after cancellation
         tool_call_id = f"tool_{uuid.uuid4().hex[:12]}"
         tool_name = getattr(fn, "__name__", type(fn).__name__)
-        arguments_json = public_tool_args_json(tool_name, kwargs)
+        arguments_json = scrub_public_text(public_tool_args_json(tool_name, kwargs))
         bus.publish_from_worker(
             ToolStarted(
                 tool_call_id=tool_call_id,
                 name=tool_name,
                 arguments_json=arguments_json,
-                input_preview=preview(arguments_json),
+                input_preview=scrub_public_text(preview(arguments_json)),
             )
         )
         started = time.monotonic()
@@ -162,7 +163,7 @@ def instrument_tool(
             ToolCompleted(
                 tool_call_id=tool_call_id,
                 name=tool_name,
-                output_preview=preview(str(value)),
+                output_preview=scrub_public_text(preview(str(value))),
                 duration_ms=duration_ms,
             )
         )

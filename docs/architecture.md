@@ -34,13 +34,13 @@ flowchart LR
     PP -->|"REST · SSE"| ROUTES
 
     subgraph ENG["DSPy engine layer"]
-        PUBLIC --> DSPY["dspy.ReActV2 / staged strategy"]
+        PUBLIC --> DSPY["routed FleetAgent:\nrouter → evidence ReActV2 → streamed synthesis"]
         DSPY --> TOOLS["typed tools"]
     end
 
     TOOLS -->|"search · report"| DOCS["documentation corpus"]
     TOOLS -->|"optional web"| TAV["Tavily web_search / fetch_page"]
-    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(OpenAI SDK gateway client / dspy.LM)"]
+    DSPY -->|"model calls (streamed for synthesis)"| LM["OpenAI-compatible model\n(OpenAI SDK gateway client / dspy.LM)"]
 
     subgraph DATA["Persistence"]
         PUBLIC --> PG[("PostgreSQL 17")]
@@ -89,6 +89,7 @@ flowchart TB
         RUNI("run_input · source_identity")
         METR("metrics registry")
         HIST("history_safety · mock_run")
+        SAFE("content_safety\nbatch + streaming scrubbing")
     end
 
     SW --> R1; SW --> R2; SW --> R3
@@ -98,6 +99,7 @@ flowchart TB
     CB --> BC; BC --> EMP; EMP --> TR; EMP --> LC
     LC --> PERS; PERS --> MOD; MOD --> MIG; MOD --> REPO
     ART --> E; RPI --> LC; METR --> LC
+    E --> SAFE; EMP --> SAFE; RPI --> SAFE
 ```
 
 ---
@@ -118,13 +120,15 @@ sequenceDiagram
     A->>LC: gate via run_semaphore (max_concurrent_runs)
     LC->>LC: create RunEventBus + engine (EngineBuilder)
     LC->>E: await run(user_request, history, context)
-    E->>LM: DSPy ReActV2 / staged loop (max_iters, JSONAdapter)
-    E-->>LC: AgentStreamUpdate / AgentRunResult
+    E->>LM: route → evidence ReAct loop (JSONAdapter)
+    E->>LM: synthesis Predict (streamed, ChatAdapter)
+    E-->>LC: token deltas (scrubbed) / AgentStreamUpdate / AgentRunResult
     E-->LC: callbacks (ToolStart/End, LmStart, ...)
-    LC->>P: persist run, run_state, sources, artifacts
+    LC->>P: persist run, run_state, sources, artifacts, approval checkpoints
     LC->>A: map domain → AG-UI events (StateDelta, Tool*, Text*)
     A-->>U: SSE stream (STREAM, STATE_DELTA, DONE/RUN_ERROR)
-    Note over A,U: history (raw next_thought) stays server-side
+    Note over A,U: history (raw next_thought) stays server-side;
+    approval pauses persist durably and survive restarts
 ```
 
 **Fixtures mode** replays deterministic, provider-free AG-UI streams
@@ -186,6 +190,10 @@ flowchart TB
 - **One versioned bootstrap** — thread restoration fetches one versioned
   snapshot; fallback uses raw `fetchBootstrap`.
 - **Scoped DSPy** — `dspy.context(...)` only, never global `dspy.configure`.
+- **Streamed equals batch** — synthesis token streams are scrubbed
+  per-field; their concatenation always equals the scrubbed final fields.
+- **Durable approvals** — approval interrupts persist in PostgreSQL, are
+  consumed exactly once, and orphaned interrupted runs are swept on restart.
 - **Alembic migrations** for persistence; engine runs require an existing thread.
 - **Contract workflow**: edit schema → `contracts:sync` (TS) → regenerate Python
   model → run freshness tests.

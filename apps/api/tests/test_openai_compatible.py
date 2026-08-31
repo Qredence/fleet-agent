@@ -10,13 +10,16 @@ import logging
 from types import SimpleNamespace
 from typing import Any
 
+import anyio
 import dspy
 import httpx
 import openai
 import pydantic
 import pytest
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
 from openai.types.completion_usage import CompletionUsage
 
 from app.agent.openai_compatible import OpenAICompatibleLM
@@ -406,3 +409,152 @@ class TestSerialization:
         # credential-less restore still constructs.
         assert restored.api_key is None
         assert restored._client is None
+
+
+class _FakeSendStream:
+    """Records the litellm-shaped chunks the LM pushes into DSPy's stream."""
+
+    def __init__(self) -> None:
+        self.received: list[Any] = []
+
+    async def send(self, message: Any) -> None:
+        self.received.append(message)
+
+
+def _stream_chunk(
+    content: str | None = None,
+    *,
+    finish: str | None = None,
+    usage: CompletionUsage | None = None,
+    with_choices: bool = True,
+) -> ChatCompletionChunk:
+    return ChatCompletionChunk(
+        id="chunk-1",
+        created=1,
+        model="gateway-model",
+        object="chat.completion.chunk",
+        choices=(
+            [
+                ChunkChoice(
+                    index=0,
+                    delta=ChoiceDelta(role="assistant", content=content),
+                    finish_reason=finish,
+                )
+            ]
+            if with_choices
+            else []
+        ),
+        usage=usage,
+    )
+
+
+class TestStreamingForward:
+    """``dspy.streamify`` opens ``send_stream``; forward must serve into it."""
+
+    async def _forward_with_stream(
+        self,
+        client: Any,
+        stream: _FakeSendStream,
+        **kwargs: Any,
+    ) -> tuple[Any, Any, Any]:
+        lm = _make_lm(client=client)
+        predict = dspy.Predict("question -> answer")
+
+        def call() -> Any:
+            return lm.forward(messages=_USER_MESSAGE, **kwargs)
+
+        with dspy.context(send_stream=stream, caller_predict=predict):
+            response = await anyio.to_thread.run_sync(call)
+        return response, lm, predict
+
+    async def test_deltas_carry_content_and_the_caller_predict_id(self) -> None:
+        client, calls = _make_client(
+            iter([_stream_chunk("Hello "), _stream_chunk("world ")])
+        )
+        stream = _FakeSendStream()
+
+        _response, _lm, predict = await self._forward_with_stream(client, stream)
+
+        # The request is a real streaming request.
+        assert calls[0]["stream"] is True
+        assert calls[0]["stream_options"] == {"include_usage": True}
+
+        # Every wrapped delta carries the caller's predict id and its text.
+        assert len(stream.received) == 2
+        for message in stream.received:
+            assert message.predict_id == id(predict)
+            assert message.choices[0].delta.role == "assistant"
+        assert [m.choices[0].delta.content for m in stream.received] == [
+            "Hello ",
+            "world ",
+        ]
+
+    async def test_full_completion_is_rebuilt_for_the_adapter(self) -> None:
+        usage = CompletionUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5)
+        client, _calls = _make_client(
+            iter(
+                [
+                    _stream_chunk("Hello "),
+                    _stream_chunk("world", finish="stop"),
+                    _stream_chunk(usage=usage, with_choices=False),
+                ]
+            )
+        )
+        stream = _FakeSendStream()
+
+        response, _lm, _predict = await self._forward_with_stream(client, stream)
+
+        # The usage-only trailer chunk forwards nothing but is captured.
+        assert len(stream.received) == 2
+        assert response.choices[0].message.content == "Hello world"
+        assert response.choices[0].finish_reason == "stop"
+        assert response.usage.prompt_tokens == 3
+
+    async def test_role_only_chunks_forward_nothing(self) -> None:
+        client, _calls = _make_client(
+            iter(
+                [_stream_chunk(None), _stream_chunk("Hi"), _stream_chunk(finish="stop")]
+            )
+        )
+        stream = _FakeSendStream()
+
+        response, _lm, _predict = await self._forward_with_stream(client, stream)
+
+        assert [m.choices[0].delta.content for m in stream.received] == ["Hi"]
+        assert response.choices[0].message.content == "Hi"
+
+    async def test_streaming_responses_bypass_the_cache(self) -> None:
+        client, calls = _make_client(
+            iter([_stream_chunk("x"), _stream_chunk(finish="stop")])
+        )
+        stream = _FakeSendStream()
+
+        await self._forward_with_stream(client, stream, cache=True)
+
+        # The cache flag never reaches the gateway request.
+        assert "cache" not in calls[0]
+
+    async def test_mid_stream_gateway_errors_map_to_dspy_hierarchy(self) -> None:
+        class _ExplodingIterator:
+            def __iter__(self) -> Any:
+                return self
+
+            def __next__(self) -> Any:
+                raise _status_error(429, "slow down")
+
+        client, _calls = _make_client(_ExplodingIterator())
+        stream = _FakeSendStream()
+
+        with pytest.raises(dspy.LMRateLimitError):
+            await self._forward_with_stream(client, stream)
+
+    async def test_without_send_stream_the_request_is_not_streamed(self) -> None:
+        client, calls = _make_client(_completion("ok"))
+        lm = _make_lm(client=client)
+
+        def call() -> Any:
+            return lm.forward(messages=_USER_MESSAGE)
+
+        await anyio.to_thread.run_sync(call)
+        assert "stream" not in calls[0]
+        assert calls[0]["messages"] == _USER_MESSAGE

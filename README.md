@@ -40,7 +40,11 @@ The React frontend renders the conversation and the live process projection.
   one server-side boundary.
 - The production `FleetAgent` class routes each request into a least-privileged
   ReActV2 capability profile: direct, research, artifact, workspace read,
-  workspace write, or workspace shell.
+  workspace write, or workspace shell. The routed agents gather evidence only;
+  a separate synthesis predictor produces the final answer and streams it
+  token-by-token through public DSPy streaming APIs (`dspy.streamify`).
+- Approval-gated workspace tools (`write`, `edit`, `bash`) pause the run with a
+  durable, database-backed interrupt that survives server restarts.
 - An optional staged strategy uses DSPy modules for planning, parallel
   research, verification, and synthesis while keeping budgets and cancellation
   outside the model.
@@ -50,7 +54,9 @@ The React frontend renders the conversation and the live process projection.
   time, and report generation. Optional Tavily configuration adds bounded
   `web_search` and `fetch_page` tools.
 - OpenAI-compatible model endpoints are supported through the configured DSPy
-  model and base URL.
+  model and base URL; routed behavior is evaluated offline with
+  `uv run python -m evals.run --suite routing` (see
+  [docs/dspy-agent.md](docs/dspy-agent.md)).
 
 ### Evidence and artifacts
 
@@ -83,9 +89,13 @@ The React frontend renders the conversation and the live process projection.
 - The public `AgentWorkspaceState` JSON Schema is the shared contract between
   backend and frontend.
 - Raw `next_thought`, DSPy history, provider prompts, credentials, stack traces,
-  and unredacted tool payloads remain server-side.
+  and unredacted tool payloads remain server-side. Streamed answer and summary
+  tokens are scrubbed per delta, so a secret split across tokens is never
+  partially emitted.
 - Tool arguments and previews are bounded, public failures use safe error
-  codes, and CORS accepts exact configured origins only.
+  codes, and CORS accepts exact configured origins only. The workspace `bash`
+  tool runs with a pinned system PATH (`/usr/bin:/bin:/usr/local/bin`), the
+  workspace as HOME, and no inherited environment.
 
 ## How the pieces fit together
 

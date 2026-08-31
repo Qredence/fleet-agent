@@ -39,6 +39,7 @@ from app.contracts.domain import (
     ArtifactStarted,
     FinalFieldsReady,
     SourceDiscovered,
+    SynthesisTokenDelta,
     ToolCompleted,
     ToolFailed,
 )
@@ -300,6 +301,7 @@ class LiveDSPyCoordinator:
                     AgentRunResult: The completed agent run result.
                 """
                 result: AgentRunResult | None = None
+                summary_parts: list[str] = []
                 stream_kwargs: dict[str, Any] = {
                     "user_request": user_request,
                     "history": history,
@@ -316,6 +318,26 @@ class LiveDSPyCoordinator:
                                 process_summary=update.process_summary,
                             )
                         )
+                    elif update.kind == "token":
+                        # Streamed synthesis fields (already scrubbed by the
+                        # engine) become incremental message/state updates.
+                        if update.delta and update.stream_field == "answer":
+                            bus.publish_from_loop(
+                                SynthesisTokenDelta(
+                                    field="answer",
+                                    delta=update.delta,
+                                    summary_so_far="".join(summary_parts),
+                                )
+                            )
+                        elif update.delta and update.stream_field == "process_summary":
+                            summary_parts.append(update.delta)
+                            bus.publish_from_loop(
+                                SynthesisTokenDelta(
+                                    field="process_summary",
+                                    delta=update.delta,
+                                    summary_so_far="".join(summary_parts),
+                                )
+                            )
                     else:
                         result = update.result
                 if result is None:
@@ -325,6 +347,7 @@ class LiveDSPyCoordinator:
             return run_pump()
 
         answer_streamed = False
+        answer_tokens_streamed = False
         try:
             if persistence:
                 await persistence.mark_running(run_id=run_id, state_json=reducer.state)
@@ -396,12 +419,21 @@ class LiveDSPyCoordinator:
                         event = await bus.next()
                         if event is DONE:
                             break
+                        if (
+                            isinstance(event, SynthesisTokenDelta)
+                            and event.field == "answer"
+                        ):
+                            # Tokens streamed the answer text incrementally;
+                            # final fields must not duplicate it as chunks.
+                            answer_streamed = True
+                            answer_tokens_streamed = True
                         if isinstance(event, FinalFieldsReady) and event.answer:
                             answer_streamed = True
                         agui_events = map_domain_event(
                             event,  # type: ignore[arg-type]
                             assistant_message_id=assistant_message_id,
                             reducer=reducer,
+                            emit_answer_text=not answer_tokens_streamed,
                         )
                         if persistence and isinstance(
                             event,

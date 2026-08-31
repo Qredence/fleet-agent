@@ -113,6 +113,22 @@ class FinalFieldsReady(DomainEvent):
     process_summary: str | None = None
 
 
+@dataclass(frozen=True)
+class SynthesisTokenDelta(DomainEvent):
+    """One increment of a streamed synthesis field (already scrubbed).
+
+    Published as the synthesis predictor streams under
+    ``dspy.streamify``; ``field`` is either ``answer`` (rendered as
+    assistant message text) or ``process_summary`` (rendered as the
+    synthesis step's live summary). ``summary_so_far`` carries the
+    accumulated summary text so state patches stay idempotent.
+    """
+
+    field: Literal["answer", "process_summary"]
+    delta: str
+    summary_so_far: str = ""
+
+
 class ArtifactResult(BaseModel):
     """Standard contract for generated artifacts (plan.md Phase 10)."""
 

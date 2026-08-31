@@ -27,6 +27,9 @@ __pycache__/
 # Artifacts & storage
 .artifacts/
 
+# Optimized router artifacts (evals/optimize.py output)
+apps/api/evals/artifacts/
+
 # QA evidence bundles and browser session logs
 qa-results/
 .playwright-mcp/
@@ -38,3 +41,6 @@ qa-results/
 .claude/
 .impeccable/
 skills-lock.json
+# MLflow local run store (evals/mlflow_tracking.py)
+apps/api/mlruns/
+.factory/

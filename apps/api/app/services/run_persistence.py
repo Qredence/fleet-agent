@@ -26,6 +26,7 @@ from app.contracts.domain import (
 )
 from app.persistence.models import DspyHistory, Message, Run, RunState, Thread
 from app.persistence.repositories import (
+    ApprovalCheckpointsRepository,
     ArtifactsRepository,
     DspyHistoriesRepository,
     MessagesRepository,
@@ -383,6 +384,12 @@ class RunPersistence:
                 )
                 if not changed:
                     return False
+                # Terminal settlement kills any dead continuation: a
+                # pending approval checkpoint for this run can no longer
+                # be resumed once the run has completed.
+                await ApprovalCheckpointsRepository.delete_pending_for_run_in_session(
+                    session, run_id=run_id
+                )
                 await RunStatesRepository.upsert_in_session(
                     session,
                     thread_id=thread_id,
@@ -584,6 +591,12 @@ class RunPersistence:
                 )
                 if not changed:
                     return False
+                # Terminal settlement kills any dead continuation: a
+                # pending approval checkpoint for this run can no longer
+                # be resumed once the run has settled.
+                await ApprovalCheckpointsRepository.delete_pending_for_run_in_session(
+                    session, run_id=run_id
+                )
                 await RunStatesRepository.upsert_in_session(
                     session,
                     thread_id=thread_id,
