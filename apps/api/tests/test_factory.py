@@ -1,3 +1,4 @@
+import pytest
 from pydantic import SecretStr
 
 from app.agent.engine import DspyAgentEngine
@@ -7,12 +8,13 @@ from app.settings import Settings
 
 
 def make_settings(**overrides) -> Settings:
-    return Settings(
-        llm_model="openai/test-model",
-        llm_api_key=SecretStr("sk-test-123"),
-        llm_max_iters=6,
-        **overrides,
-    )
+    values = {
+        "llm_model": "openai/test-model",
+        "llm_api_key": SecretStr("sk-test-123"),
+        "llm_max_iters": 6,
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 def test_factory_builds_engine():
@@ -96,3 +98,49 @@ def test_factory_selects_opt_in_staged_program(tmp_path):
     assert isinstance(engine, StagedDspyEngine)
     assert engine._registry.get("write_report").metadata.read_only is False
     assert engine._registry.get("write_report").metadata.parallelizable is False
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "https://example.gcp.databricks.com/ai-gateway/openai/v1",
+        "https://DATABRICKS.COM./ai-gateway/openai/v1",
+    ],
+)
+def test_databricks_gateway_replaces_daytona_key_with_workspace_token(
+    monkeypatch, api_base
+):
+    from app.agent.factory import _build_lm
+
+    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-workspace-token")
+    settings = make_settings(
+        llm_base_url=api_base,
+        llm_api_key=SecretStr("dtn_not_a_workspace_token"),
+        modal_model_id=None,
+    )
+    lm = _build_lm(settings, None)
+    assert isinstance(lm, OpenAICompatibleLM)
+    assert lm.api_key == "dapi-workspace-token"
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "http://localhost:4000/v1",
+        "https://example.com/databricks.com/ai-gateway/openai/v1",
+        "https://databricks.com.evil.example/ai-gateway/openai/v1",
+        "https://databricks.com@evil.example/ai-gateway/openai/v1",
+    ],
+)
+def test_databricks_lookalikes_keep_configured_key(monkeypatch, api_base):
+    from app.agent.factory import _build_lm
+
+    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-workspace-token")
+    settings = make_settings(
+        llm_base_url=api_base,
+        llm_api_key=SecretStr("dtn_keep_this_key"),
+        modal_model_id=None,
+    )
+    lm = _build_lm(settings, None)
+    assert isinstance(lm, OpenAICompatibleLM)
+    assert lm.api_key == "dtn_keep_this_key"

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import dspy
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -74,6 +76,32 @@ class _FleetLM(dspy.LM):  # type: ignore[misc]
         return self._force_function_calling or super().supports_function_calling
 
 
+def _resolve_gateway_api_key(api_key: str | None, api_base: str) -> str | None:
+    """Pick a credential the gateway will actually accept.
+
+    Databricks serving/AI Gateway rejects non-workspace tokens (Daytona
+    ``dtn_…`` keys produce HTTP 401 "unsupported type"). When the configured
+    key cannot work, prefer ``DATABRICKS_TOKEN`` from the environment.
+    """
+    try:
+        hostname = urlsplit(api_base).hostname
+    except ValueError:
+        hostname = None
+    if hostname is None:
+        return api_key
+    hostname = hostname.rstrip(".").lower()
+    if hostname != "databricks.com" and not hostname.endswith(".databricks.com"):
+        return api_key
+    env_token = os.environ.get("DATABRICKS_TOKEN") or os.environ.get(
+        "DATABRICKS_API_TOKEN"
+    )
+    if not env_token:
+        return api_key
+    if api_key is None or api_key.startswith("dtn_"):
+        return env_token
+    return api_key
+
+
 def _build_lm(
     settings: Settings, override: ProviderOverride | None = None
 ) -> dspy.BaseLM:
@@ -135,7 +163,7 @@ def _build_lm(
     if api_base is not None:
         return OpenAICompatibleLM(
             model=model,
-            api_key=api_key,
+            api_key=_resolve_gateway_api_key(api_key, api_base),
             api_base=api_base,
             temperature=settings.llm_temperature,
             cache=False,

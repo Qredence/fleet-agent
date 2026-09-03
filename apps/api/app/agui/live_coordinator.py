@@ -21,13 +21,14 @@ from ag_ui.core import (
     TextMessageStartEvent,
 )
 from ag_ui.encoder import EventEncoder
-from dspy import LMRateLimitError
+from dspy import LMAuthError, LMRateLimitError
 
 from app.agent.engine import (
     AgentEngine,
     AgentRunContext,
     AgentRunResult,
     AgentStreamUpdate,
+    _flatten_exception_group,
 )
 from app.agent.provider import ProviderOverride
 from app.agui.event_bus import DONE, RunEventBus
@@ -703,9 +704,16 @@ async def _settle_with_retry(
 
 
 def _code_for_exception(exc: Exception) -> tuple[str, str]:
-    text = f"{type(exc).__name__} {exc}".lower()
+    leaves: list[BaseException]
+    if isinstance(exc, BaseExceptionGroup):
+        leaves = _flatten_exception_group(exc)
+    else:
+        leaves = [exc]
+    text = " ".join(f"{type(item).__name__} {item}" for item in leaves).lower()
+    if any(isinstance(item, LMAuthError) for item in leaves) or "lmautherror" in text:
+        return public_error("provider_unauthorized")
     if (
-        isinstance(exc, LMRateLimitError)
+        any(isinstance(item, LMRateLimitError) for item in leaves)
         or "rate limit" in text
         or "ratelimit" in text
         or "429" in text

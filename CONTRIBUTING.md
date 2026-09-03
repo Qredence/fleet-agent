@@ -7,8 +7,9 @@ easier to review and keep the public contract stable.
 ## Before you start
 
 Read the [README](README.md) for setup and the current runtime limitations.
-`AGENTS.md` contains the engineering invariants that apply to frontend,
-backend, contracts, persistence, and the DSPy boundary.
+In Prime Lab workspaces, run `prime lab setup` before working; it generates the
+ignored `AGENTS.md` with the engineering invariants for frontend, backend,
+contracts, persistence, and the DSPy boundary.
 
 For a usage question, start a [Discussion](https://github.com/Qredence/fleet-agent/discussions).
 For a reproducible defect or scoped feature request, use an
@@ -48,8 +49,9 @@ environment.
   persistence, migrations, and API tests.
 - `packages/contracts` is the source of truth for the public agent-state JSON
   Schema and canonical fixtures.
-- `AGENTS.md` documents non-negotiable boundaries, including the rule that raw
-  DSPy reasoning and provider prompts never reach the browser.
+- Prime Lab's generated `AGENTS.md` documents non-negotiable boundaries,
+  including the rule that raw DSPy reasoning and provider prompts never reach
+  the browser.
 
 Keep runtime changes focused. Do not introduce handwritten duplicates of the
 generated contract models, broaden CORS with wildcards, log credentials, or

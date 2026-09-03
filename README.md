@@ -76,7 +76,7 @@ The React frontend renders the conversation and the live process projection.
   conversation history.
 - The responsive three-pane UI combines project/thread navigation, an
   assistant-ui conversation with native text/tool parts, and an AG-UI process
-  panel with Activity, Sources, and Artifacts tabs plus file exploration.
+  panel with Activity, Sources, and Artifacts tabs.
 - Frontend components use `@base-ui/react` primitives and Fluid Functionalism
   design tokens, adhering to CSS logical properties for bidirectional (RTL)
   layout support.
@@ -289,9 +289,9 @@ uses the versioned bootstrap endpoint
 never cross the API boundary. Artifacts are downloaded through controlled API
 URLs; do not expose the local artifact directory directly.
 
-Keep pull requests small and focused. Read [AGENTS.md](AGENTS.md) for
-engineering boundaries and [CONTRIBUTING.md](CONTRIBUTING.md) for contract,
-migration, validation, and review guidance. Report vulnerabilities privately
-using [SECURITY.md](SECURITY.md).
+Keep pull requests small and focused. In Prime Lab workspaces, run
+`prime lab setup` to generate the workspace engineering guidance. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) for contract, migration, validation, and
+review guidance. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
 Fleet Agent is released under the [MIT License](LICENSE).

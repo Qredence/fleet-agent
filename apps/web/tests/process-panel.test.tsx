@@ -390,7 +390,7 @@ describe('ProcessPanel', () => {
   // Rendered without AgUiRuntimePresenceProvider, so the presence context
   // defaults to false: the panel must render its full chrome without calling
   // any AG-UI hook (they throw without a mounted runtime).
-  it('renders tabs, empty states, and the file explorer without a runtime', async () => {
+  it('renders tabs and empty states without a runtime', async () => {
     const user = userEvent.setup()
     render(<ProcessPanel onClose={() => undefined} />)
 
@@ -416,10 +416,6 @@ describe('ProcessPanel', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Artifacts' }))
     expect(screen.getByText('No artifacts generated')).toBeInTheDocument()
-
-    expect(
-      screen.getByRole('textbox', { name: 'Filter workspace files' }),
-    ).toBeInTheDocument()
   })
 })
 
