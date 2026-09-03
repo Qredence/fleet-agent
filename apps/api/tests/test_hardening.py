@@ -299,6 +299,32 @@ async def test_dspy_rate_limit_maps_public_code():
     assert events[-1]["code"] == "rate_limited"
 
 
+async def test_dspy_auth_error_in_exception_group_maps_public_code():
+    import dspy
+
+    inner = dspy.LMAuthError(
+        "401 unsupported type",
+        model="databricks-test",
+        provider="openai-compatible",
+        status=401,
+    )
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input("t-auth", "run-auth")),
+        engine_builder=lambda bus, **kw: (_ for _ in ()).throw(
+            ExceptionGroup("streamify", [inner])
+        ),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    events = [json.loads(c.removeprefix("data: ").strip()) async for c in stream]
+    assert events[-1]["type"] == "RUN_ERROR"
+    assert events[-1]["code"] == "provider_unauthorized"
+    assert events[-1]["message"] == (
+        "The language model rejected the configured API key. "
+        "Check the provider credentials and base URL."
+    )
+
+
 # --- orphan reconciliation + metrics -------------------------------------------
 
 

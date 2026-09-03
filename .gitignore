@@ -44,3 +44,22 @@ skills-lock.json
 # MLflow local run store (evals/mlflow_tracking.py)
 apps/api/mlruns/
 .factory/
+# Lab generated artifacts
+/AGENTS.md
+/CLAUDE.md
+/CLAUDE.local.md
+/.prime/
+/.agents/skills/
+/.claude/skills/
+/.cursor/skills/
+/.factory/skills/
+/.grok/skills/
+/.opencode/skills/
+/.pi/skills/
+/outputs/
+/prime-rl/
+/environments/AGENTS.md
+/environments/*/outputs/
+/environments/*/dist/
+/environments/*/*.egg-info/
+/environments/*/__pycache__/

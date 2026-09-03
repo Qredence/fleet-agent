@@ -33,6 +33,13 @@ FleetAgent(dspy.Module)
             dspy.streamify + StreamListener (ChatAdapter)
 ```
 
+## RLM availability in 3.3.1
+
+DSPy 3.3.1 exposes `RLM` at the package root as `dspy.RLM`; the implementation
+is also available at `dspy/predict/rlm.py` for explicit imports. Fleet Agent's
+code does not depend on RLM — the routed `FleetAgent` uses `ReActV2` only — but
+these notes keep older RLM examples aligned with the pinned DSPy version.
+
 ## Why keep ReActV2
 
 DSPy 3.3.1 marks `ReActV2` experimental, but it is the relevant 3.3 agent
@@ -273,8 +280,8 @@ any anchor stream immediately (minus a small 80-character confirmation window).
 
 ## Routing evaluation
 
-`evals/agent_tool_routing.py` holds two example populations: ~25 canonical
-requests (the unambiguous core, every route covered) and ~18 adversarial
+`evals/agent_tool_routing.py` holds two example populations: 25 canonical
+requests (the unambiguous core, every route covered) and 18 adversarial
 requests attacking the two real failure modes - over-selection (granting
 mutation for discussion) and under-selection (phrasing mutation as a question,
 or a deletion that needs the shell because no delete tool exists).
@@ -313,8 +320,8 @@ The loop is offline, manual, and gated:
 cd apps/api && uv run python -m evals.optimize --auto light
 ```
 
-1. The 45-example set is split per route (fixed seed, ~70/30) into train and
-   held-out validation halves.
+1. The 43-example set (25 canonical + 18 adversarial) is split per route
+   (fixed seed, ~70/30) into train and held-out validation halves.
 2. The baseline Flex router is scored on the held-out half. Every forward —
    baseline included — runs inside dspy's Deno sandbox; the optimizer never
    executes in the host process, and only predictor construction/calls bridge
@@ -408,7 +415,8 @@ provider data to the browser, with or without the flag.
   reported per run in the artifact manifest) before the evidence loop even
   starts. Operators who value latency over route precision simply do not pin
   the state.
-- **The eval set is small and hand-authored.** 45 examples, ~13 held out. A
+- **The eval set is small and hand-authored.** 43 examples (25 canonical +
+  18 adversarial), ~13 held out. A
   candidate that clears the gates generalizes as well as that set measures;
   the gate is regression protection, not proof of optimality.
 - **Detached/resumable runs beyond approvals are out of scope.** A paused

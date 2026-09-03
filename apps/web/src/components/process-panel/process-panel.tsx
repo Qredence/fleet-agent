@@ -1,11 +1,10 @@
 import { Activity, X } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
 import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
-import { FileExplorer } from '@/components/process-panel/file-explorer'
 import { RunActivityPanel } from '@/components/process-panel/run-activity-inline'
 import { SourcesTab } from '@/components/process-panel/sources-tab'
 import { Button } from '@/components/ui/button'
@@ -26,8 +25,7 @@ const TABS: { value: ProcessPanelTab; label: string }[] = [
 ]
 
 /**
- * Minimal process header: a plain heading and a close action. The file path
- * lives with the file explorer; no breadcrumb, copy, or open actions.
+ * Minimal process header: a plain heading and a close action.
  *
  * @param onClose - Callback invoked when closing the process panel.
  */
@@ -54,8 +52,7 @@ function ProcessHeader({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Renders the process panel showing run activity, sources, artifacts, and
- * file exploration.
+ * Renders the process panel showing run activity, sources, and artifacts.
  *
  * The shell is shared by the live runtime and runtime-less preview routes;
  * only the tab bodies differ, and AG-UI hooks are confined to the `Active*`
@@ -90,13 +87,11 @@ export function ProcessPanel({
   )
 }
 
-/** Tab strip, tab bodies, and the docked file explorer. */
+/** Tab strip and tab bodies. */
 function ProcessPanelBody() {
   const hasAgUi = useHasAgUiRuntime()
   const activeTab = useWorkspaceStore((s) => s.processPanelTab)
   const setActiveTab = useWorkspaceStore((s) => s.setProcessPanelTab)
-  const [selectedFilePath, setSelectedFilePath] = useState('README.md')
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <Tabs
@@ -151,10 +146,6 @@ function ProcessPanelBody() {
         </TabsContent>
       </Tabs>
 
-      <FileExplorer
-        selectedPath={selectedFilePath}
-        onSelectPath={setSelectedFilePath}
-      />
     </div>
   )
 }

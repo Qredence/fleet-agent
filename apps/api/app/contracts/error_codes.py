@@ -20,6 +20,10 @@ ERROR_MESSAGES = {
     "rate_limited": "The system is busy right now. Please retry in a moment.",
     "run_cancelled": "The run was cancelled.",
     "provider_override_invalid": "The selected provider settings are invalid.",
+    "provider_unauthorized": (
+        "The language model rejected the configured API key. "
+        "Check the provider credentials and base URL."
+    ),
     "approval_expired": "The approval request is no longer available.",
     "approval_invalid": "The approval response is invalid.",
     "internal_error": "The agent run failed.",
