@@ -10,6 +10,14 @@ import {
   STORAGE_KEY,
 } from '@/lib/openrouter-auth'
 import {
+  getApiKey as getOpenCodeZenApiKey,
+  setApiKey as setOpenCodeZenApiKey,
+  setSelectedModel as setOpenCodeZenSelectedModel,
+  setCustomModelEnabled as setOpenCodeZenCustomModelEnabled,
+  clearApiKey as clearOpenCodeZenApiKey,
+  STORAGE_KEY as OPENCODE_ZEN_STORAGE_KEY,
+} from '@/lib/opencode-zen-auth'
+import {
   getActiveProfile,
   getActiveProviderId,
   getAgentProviderHeaders,
@@ -17,6 +25,8 @@ import {
   loadProviderStore,
   OPENROUTER_BASE_URL,
   OPENROUTER_PROFILE_ID,
+  OPENCODE_ZEN_BASE_URL,
+  OPENCODE_ZEN_PROFILE_ID,
   PROVIDERS_STORAGE_KEY,
   removeProfile,
   SERVER_DEFAULT_ID,
@@ -41,11 +51,20 @@ describe('providers store', () => {
 
     expect(store.version).toBe(1)
     expect(store.activeProviderId).toBe(OPENROUTER_PROFILE_ID)
+    // The default store ships the OpenRouter and OpenCode Zen presets
+    // side-by-side; users see both on first load.
     expect(store.profiles).toEqual([
       expect.objectContaining({
         id: OPENROUTER_PROFILE_ID,
         name: 'OpenRouter',
         baseUrl: OPENROUTER_BASE_URL,
+        responseFormat: 'native_function_calling',
+        messagesFormat: 'system_role',
+      }),
+      expect.objectContaining({
+        id: 'opencode-zen',
+        name: 'OpenCode Zen',
+        baseUrl: 'https://opencode.ai/zen/v1',
         responseFormat: 'native_function_calling',
         messagesFormat: 'system_role',
       }),
@@ -159,8 +178,10 @@ describe('providers store', () => {
     setActiveProviderId('profile-one')
 
     const profiles = getProfiles()
-    expect(profiles).toHaveLength(2) // OpenRouter preset + one custom
-    expect(profiles[1]).toMatchObject({
+    // OpenRouter preset + OpenCode Zen preset + one custom.
+    expect(profiles).toHaveLength(3)
+    const custom = profiles.find((p) => p.id === 'profile-one')
+    expect(custom).toMatchObject({
       name: 'Gateway One Renamed',
       baseUrl: 'https://one.example/v2',
       responseFormat: 'json_tool_calls',
@@ -168,7 +189,7 @@ describe('providers store', () => {
 
     removeProfile('profile-one')
 
-    expect(getProfiles()).toHaveLength(1)
+    expect(getProfiles()).toHaveLength(2)
     expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
   })
 
@@ -201,5 +222,76 @@ describe('providers store', () => {
     const raw = localStorage.getItem(PROVIDERS_STORAGE_KEY)
     expect(raw).not.toContain('sk-or-v1-legacykey123456')
     expect(localStorage.getItem(STORAGE_KEY)).toBe('sk-or-v1-legacykey123456')
+  })
+
+  describe('OpenCode Zen preset', () => {
+    it('exposes the OpenCode Zen preset alongside OpenRouter', () => {
+      const profiles = getProfiles()
+      const ids = profiles.map((p) => p.id)
+      expect(ids).toContain(OPENROUTER_PROFILE_ID)
+      expect(ids).toContain(OPENCODE_ZEN_PROFILE_ID)
+    })
+
+    it('builds agent headers for the OpenCode Zen preset', () => {
+      setOpenCodeZenApiKey('zen-browser-key-1234')
+      setOpenCodeZenCustomModelEnabled(true)
+      setOpenCodeZenSelectedModel('muse-spark-1.3-contributor-free')
+      setActiveProviderId(OPENCODE_ZEN_PROFILE_ID)
+
+      expect(getAgentProviderHeaders()).toEqual({
+        'X-LLM-Key': 'zen-browser-key-1234',
+        'X-LLM-Base-Url': OPENCODE_ZEN_BASE_URL,
+        'X-LLM-Response-Format': 'native_function_calling',
+        'X-LLM-Messages-Format': 'system_role',
+        'X-LLM-Model': 'muse-spark-1.3-contributor-free',
+      })
+
+      // The browser key never leaves storage; it must not appear in the
+      // generic Fleet provider registry.
+      const raw = localStorage.getItem(PROVIDERS_STORAGE_KEY)
+      expect(raw).not.toContain('zen-browser-key-1234')
+      expect(localStorage.getItem(OPENCODE_ZEN_STORAGE_KEY)).toBe(
+        'zen-browser-key-1234',
+      )
+    })
+
+    it('omits the model override when the custom-model toggle is off', () => {
+      setOpenCodeZenApiKey('zen-browser-key-1234')
+      setOpenCodeZenCustomModelEnabled(false)
+      setOpenCodeZenSelectedModel('claude-opus-4-8')
+      setActiveProviderId(OPENCODE_ZEN_PROFILE_ID)
+
+      const headers = getAgentProviderHeaders()
+      expect(headers).not.toHaveProperty('X-LLM-Model')
+      expect(headers['X-LLM-Base-Url']).toBe(OPENCODE_ZEN_BASE_URL)
+    })
+
+    it('returns no OpenCode Zen headers without a key', () => {
+      clearOpenCodeZenApiKey()
+      setActiveProviderId(OPENCODE_ZEN_PROFILE_ID)
+      expect(getOpenCodeZenApiKey()).toBeNull()
+      expect(getAgentProviderHeaders()).toEqual({})
+    })
+
+    it('protects the OpenCode Zen preset from removal and from foreign base URLs', () => {
+      loadProviderStore()
+
+      removeProfile(OPENCODE_ZEN_PROFILE_ID)
+      expect(getProfiles().map((p) => p.id)).toContain(OPENCODE_ZEN_PROFILE_ID)
+
+      // A malicious override cannot repoint the preset at a different base URL.
+      upsertProfile({
+        id: OPENCODE_ZEN_PROFILE_ID,
+        name: 'OpenCode Zen',
+        baseUrl: 'https://attacker.example/v1',
+        apiKey: 'stolen',
+        chatCompletionFormat: 'openai-chat-completions',
+        responseFormat: 'native_function_calling',
+        messagesFormat: 'system_role',
+      })
+
+      const preset = getProfiles().find((p) => p.id === OPENCODE_ZEN_PROFILE_ID)
+      expect(preset?.baseUrl).toBe(OPENCODE_ZEN_BASE_URL)
+    })
   })
 })

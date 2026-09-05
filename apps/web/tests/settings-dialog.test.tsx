@@ -27,12 +27,16 @@ describe('SettingsDialog', () => {
     render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
 
     expect(screen.getByText(/workspace settings/i)).toBeInTheDocument()
-    expect(screen.getByText('Disconnected')).toBeInTheDocument()
+    // Both OpenRouter and OpenCode Zen start in the disconnected state.
+    expect(screen.getAllByText('Disconnected').length).toBeGreaterThanOrEqual(2)
     expect(
       screen.getByRole('button', { name: /sign in with openrouter/i }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /or paste api key manually/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /add opencode zen api key/i }),
     ).toBeInTheDocument()
   })
 
@@ -60,7 +64,9 @@ describe('SettingsDialog', () => {
 
     render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
 
-    expect(screen.getByText('Connected')).toBeInTheDocument()
+    // OpenRouter is now connected; OpenCode Zen stays disconnected.
+    expect(screen.getAllByText('Connected').length).toBe(1)
+    expect(screen.getAllByText('Disconnected').length).toBe(1)
     expect(screen.getByText(/sk-or-v1••••••••cdef/i)).toBeInTheDocument()
     expect(
       screen.getByText(/app attribution configured/i),
@@ -103,8 +109,10 @@ describe('SettingsDialog', () => {
     await user.click(screen.getByRole('button', { name: /save provider/i }))
 
     const profiles = getProfiles()
-    expect(profiles).toHaveLength(2)
-    expect(profiles[1]).toMatchObject({
+    // OpenRouter + OpenCode Zen presets + the newly added custom profile.
+    expect(profiles).toHaveLength(3)
+    const custom = profiles.find((p) => p.name === 'Modal Gateway')
+    expect(custom).toMatchObject({
       name: 'Modal Gateway',
       baseUrl: 'https://fleet-proxy.modal.run/v1',
       apiKey: 'sk-modal-key',
@@ -112,7 +120,7 @@ describe('SettingsDialog', () => {
       responseFormat: 'json_tool_calls',
       messagesFormat: 'system_role',
     })
-    expect(getActiveProviderId()).toBe(profiles[1].id)
+    expect(getActiveProviderId()).toBe(custom?.id)
     expect(getAgentProviderHeaders()['X-LLM-Base-Url']).toBe(
       'https://fleet-proxy.modal.run/v1',
     )
@@ -154,7 +162,9 @@ describe('SettingsDialog', () => {
 
     await user.click(screen.getByRole('button', { name: /delete modal gateway/i }))
 
-    expect(getProfiles()).toHaveLength(1)
+    // The two built-in presets (OpenRouter + OpenCode Zen) are protected and
+    // re-appear in the profile list when missing from localStorage.
+    expect(getProfiles()).toHaveLength(2)
     expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
     expect(getAgentProviderHeaders()).toEqual({})
   })
