@@ -8,6 +8,7 @@ const routeMocks = vi.hoisted(() => ({
   fetchBootstrap: vi.fn(),
   listThreads: vi.fn(),
   renameThread: vi.fn(),
+  createThread: vi.fn(),
   onUserMessagePersisted:
     undefined as ((message: unknown) => void | Promise<void>) | undefined,
 }))
@@ -35,6 +36,7 @@ vi.mock('@/features/threads/threads-api', () => ({
   fetchBootstrap: (...args: unknown[]) => routeMocks.fetchBootstrap(...args),
   listThreads: (...args: unknown[]) => routeMocks.listThreads(...args),
   renameThread: (...args: unknown[]) => routeMocks.renameThread(...args),
+  createThread: (...args: unknown[]) => routeMocks.createThread(...args),
 }))
 
 import { WorkspaceRoute } from '@/app/routes/workspace-route'
@@ -61,15 +63,19 @@ const bootstrap: ThreadBootstrap = {
 
 let queryClient: QueryClient
 
-function renderRoute() {
+function renderRoute(initialEntry = '/projects/project_1/threads/thread_a') {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/projects/project_1/threads/thread_a']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
+          <Route
+            path="/projects/:projectId"
+            element={<WorkspaceRoute />}
+          />
           <Route
             path="/projects/:projectId/threads/:threadId"
             element={<WorkspaceRoute />}
@@ -86,6 +92,10 @@ beforeEach(() => {
   routeMocks.renameThread.mockResolvedValue({
     ...placeholderThread,
     title: 'Explain the project',
+  })
+  routeMocks.createThread.mockResolvedValue({
+    ...placeholderThread,
+    id: 'thread_new',
   })
   routeMocks.onUserMessagePersisted = undefined
 })
@@ -170,5 +180,36 @@ describe('WorkspaceRoute automatic thread titles', () => {
     })
 
     expect(routeMocks.renameThread).not.toHaveBeenCalled()
+  })
+})
+
+describe('WorkspaceRoute without an active conversation', () => {
+  it('opens the most recent conversation instead of a composer with no thread', async () => {
+    renderRoute('/projects/project_1')
+
+    // The route redirects to the project's newest thread, which then renders.
+    expect(await screen.findByTestId('workspace-title')).toHaveTextContent(
+      'New conversation',
+    )
+    expect(routeMocks.createThread).not.toHaveBeenCalled()
+  })
+
+  it('starts the first conversation for a project that has none', async () => {
+    routeMocks.listThreads.mockResolvedValue([])
+    routeMocks.createThread.mockImplementation(async () => {
+      // The created thread is visible on the next list, as it is in the app.
+      routeMocks.listThreads.mockResolvedValue([
+        { ...placeholderThread, id: 'thread_new' },
+      ])
+      return { ...placeholderThread, id: 'thread_new' }
+    })
+
+    renderRoute('/projects/project_1')
+
+    expect(await screen.findByTestId('workspace-title')).toHaveTextContent(
+      'New conversation',
+    )
+    expect(routeMocks.createThread).toHaveBeenCalledWith('project_1')
+    expect(routeMocks.createThread).toHaveBeenCalledTimes(1)
   })
 })

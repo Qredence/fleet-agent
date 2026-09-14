@@ -28,6 +28,9 @@ export function RunMetricsLine({ metrics }: { metrics: RunMetrics }) {
 
 const TERMINATION_LABELS: Record<string, string> = {
   submit: 'Completed normally',
+  // The routed program ends by synthesizing the answer from evidence rather
+  // than by calling submit, so this is its normal completion too.
+  synthesis: 'Completed normally',
   forced_submit: 'Completed via forced submission',
   max_iters: 'Stopped: iteration limit reached',
   empty_tool_calls: 'Stopped: the agent returned no actions',
@@ -40,7 +43,10 @@ const TERMINATION_LABELS: Record<string, string> = {
   approval_invalid: 'Approval could not be applied',
 }
 
-/** Surfaces how a run ended — prominent for problems, quiet for submit. */
+/** Reasons that describe a run that finished as intended, not a problem. */
+const NORMAL_TERMINATIONS = new Set(['submit', 'synthesis'])
+
+/** Surfaces how a run ended — prominent for problems, quiet for a clean finish. */
 export function TerminationNotice({
   terminationReason,
   errorCode,
@@ -52,7 +58,8 @@ export function TerminationNotice({
 
   const isProblem =
     Boolean(errorCode) ||
-    (terminationReason !== undefined && terminationReason !== 'submit')
+    (terminationReason !== undefined &&
+      !NORMAL_TERMINATIONS.has(terminationReason))
 
   return (
     <div

@@ -1,6 +1,6 @@
-import { useCallback, useRef } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef } from 'react'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
 import { AgentRuntimeProvider } from '@/features/agent-runtime/agent-runtime-provider'
@@ -12,6 +12,7 @@ import {
 } from '@/features/threads/thread-title'
 import { useThreads } from '@/features/threads/use-threads'
 import {
+  createThread,
   fetchBootstrap,
   renameThread,
   type ThreadBootstrap,
@@ -30,6 +31,7 @@ export function WorkspaceRoute() {
   }>()
 
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const threads = useThreads(projectId)
   const thread = threadId
     ? threads.data?.find((candidate) => candidate.id === threadId)
@@ -90,9 +92,68 @@ export function WorkspaceRoute() {
     [projectId, queryClient, threadId, threadTitle],
   )
 
+  // `/projects/:projectId` carries no conversation, so the composer would post
+  // a client-invented thread id and the run would 404. Resolve the route to a
+  // real thread first: open the project's most recently updated conversation,
+  // or start one when the project is still empty (a new project, or every
+  // thread deleted).
+  const newestThreadId = threads.data?.[0]?.id
+  const openThread = useMutation({
+    mutationFn: (id: string) => createThread(id),
+    onSuccess: async (created) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['projects', projectId, 'threads'],
+      })
+      navigate(`/projects/${projectId}/threads/${created.id}`, { replace: true })
+    },
+  })
+  const requestedThread = useRef(false)
+  const needsThread =
+    !threadId && Boolean(projectId) && threads.isSuccess && !newestThreadId
+  useEffect(() => {
+    if (!needsThread || requestedThread.current) return
+    requestedThread.current = true
+    openThread.mutate(projectId as string)
+  }, [needsThread, openThread, projectId])
+
   // Unknown thread id for this project → bounce to the project page.
   if (threadId && threads.isSuccess && !thread) {
     return <Navigate to={`/projects/${projectId}`} replace />
+  }
+
+  if (!threadId && projectId) {
+    // Wait for the thread list before rendering a composer that has nothing
+    // to attach to; the effect above starts a conversation when there is none.
+    if (!threads.isSuccess || !newestThreadId) {
+      if (openThread.isError) {
+        return (
+          <section className="flex min-h-screen items-center justify-center p-6">
+            <div className="max-w-md space-y-3 text-center">
+              <h1 className="text-lg font-semibold">
+                Unable to start a conversation
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                This project has no conversation yet and one could not be created.
+              </p>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm"
+                onClick={() => {
+                  requestedThread.current = false
+                  openThread.reset()
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </section>
+        )
+      }
+      return <WorkspaceLoading />
+    }
+    return (
+      <Navigate to={`/projects/${projectId}/threads/${newestThreadId}`} replace />
+    )
   }
 
   if (threadId && bootstrap.isPending) {

@@ -1,5 +1,5 @@
 diff --git a/dist/runtime/AgUiThreadRuntimeCore.js b/dist/runtime/AgUiThreadRuntimeCore.js
-index 9ba55c5c5a05a7777dfd00ae5ca52e756810b122..c4765cab114a9eddb54b0cc21e4f44776a24e3d6 100644
+index 9ba55c5c5a05a7777dfd00ae5ca52e756810b122..d44a7de12d2ada2d06b255c8a1a0dd4800aca06a 100644
 --- a/dist/runtime/AgUiThreadRuntimeCore.js
 +++ b/dist/runtime/AgUiThreadRuntimeCore.js
 @@ -224,7 +224,7 @@ var AgUiThreadRuntimeCore = class {
@@ -11,19 +11,38 @@ index 9ba55c5c5a05a7777dfd00ae5ca52e756810b122..c4765cab114a9eddb54b0cc21e4f4477
  		this.addOrUpdateMessage(parentId, threadMessage);
  		this.switchToBranch(threadMessage.id);
  		this.notifyUpdate();
-@@ -937,6 +937,7 @@ var AgUiThreadRuntimeCore = class {
+@@ -702,7 +702,13 @@ var AgUiThreadRuntimeCore = class {
+ 				const placeholder = ensureAssistant(true);
+ 				if (placeholder === serverId) return;
+ 				const reassigned = this.reassignAssistantId(placeholder, serverId);
+-				const adoptsVisibleCollision = !reassigned && !runStartMessageIds.has(serverId) && this.repository.headId === serverId;
++				// A native AG-UI resume continues the assistant message that owns the
++				// live checkpoint, so the server deliberately reuses an id already in
++				// the repository. Adopt it instead of dropping the continuation. This
++				// assumes the first assistant id the server reports during a resume is
++				// that checkpoint owner; a path that passes no `resume` (page-reload
++				// stream resume) keeps the original condition.
++				const adoptsVisibleCollision = !reassigned && (resume != null || !runStartMessageIds.has(serverId)) && this.repository.headId === serverId;
+ 				if (reassigned || adoptsVisibleCollision) {
+ 					assistantMessageId = serverId;
+ 					if (adoptsVisibleCollision) {
+@@ -937,6 +943,9 @@ var AgUiThreadRuntimeCore = class {
  				newId
  			});
  			this.deleteMessage(oldId, oldItem.parentId ?? null);
++			// The placeholder is gone, so keep the view on the server's message
++			// instead of letting the head fall back to findHead().
 +			this.switchToBranch(newId);
  		} else {
  			const { isOptimistic: _, ...metadata } = oldItem.message.metadata;
  			this.addOrUpdateMessage(oldItem.parentId, {
-@@ -944,8 +945,8 @@ var AgUiThreadRuntimeCore = class {
+@@ -944,8 +953,10 @@ var AgUiThreadRuntimeCore = class {
  				id: newId,
  				metadata
  			});
 -			this.switchToBranch(newId);
++			// Delete first: dropping the placeholder can move the head itself,
++			// so the branch switch has to come last.
  			this.tryDeleteMessage(oldId);
 +			this.switchToBranch(newId);
  		}

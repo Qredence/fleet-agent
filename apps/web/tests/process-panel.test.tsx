@@ -126,6 +126,11 @@ const completedState: AgentWorkspaceState = {
   },
 }
 
+const synthesisState: AgentWorkspaceState = {
+  ...completedState,
+  run: { ...completedState.run, terminationReason: 'synthesis' },
+}
+
 const failedState: AgentWorkspaceState = {
   ...runningState,
   run: {
@@ -347,6 +352,14 @@ describe('RunActivityInlineContent', () => {
 
     expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.getByText('agent_no_output')).toBeInTheDocument()
+  })
+
+  it('treats the routed program synthesis ending as a normal completion', async () => {
+    await renderActivity(synthesisState)
+
+    expect(screen.getByText('Completed normally')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('renders cancelled runs without alarming chrome', async () => {
