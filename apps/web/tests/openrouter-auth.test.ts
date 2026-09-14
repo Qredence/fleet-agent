@@ -7,8 +7,6 @@ import {
   setApiKey,
   clearApiKey,
   maskApiKey,
-  getOpenRouterHeaders,
-  getOpenRouterAgentHeaders,
   getSelectedModel,
   setSelectedModel,
   isCustomModelEnabled,
@@ -239,26 +237,6 @@ describe('openrouter-auth module', () => {
       await expect(handleOAuthCallback('invalid_code')).rejects.toThrow(
         'Key exchange failed with status 400',
       )
-    })
-  })
-
-  describe('Attribution Headers', () => {
-    it('returns standard headers including HTTP-Referer and X-Title', () => {
-      const headers = getOpenRouterHeaders('sk-or-test-key')
-      expect(headers['HTTP-Referer']).toBeTruthy()
-      expect(headers['X-Title']).toBe('Fleet Agent')
-      expect(headers['Authorization']).toBe('Bearer sk-or-test-key')
-      expect(headers['X-OpenRouter-Key']).toBe('sk-or-test-key')
-    })
-
-    it('only creates agent-scoped headers when a key is present', () => {
-      expect(getOpenRouterAgentHeaders(null, 'anthropic/claude')).toEqual({})
-      expect(
-        getOpenRouterAgentHeaders('sk-or-test-key', 'anthropic/claude'),
-      ).toEqual({
-        'X-OpenRouter-Key': 'sk-or-test-key',
-        'X-OpenRouter-Model': 'anthropic/claude',
-      })
     })
   })
 })

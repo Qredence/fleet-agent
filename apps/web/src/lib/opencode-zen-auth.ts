@@ -166,29 +166,3 @@ export const setCustomModelEnabled = (enabled: boolean): void => {
     // Ignore
   }
 }
-
-/**
- * Returns standard OpenCode Zen request headers (attribution + bearer).
- * Use only for direct calls to the OpenCode Zen API; never send these to
- * the Fleet Agent generic API surface.
- */
-export function getOpenCodeZenHeaders(
-  apiKey?: string | null,
-): Record<string, string> {
-  const key = apiKey ?? getApiKey()
-  const origin =
-    typeof window !== 'undefined' && window.location.origin
-      ? window.location.origin
-      : 'https://fleet-agent.local'
-
-  const headers: Record<string, string> = {
-    'HTTP-Referer': origin,
-    'X-Title': 'Fleet Agent',
-  }
-
-  if (key) {
-    headers['Authorization'] = `Bearer ${key}`
-  }
-
-  return headers
-}

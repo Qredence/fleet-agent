@@ -13,7 +13,6 @@ import {
   setSelectedModel,
   isCustomModelEnabled,
   setCustomModelEnabled,
-  getOpenCodeZenHeaders,
   onAuthChange,
 } from '@/lib/opencode-zen-auth'
 
@@ -91,26 +90,6 @@ describe('opencode-zen-auth module', () => {
       const ids = POPULAR_OPENCODE_ZEN_MODELS.map((model) => model.id)
       expect(ids).toContain('muse-spark-1.3-contributor-free')
       expect(ids).toContain('claude-opus-4-8')
-    })
-  })
-
-  describe('Attribution headers', () => {
-    it('returns the app attribution header even without a key', () => {
-      const headers = getOpenCodeZenHeaders()
-      expect(headers['HTTP-Referer']).toBeTruthy()
-      expect(headers['X-Title']).toBe('Fleet Agent')
-      expect(headers['Authorization']).toBeUndefined()
-    })
-
-    it('adds the Bearer token when a key is provided', () => {
-      const headers = getOpenCodeZenHeaders('zen-test-key-1234')
-      expect(headers['Authorization']).toBe('Bearer zen-test-key-1234')
-    })
-
-    it('reads the key from storage when no override is passed', () => {
-      setApiKey('zen-test-key-5678')
-      const headers = getOpenCodeZenHeaders()
-      expect(headers['Authorization']).toBe('Bearer zen-test-key-5678')
     })
   })
 })

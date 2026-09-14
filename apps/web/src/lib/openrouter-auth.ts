@@ -289,50 +289,6 @@ export async function finalizeOAuthCallback(): Promise<string | null> {
 }
 
 /**
- * Returns standard OpenRouter headers including full app attribution.
- *
- * @param apiKey - Optional explicit API key override
- */
-export function getOpenRouterHeaders(
-  apiKey?: string | null,
-): Record<string, string> {
-  const key = apiKey ?? getApiKey()
-  const origin =
-    typeof window !== 'undefined' && window.location.origin
-      ? window.location.origin
-      : 'https://fleet-agent.local'
-
-  const headers: Record<string, string> = {
-    'HTTP-Referer': origin,
-    'X-Title': 'Fleet Agent',
-  }
-
-  if (key) {
-    headers['Authorization'] = `Bearer ${key}`
-    headers['X-OpenRouter-Key'] = key
-  }
-
-  return headers
-}
-
-/**
- * Returns only the headers accepted by Fleet Agent's /api/agent endpoint.
- * Provider authorization and attribution headers must never be sent to the
- * generic Fleet API resources.
- */
-export function getOpenRouterAgentHeaders(
-  apiKey?: string | null,
-  model?: string | null,
-): Record<string, string> {
-  const key = apiKey ?? getApiKey()
-  const headers: Record<string, string> = {}
-  if (!key) return headers
-  headers['X-OpenRouter-Key'] = key
-  if (model?.trim()) headers['X-OpenRouter-Model'] = model.trim()
-  return headers
-}
-
-/**
  * Masks an API key for safe display (e.g., sk-or-v1-••••••••4a8f).
  */
 export function maskApiKey(key: string | null | undefined): string {

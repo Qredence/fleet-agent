@@ -33,9 +33,7 @@ A comprehensive architectural and engineering roadmap to elevate **Fleet Agent**
 **Goal:** Hoist navigation into a persistent root layout that preserves sidebar scroll/collapse state across all routes, implementing the exact dark-theme styling, iconography, and layout from the reference design.
 
 ### 1.1 Persistent App Shell & Layout
-- [x] Create `AppShell` and `ProjectNavTabs` (`apps/web/src/components/layout/project-nav-tabs.tsx`):
-  - Tabs: **Workspace** (`/projects/:id`), **Optimizer** (`/projects/:id/optimizer`), **Tools** (`/projects/:id/tools`), **Connectors** (`/projects/:id/connectors`).
-  - Active state styling with pill highlights and seamless route transitions.
+- [x] Section tabs (**Workspace** (`/projects/:id`), **Optimizer** (`/projects/:id/optimizer`), **Tools** (`/projects/:id/tools`), **Connectors** (`/projects/:id/connectors`)) render inside `apps/web/src/components/projects/project-sidebar.tsx` (see 1.2), with pill-highlight active state. The earlier standalone `ProjectNavTabs` component was never mounted and was removed.
 - [x] Refactor `apps/web/src/app/app-router.tsx` to include routes for Workspace, Optimizer, Tools, and Connectors.
 
 ### 1.2 High-Fidelity Shadcn Base-UI Sidebar

@@ -24,7 +24,7 @@ from app.contracts.domain import (
     ArtifactStarted,
     SourceDiscovered,
 )
-from app.persistence.models import DspyHistory, Message, Run, RunState, Thread
+from app.persistence.models import DspyHistory, Message, Run, Thread
 from app.persistence.repositories import (
     ApprovalCheckpointsRepository,
     ArtifactsRepository,
@@ -792,45 +792,6 @@ async def _validate_message_reference(
     if not allow_missing:
         raise RunReservationError(ReservationErrorCode.MESSAGE_NOT_FOUND)
     return None
-
-
-async def _nearest_state(
-    session: AsyncSession, thread_id: str, head_message_id: str
-) -> RunState | None:
-    rows = await session.execute(
-        select(RunState).where(RunState.thread_id == thread_id)
-    )
-    states = {row.head_message_id: row for row in rows.scalars()}
-    messages = await session.execute(
-        select(Message.message_id, Message.parent_message_id).where(
-            Message.thread_id == thread_id
-        )
-    )
-    parents = {message_id: parent for message_id, parent in messages}
-    runs = await session.execute(
-        select(Run.id, Run.input_message_id, Run.output_message_id).where(
-            Run.thread_id == thread_id
-        )
-    )
-    for r_id, r_in, r_out in runs.all():
-        st = states.get(r_out) or states.get(f"msg-{r_id}")
-        if st is not None:
-            states[f"msg-tools-{r_id}"] = st
-            if r_in and r_in not in states:
-                states[r_in] = st
-
-    current: str | None = head_message_id
-    seen: set[str] = set()
-    while current is not None and current not in seen:
-        if current in states:
-            return states[current]
-        if current.startswith("msg-tools-"):
-            alt = current.replace("msg-tools-", "msg-", 1)
-            if alt in states:
-                return states[alt]
-        seen.add(current)
-        current = parents.get(current)
-    return states.get(None)
 
 
 async def _nearest_history(

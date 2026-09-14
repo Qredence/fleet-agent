@@ -20,27 +20,10 @@ export const SURFACE_SHADOW: Record<number, string> = {
   8: "shadow-surface-8",
 };
 
-export const SURFACE_HOVER_BG: Record<number, string> = {
-  1: "hover:bg-surface-1",
-  2: "hover:bg-surface-2",
-  3: "hover:bg-surface-3",
-  4: "hover:bg-surface-4",
-  5: "hover:bg-surface-5",
-  6: "hover:bg-surface-6",
-  7: "hover:bg-surface-7",
-  8: "hover:bg-surface-8",
-};
-
-export const SURFACE_HOVER_SHADOW: Record<number, string> = {
-  1: "hover:shadow-surface-1",
-  2: "hover:shadow-surface-2",
-  3: "hover:shadow-surface-3",
-  4: "hover:shadow-surface-4",
-  5: "hover:shadow-surface-5",
-  6: "hover:shadow-surface-6",
-  7: "hover:shadow-surface-7",
-  8: "hover:shadow-surface-8",
-};
+/** Clamp a surface level into the 1-8 ladder the lookup tables cover. */
+function level(value: number): number {
+  return Math.round(Math.max(1, Math.min(8, value)));
+}
 
 /**
  * Generates background and shadow classes for the specified surface levels.
@@ -50,25 +33,7 @@ export const SURFACE_HOVER_SHADOW: Record<number, string> = {
  * @returns The corresponding background and shadow CSS classes.
  */
 export function surfaceClasses(bgLevel: number, shadowLevel: number = bgLevel): string {
-  // Round after clamping so a fractional level can't index out of the lookup
-  // tables (which would render "undefined undefined").
-  const bg = Math.round(Math.max(1, Math.min(8, bgLevel)));
-  const shadow = Math.round(Math.max(1, Math.min(8, shadowLevel)));
-  return `${SURFACE_BG[bg]} ${SURFACE_SHADOW[shadow]}`;
-}
-
-/**
- * Builds the hover-state surface classes for the specified background and shadow levels.
- *
- * @param bgLevel - Background level, clamped and rounded to an integer from 1 through 8
- * @param shadowLevel - Shadow level, clamped and rounded to an integer from 1 through 8
- * @returns The corresponding hover background and shadow CSS classes
- */
-export function surfaceHoverClasses(
-  bgLevel: number,
-  shadowLevel: number = bgLevel
-): string {
-  const bg = Math.round(Math.max(1, Math.min(8, bgLevel)));
-  const shadow = Math.round(Math.max(1, Math.min(8, shadowLevel)));
-  return `${SURFACE_HOVER_BG[bg]} ${SURFACE_HOVER_SHADOW[shadow]}`;
+  // Clamp before indexing: a fractional or out-of-range level would otherwise
+  // render "undefined undefined".
+  return `${SURFACE_BG[level(bgLevel)]} ${SURFACE_SHADOW[level(shadowLevel)]}`;
 }

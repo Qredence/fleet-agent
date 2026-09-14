@@ -2,7 +2,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.agent.engine import DspyAgentEngine
-from app.agent.factory import _FleetLM, build_dspy_engine
+from app.agent.factory import build_dspy_engine
 from app.agent.openai_compatible import OpenAICompatibleLM
 from app.settings import Settings
 
@@ -40,8 +40,11 @@ def test_custom_base_url_uses_the_openai_compatible_client():
 
 
 def test_hosted_models_without_a_base_url_keep_litellm_routing():
+    import dspy
+
     engine = build_dspy_engine(make_settings())
-    assert isinstance(engine._lm, _FleetLM)
+    assert isinstance(engine._lm, dspy.LM)
+    assert not isinstance(engine._lm, OpenAICompatibleLM)
     assert engine._lm.kwargs.get("api_base") is None
 
 

@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlsplit
 
 import dspy
@@ -64,18 +63,6 @@ def _promoted_router_src(settings: Settings) -> str | None:
     return router.module_src()
 
 
-class _FleetLM(dspy.LM):  # type: ignore[misc]
-    """LM with an explicit capability override for compatible gateways."""
-
-    def __init__(self, *, force_function_calling: bool, **kwargs: Any) -> None:
-        self._force_function_calling = force_function_calling
-        super().__init__(**kwargs)
-
-    @property
-    def supports_function_calling(self) -> bool:
-        return self._force_function_calling or super().supports_function_calling
-
-
 def _resolve_gateway_api_key(api_key: str | None, api_base: str) -> str | None:
     """Pick a credential the gateway will actually accept.
 
@@ -122,13 +109,8 @@ def _build_lm(
         api_key = override.api_key
         api_base = override.api_base
         # An override that does not pin a response format inherits the
-        # operator's FLEET_AGENT_LLM_NATIVE_FUNCTION_CALLING selection, which
-        # exists precisely for gateways that reject native tool calls.
-        native_function_calling = (
-            settings.llm_native_function_calling
-            if override.response_format is None
-            else override.response_format == "native_function_calling"
-        )
+        # operator's FLEET_AGENT_LLM_NATIVE_FUNCTION_CALLING selection.
+        native_function_calling = _native_function_calling(settings, override)
         use_developer_role = override.messages_format == "developer_role"
     elif settings.modal_model_id:
         model = settings.modal_model_id or settings.llm_model
@@ -174,31 +156,37 @@ def _build_lm(
 
     # Hosted providers keep LiteLLM routing, where the provider prefix in the
     # model id is meaningful and capability tables are known.
-    return _FleetLM(
+    return dspy.LM(
         model=model,
         api_key=api_key,
         api_base=None,
         temperature=settings.llm_temperature,
         cache=False,
-        force_function_calling=False,
         use_developer_role=use_developer_role,
     )
+
+
+def _native_function_calling(
+    settings: Settings, override: ProviderOverride | None
+) -> bool:
+    """Resolve native tool calls once, for both the LM and its adapter.
+
+    An override that does not pin a response format inherits the operator's
+    FLEET_AGENT_LLM_NATIVE_FUNCTION_CALLING selection, which exists precisely
+    for gateways that reject native tool calls.
+    """
+    if override is None or override.response_format is None:
+        return settings.llm_native_function_calling
+    return override.response_format == "native_function_calling"
 
 
 def _build_adapter(
     settings: Settings, override: ProviderOverride | None = None
 ) -> dspy.JSONAdapter:
     """Build the JSON adapter matching the active response format."""
-    use_native_function_calling = (
-        (
-            settings.llm_native_function_calling
-            if override.response_format is None
-            else override.response_format == "native_function_calling"
-        )
-        if override is not None
-        else settings.llm_native_function_calling
+    return dspy.JSONAdapter(
+        use_native_function_calling=_native_function_calling(settings, override)
     )
-    return dspy.JSONAdapter(use_native_function_calling=use_native_function_calling)
 
 
 def _source_name(source: ToolSource) -> str:
@@ -399,79 +387,71 @@ def make_engine_builder(
         profiles = build_tool_profiles(registry)
         approval_policy = registry.approval_policy()
 
-        if settings.reasoning_program == "flex":
-            if not settings.flex_enabled:
-                raise RuntimeError("reasoning_program=flex requires flex_enabled=true")
-            flex_capabilities: set[ToolCapability] = {
-                "retrieval",
-                "utility",
-                "workspace_read",
-            }
-            if settings.flex_allow_mutating_tools:
-                flex_capabilities.update({"artifact", "workspace_write", "shell"})
-            # DSPy 3.3.1 swallows exceptions raised inside start callbacks,
-            # so the read-only Flex path enforces cancellation on the tool
-            # callable itself rather than through AgUiRunCallback hooks.
-            flex_tools = [
-                wrap_tool_with_guard(tool, bus.cancel_token.check)
-                for tool in registry.dspy_tools_for_capabilities(flex_capabilities)
-            ]
-
-            # Flex executes tool calls inside its RLM interpreter, which catches
-            # host-tool exceptions before the application can turn them into an
-            # AG-UI interrupt.  Mutating Flex is therefore routed through the
-            # same application-owned approval loop as the default program; the
-            # read-only experimental path retains native Flex semantics.
-            if settings.flex_allow_mutating_tools:
-
-                def flex_safe_program_factory() -> FleetAgent:
-                    return FleetAgent(
-                        tool_profiles=profiles,
-                        max_iters=settings.llm_max_iters,
-                        approval_policy=approval_policy,
-                        lifecycle=callback,
-                    )
-
-                return DspyAgentEngine(
-                    program_factory=flex_safe_program_factory,
-                    lm=lm,
-                    adapter=adapter,
-                    callbacks=[callback],
-                    provider_override=provider_override,
-                    lifecycle=callback,
-                    cancel_token=bus.cancel_token,
-                    approval_registry=approval_registry,
-                    cleanup=web_bundle.close if web_bundle else None,
-                )
-
-            # The read-only Flex track runs dspy.Flex's Deno/Pyodide sandbox;
-            # fail fast at engine-build time instead of on every request.
-            ensure_deno_runtime()
-
-            def flex_program_factory() -> FlexFleetAgent:
-                return FlexFleetAgent(
-                    tools=flex_tools,
-                    max_predictor_calls=settings.flex_max_predictor_calls,
-                )
-
-            return DspyAgentEngine(
-                program_factory=flex_program_factory,
-                lm=lm,
-                adapter=adapter,
-                callbacks=[callback],
-                provider_override=provider_override,
-                cancel_token=bus.cancel_token,
-                cleanup=web_bundle.close if web_bundle else None,
-            )
-
-        def program_factory() -> FleetAgent:
+        def react_program(router: dspy.Module | None) -> FleetAgent:
+            """The routed ReActV2 program, with or without a promoted router."""
             return FleetAgent(
                 tool_profiles=profiles,
                 max_iters=settings.llm_max_iters,
                 approval_policy=approval_policy,
                 lifecycle=callback,
-                router=_build_router(),
+                router=router,
             )
+
+        # Each track supplies a program factory and, where it applies, the
+        # approval seam; everything else about the engine is identical, so the
+        # engine is constructed once below.
+        if settings.reasoning_program == "flex":
+            if not settings.flex_enabled:
+                raise RuntimeError("reasoning_program=flex requires flex_enabled=true")
+
+            if settings.flex_allow_mutating_tools:
+                # Flex executes tool calls inside its RLM interpreter, which
+                # catches host-tool exceptions before the application can turn
+                # them into an AG-UI interrupt. Mutating Flex is therefore
+                # routed through the same application-owned approval loop as
+                # the default program; the read-only path keeps native Flex
+                # semantics.
+                def flex_safe_program_factory() -> FleetAgent:
+                    return react_program(None)
+
+                program_factory = flex_safe_program_factory
+                lifecycle = callback
+                approval_registry_for_run = approval_registry
+            else:
+                flex_capabilities: set[ToolCapability] = {
+                    "retrieval",
+                    "utility",
+                    "workspace_read",
+                }
+                # DSPy 3.3.1 swallows exceptions raised inside start callbacks,
+                # so the read-only Flex path enforces cancellation on the tool
+                # callable itself rather than through AgUiRunCallback hooks.
+                flex_tools = [
+                    wrap_tool_with_guard(tool, bus.cancel_token.check)
+                    for tool in registry.dspy_tools_for_capabilities(flex_capabilities)
+                ]
+                # The read-only Flex track runs dspy.Flex's Deno/Pyodide
+                # sandbox; fail fast at engine-build time instead of on every
+                # request.
+                ensure_deno_runtime()
+
+                def flex_program_factory() -> FlexFleetAgent:
+                    return FlexFleetAgent(
+                        tools=flex_tools,
+                        max_predictor_calls=settings.flex_max_predictor_calls,
+                    )
+
+                program_factory = flex_program_factory
+                lifecycle = None
+                approval_registry_for_run = None
+        else:
+
+            def default_program_factory() -> FleetAgent:
+                return react_program(_build_router())
+
+            program_factory = default_program_factory
+            lifecycle = callback
+            approval_registry_for_run = approval_registry
 
         return DspyAgentEngine(
             program_factory=program_factory,
@@ -479,9 +459,9 @@ def make_engine_builder(
             adapter=adapter,
             callbacks=[callback],
             provider_override=provider_override,
-            lifecycle=callback,
+            lifecycle=lifecycle,
             cancel_token=bus.cancel_token,
-            approval_registry=approval_registry,
+            approval_registry=approval_registry_for_run,
             cleanup=web_bundle.close if web_bundle else None,
         )
 
