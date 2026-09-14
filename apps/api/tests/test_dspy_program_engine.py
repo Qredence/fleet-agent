@@ -8,7 +8,7 @@ from app.agent.engine import (
 )
 from app.agent.program import FleetAgent
 from app.agent.tooling import create_dspy_tool
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.scripted_lm import ScriptedLM, router_call, synthesis_call
 
 CTX = AgentRunContext(thread_id="thread-1", run_id="run-1")
 
@@ -53,11 +53,15 @@ async def test_engine_runs_the_first_class_fleet_agent_program() -> None:
 
     tool = create_dspy_tool(lookup)
     engine = DspyAgentEngine(
-        program_factory=lambda: FleetAgent(tools=[tool], max_iters=3),
+        program_factory=lambda: FleetAgent(
+            tool_profiles={"research": [tool]}, max_iters=3
+        ),
         lm=ScriptedLM(
             [
+                router_call("research"),
                 [{"name": "lookup", "args": {"query": "x"}}],
-                [submit_call(answer="Used the tool.")],
+                {"calls": [], "content": '{"next_thought": "done"}'},
+                synthesis_call(answer="Used the tool.", summary="Looked it up."),
             ]
         ),  # type: ignore[arg-type]
         adapter=dspy.JSONAdapter(use_native_function_calling=True),
@@ -67,8 +71,10 @@ async def test_engine_runs_the_first_class_fleet_agent_program() -> None:
 
     assert result.status == "completed"
     assert result.answer == "Used the tool."
-    assert result.termination_reason == "submit"
-    assert len(result.history.messages) == 2
+    assert result.termination_reason == "synthesis"
+    # One evidence turn: the tool call. The next turn ends the loop with no
+    # calls, so no second event is appended.
+    assert len(result.history.messages) == 1
 
 
 async def test_stream_does_not_require_react_v2_internals() -> None:

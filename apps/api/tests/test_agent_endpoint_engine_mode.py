@@ -13,7 +13,13 @@ from app.agui.event_bus import RunEventBus
 from app.main import create_app
 from app.settings import Settings
 from tests.conftest import requires_db
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.scripted_lm import (
+    FixedRouter,
+    ScriptedLM,
+    evidence_end,
+    submit_call,
+    synthesis_call,
+)
 from tests.test_live_coordinator import scripted_builder
 
 pytestmark = requires_db
@@ -156,17 +162,18 @@ async def test_engine_mode_approval_resume_uses_native_events_and_persists_safe_
         steps = (
             [[{"name": "write", "args": {"path": "notes.txt", "content": "secret"}}]]
             if builder_calls == 0
-            else [[submit_call(answer="saved")]]
+            else [evidence_end(), synthesis_call(answer="saved")]
         )
         builder_calls += 1
         lifecycle = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
         def program_factory() -> FleetAgent:
             return FleetAgent(
-                tools=[tool],
+                tool_profiles={"workspace_write": [tool]},
                 max_iters=4,
                 approval_policy=policy,
                 lifecycle=lifecycle,
+                router=FixedRouter("workspace_write"),
             )
 
         return DspyAgentEngine(

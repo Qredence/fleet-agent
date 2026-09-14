@@ -15,6 +15,7 @@ A step is either:
 import json
 from typing import Any
 
+import dspy
 from dspy.utils.dummies import DummyLM, dotdict
 
 # The synthesis predictor runs under ChatAdapter (exact stream boundaries),
@@ -157,3 +158,30 @@ def synthesis_call(
 def router_call(route: str) -> dict[str, Any]:
     """A router step selecting one capability route."""
     return {"calls": [], "content": json.dumps({"route": route})}
+
+
+def evidence_end() -> dict[str, Any]:
+    """A step that ends an evidence-gathering ReActV2 loop.
+
+    The routed program's loops run ``EvidenceSignature`` (no output fields),
+    so they end by returning no tool calls rather than by calling ``submit``.
+    The synthesis predictor then takes the next step.
+    """
+    return {"calls": [], "content": json.dumps({"next_thought": "evidence complete"})}
+
+
+class FixedRouter(dspy.Module):  # type: ignore[misc]
+    """A router that returns one route without an LM call.
+
+    Tests that pin gated-tool, persistence, or streaming behavior are not
+    about routing; a fixed router keeps their scripted step lists about the
+    evidence loop instead of spending a step on route selection.
+    """
+
+    def __init__(self, route: str) -> None:
+        super().__init__()
+        self.route = route
+
+    def forward(self, *, user_request: str) -> dspy.Prediction:
+        del user_request
+        return dspy.Prediction(route=self.route)

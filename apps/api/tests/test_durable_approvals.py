@@ -34,7 +34,12 @@ from app.services.durable_approvals import (
     sweep_expired_checkpoints,
 )
 from tests.conftest import requires_db
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.scripted_lm import (
+    FixedRouter,
+    ScriptedLM,
+    evidence_end,
+    synthesis_call,
+)
 
 pytestmark = requires_db
 
@@ -79,9 +84,10 @@ def _make_engine(
 ) -> DspyAgentEngine:
     def program_factory() -> FleetAgent:
         return FleetAgent(
-            tools=[tool],
+            tool_profiles={"workspace_write": [tool]},
             max_iters=4,
             approval_policy=_WRITE_POLICY,
+            router=FixedRouter("workspace_write"),
         )
 
     return DspyAgentEngine(
@@ -172,7 +178,7 @@ async def test_pause_survives_restart_and_resumes_exactly_once(db_sessions) -> N
     # Simulated restart: a brand-new process object with no shared memory.
     second_registry = _durable_registry(db_sessions)
     second_engine = _make_engine(
-        [[submit_call(answer="saved")]],
+        [evidence_end(), synthesis_call(answer="saved")],
         registry=second_registry,
         tool=_write_tool(calls),
         provider_override=provider,
@@ -193,7 +199,7 @@ async def test_pause_survives_restart_and_resumes_exactly_once(db_sessions) -> N
     # Replaying the same decision can never execute the tool a second time.
     third_registry = _durable_registry(db_sessions)
     third_engine = _make_engine(
-        [[submit_call(answer="never")]],
+        [evidence_end(), synthesis_call(answer="never")],
         registry=third_registry,
         tool=_write_tool(calls),
         provider_override=provider,
@@ -243,7 +249,7 @@ async def test_wrong_thread_and_provider_fail_closed_without_consuming(
     assert wrong_thread.error_code == "approval_invalid"
 
     wrong_provider_engine = _make_engine(
-        [[submit_call()]],
+        [evidence_end(), synthesis_call()],
         registry=registry,
         tool=_write_tool(calls),
         provider_override=ProviderOverride(api_key="sk-or-other", model="vendor/other"),
@@ -260,7 +266,7 @@ async def test_wrong_thread_and_provider_fail_closed_without_consuming(
     # The checkpoint was never consumed by the failed attempts, so the
     # correctly bound resume still completes.
     valid_engine = _make_engine(
-        [[submit_call(answer="approved")]],
+        [evidence_end(), synthesis_call(answer="approved")],
         registry=registry,
         tool=_write_tool(calls),
         provider_override=provider,
@@ -346,7 +352,8 @@ async def test_second_pause_for_same_run_replaces_first_checkpoint(db_sessions) 
         [
             [{"name": "write", "args": {"path": "one.txt", "content": "1"}}],
             [{"name": "write", "args": {"path": "two.txt", "content": "2"}}],
-            [submit_call(answer="done")],
+            evidence_end(),
+            synthesis_call(answer="done"),
         ],
         registry=registry,
         tool=_write_tool(calls),

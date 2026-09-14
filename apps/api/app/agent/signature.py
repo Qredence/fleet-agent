@@ -87,7 +87,6 @@ class SynthesisSignature(dspy.Signature):  # type: ignore[misc]  # dspy is untyp
 
     user_request: str = dspy.InputField(desc="The user's request.")
     evidence_json: str = dspy.InputField(desc="Bounded successful and failed evidence.")
-    critique: str = dspy.InputField(desc="Bounded optional evidence critique.")
     answer: str = dspy.OutputField(desc="Direct final answer to the user.")
     process_summary: str = dspy.OutputField(desc="Concise user-safe process summary.")
     key_decisions: list[str] = dspy.OutputField(desc="Important decisions made.")

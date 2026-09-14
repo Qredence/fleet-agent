@@ -26,10 +26,10 @@ import dspy
 
 from evals.agent_tool_routing import (
     ROUTING_EXAMPLES,
-    routing_metric,
     validate_routing_dataset,
 )
 from evals.mlflow_tracking import log_routing_score
+from evals.scoring import RoutingScore, score_router
 
 
 def _resolve_lm() -> dspy.BaseLM | None:
@@ -48,53 +48,43 @@ def _resolve_lm() -> dspy.BaseLM | None:
     return _build_lm(settings)
 
 
-def _score_routing(lm: dspy.BaseLM) -> tuple[float, list[tuple[str, str, str, float]]]:
-    """Route every example with the production router; return (mean, misses).
+def _score_routing(lm: dspy.BaseLM) -> RoutingScore:
+    """Route every example with the production router.
 
     Scores the real ``ToolRoutingSignature`` (least-privilege instructions,
     the six-route vocabulary) rather than a bare string signature: a bare
     ``"user_request -> route"`` has no vocabulary and lets the model invent
-    values like ``web_search``, which measures nothing the app ships.
+    values like ``web_search``, which measures nothing the app ships. The
+    scoring loop itself is shared with the optimizer (``evals.scoring``).
     """
     from app.agent.routing import ToolRoutingSignature
 
     router = dspy.Predict(ToolRoutingSignature)
-    misses: list[tuple[str, str, str, float]] = []
-    scores: list[float] = []
-    adapter = dspy.JSONAdapter(use_native_function_calling=True)
-    with dspy.context(lm=lm, adapter=adapter):
-        for example in ROUTING_EXAMPLES:
-            prediction = router(user_request=str(example.user_request))
-            verdict = routing_metric(example, prediction)
-            score = float(verdict.score)  # type: ignore[attr-defined]
-            scores.append(score)
-            if score < 1.0:
-                misses.append(
-                    (
-                        str(example.user_request),
-                        str(example.expected_route),
-                        str(getattr(prediction, "route", "<missing>")),
-                        score,
-                    )
-                )
-    return (sum(scores) / len(scores) if scores else 0.0), misses
+    return score_router(router, lm, ROUTING_EXAMPLES)
 
 
-def _print_routing_report(
-    mean: float, misses: list[tuple[str, str, str, float]]
-) -> None:
+def _print_routing_report(scored: RoutingScore) -> None:
     per_route: Counter[str] = Counter()
-    for _request, expected, _actual, score in misses:
+    for _request, expected, _actual, score in scored.misses:
         bucket = "under-selected" if score == 0.0 else "over-selected"
         per_route[f"{expected} ({bucket})"] += 1
 
-    print(f"routing suite: {len(ROUTING_EXAMPLES)} examples, mean score {mean:.3f}")
+    total = len(ROUTING_EXAMPLES)
+    print(f"routing suite: {total} examples, mean score {scored.mean:.3f}")
+    if scored.failures:
+        # dspy.Evaluate scores a raised example 0 and keeps going, so a gateway
+        # error looks like a wrong route in the mean. Say which it was.
+        print(
+            f"WARNING: {scored.failures} of {total} routing calls raised "
+            "(scored 0 by dspy.Evaluate); the mean mixes provider errors with "
+            "routing misses"
+        )
     if per_route:
         print("miss breakdown:")
         for bucket, count in sorted(per_route.items()):
             print(f"  {bucket}: {count}")
         print("misses:")
-        for request, expected, actual, score in misses:
+        for request, expected, actual, score in scored.misses:
             print(f"  [{score:.2f}] expected={expected} actual={actual}: {request}")
     else:
         print("all routes selected exactly (least privilege held)")
@@ -120,17 +110,18 @@ def _run_routing(validate_only: bool, min_accuracy: float) -> int:
         )
         return 0
 
-    mean, misses = _score_routing(lm)
-    _print_routing_report(mean, misses)
+    scored = _score_routing(lm)
+    _print_routing_report(scored)
     run_id = log_routing_score(
-        mean=mean,
-        misses=misses,
+        mean=scored.mean,
+        misses=scored.misses,
         total=len(ROUTING_EXAMPLES),
         min_accuracy=min_accuracy,
+        failures=scored.failures,
     )
     if run_id:
         print(f"mlflow: routing eval logged as run {run_id}")
-    return 0 if mean >= min_accuracy else 2
+    return 0 if scored.mean >= min_accuracy else 2
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -22,8 +22,9 @@ from pydantic import BaseModel, Field
 
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentRunContext, AgentRunResult, _map_result
+from app.agent.evidence import bounded_json
 from app.agent.instrumented import preview, public_tool_args_json
-from app.agent.signature import AgentSignature, SynthesisSignature
+from app.agent.signature import AgentSignature
 from app.agent.tool_registry import ToolRegistry, wrap_tool_with_guard
 from app.agui.cancel_token import RunCancelledError, RunCancelToken
 from app.agui.event_bus import RunEventBus
@@ -72,6 +73,23 @@ class CriticSignature(dspy.Signature):  # type: ignore[misc]
     user_request: str = dspy.InputField(desc="The user's request.")
     evidence_json: str = dspy.InputField(desc="Bounded research evidence.")
     critique: str = dspy.OutputField(desc="Concise evidence-quality assessment.")
+
+
+class StagedSynthesisSignature(dspy.Signature):  # type: ignore[misc]
+    """Produce the safe public fields from evidence and its critique.
+
+    The routed program's ``SynthesisSignature`` has no critique input because
+    it runs no critic; the staged strategy verifies evidence before synthesis,
+    so its contract carries the assessment as a real input.
+    """
+
+    user_request: str = dspy.InputField(desc="The user's request.")
+    evidence_json: str = dspy.InputField(desc="Bounded research evidence.")
+    critique: str = dspy.InputField(desc="Bounded evidence-quality critique.")
+    answer: str = dspy.OutputField(desc="Direct final answer to the user.")
+    process_summary: str = dspy.OutputField(desc="Concise user-safe process summary.")
+    key_decisions: list[str] = dspy.OutputField(desc="Important decisions made.")
+    caveats: list[str] = dspy.OutputField(desc="Remaining uncertainty or limitations.")
 
 
 class ResearchTask(BaseModel):
@@ -813,7 +831,7 @@ class StagedDspyEngine:
             return await asyncio.to_thread(
                 self._synthesize_sync, user_request, evidence, critique
             )
-        module = dspy.Predict(SynthesisSignature)
+        module = dspy.Predict(StagedSynthesisSignature)
         with dspy.context(
             lm=self._lm,
             adapter=self._adapter,
@@ -836,7 +854,7 @@ class StagedDspyEngine:
             callbacks=self._budget_callbacks(),
             track_usage=True,
         ):
-            prediction = dspy.Predict(SynthesisSignature)(
+            prediction = dspy.Predict(StagedSynthesisSignature)(
                 user_request=user_request,
                 evidence_json=evidence,
                 critique=_short(critique),
@@ -1151,6 +1169,12 @@ def _short_list(value: Any) -> list[str]:
 
 
 def _evidence_json(outcomes: Iterable[_WorkerOutcome]) -> str:
+    """Render the research outcomes as bounded, always-parseable evidence.
+
+    ``StagedSynthesisSignature.evidence_json`` is a JSON document the model
+    parses, so an over-budget payload drops whole outcomes from the end
+    instead of slicing the serialized text (see ``app.agent.evidence``).
+    """
     entries = []
     for outcome in outcomes:
         entries.append(
@@ -1166,7 +1190,7 @@ def _evidence_json(outcomes: Iterable[_WorkerOutcome]) -> str:
                 ],
             }
         )
-    return json.dumps(entries, ensure_ascii=True)[:_MAX_EVIDENCE]
+    return bounded_json(entries, max_chars=_MAX_EVIDENCE)
 
 
 def _has_conflicting_answers(outcomes: list[_WorkerOutcome]) -> bool:

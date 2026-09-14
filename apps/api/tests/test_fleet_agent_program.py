@@ -18,18 +18,23 @@ def lookup_docs(query: str) -> str:
 
 def test_fleet_agent_is_a_first_class_dspy_module() -> None:
     tool = create_dspy_tool(lookup_docs)
-    program = FleetAgent(tools=[tool], max_iters=4)
+    program = FleetAgent(tool_profiles={"research": [tool]}, max_iters=4)
 
     assert isinstance(program, dspy.Module)
-    assert program.tool_names == ("lookup_docs",)
-    assert program.get_tool("lookup_docs") is tool
-    assert program.react.tools["lookup_docs"] is tool
-    assert program.predictors() == [program.react.react]
+    assert program.tool_names["research"] == ("lookup_docs",)
+    assert program.tool_names["direct"] == ()
+    assert program.evidence_agents["research"].tools["lookup_docs"] is tool
+    # DSPy's module tree walks the dict the profile agents live in, so the
+    # router, every evidence loop, and the synthesizer stay optimizable.
+    names = [name for name, _ in program.named_predictors()]
+    assert "router" in names
+    assert "synthesizer" in names
+    assert "evidence_agents['research'].react" in names
 
 
 def test_fleet_agent_requires_explicit_dspy_tools() -> None:
     with pytest.raises(TypeError, match="explicit dspy.Tool"):
-        FleetAgent(tools=[lookup_docs], max_iters=2)  # type: ignore[list-item]
+        FleetAgent(tool_profiles={"research": [lookup_docs]}, max_iters=2)  # type: ignore[list-item]
 
 
 def test_fleet_agent_rejects_async_tools_under_sync_react_v2() -> None:
@@ -39,7 +44,7 @@ def test_fleet_agent_rejects_async_tools_under_sync_react_v2() -> None:
 
     tool = create_dspy_tool(async_lookup)
     with pytest.raises(TypeError, match="executes tools synchronously"):
-        FleetAgent(tools=[tool], max_iters=2)
+        FleetAgent(tool_profiles={"research": [tool]}, max_iters=2)
 
 
 def test_tool_registry_creates_real_dspy_tools() -> None:
@@ -140,5 +145,5 @@ def test_factory_builds_fleet_agent_with_explicit_tools() -> None:
     program = engine._program_factory()  # type: ignore[attr-defined]
 
     assert isinstance(program, FleetAgent)
-    assert all(isinstance(tool, dspy.Tool) for tool in program.tools)
-    assert program.tool_names == ("search_docs", "get_current_time")
+    assert program.tool_names["research"] == ("search_docs", "get_current_time")
+    assert program.tool_names["direct"] == ()

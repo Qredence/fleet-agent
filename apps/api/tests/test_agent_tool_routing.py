@@ -9,7 +9,9 @@ from evals.agent_tool_routing import (
     routing_metric,
     validate_routing_dataset,
 )
+from evals.run import _print_routing_report
 from evals.run import main as eval_run_main
+from evals.scoring import RoutingScore
 from tests.helpers.scripted_lm import ScriptedLM
 
 
@@ -66,6 +68,35 @@ def test_eval_runner_reports_structural_failure(capsys, monkeypatch):
 
     assert exit_code == 1
     assert "unsound" in capsys.readouterr().out
+
+
+def test_routing_report_warns_about_raised_calls(capsys):
+    """A provider error has to be visible next to the mean.
+
+    ``dspy.Evaluate`` scores a raised example 0 and continues, so the mean on
+    its own cannot tell a broken gateway from a wrong route.
+    """
+    _print_routing_report(
+        RoutingScore(
+            mean=0.5,
+            misses=[("a request", "direct", "<missing>", 0.0)],
+            mean_latency_s=0.1,
+            failures=2,
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert "mean score 0.500" in out
+    assert "WARNING: 2 of" in out
+    assert "routing misses" in out
+
+
+def test_routing_report_stays_quiet_when_nothing_raised(capsys):
+    _print_routing_report(
+        RoutingScore(mean=1.0, misses=[], mean_latency_s=0.1, failures=0)
+    )
+
+    assert "WARNING" not in capsys.readouterr().out
 
 
 def test_routing_metric_satisfies_gepa_metric_contract():

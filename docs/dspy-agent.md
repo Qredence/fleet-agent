@@ -5,7 +5,9 @@
 Fleet Agent should be a real DSPy program, not a FastAPI service that happens
 to instantiate a DSPy class inside a closure. The application now separates:
 
-1. **Task contract** - `EvidenceSignature` / `SynthesisSignature` / `AgentSignature`
+1. **Task contract** - `EvidenceSignature` / `SynthesisSignature` for the routed
+   `FleetAgent`, and `AgentSignature` / `StagedSynthesisSignature` for the staged
+   `StagedDspyEngine`
 2. **DSPy program** - `FleetAgent(dspy.Module)`: routed evidence loops + streamed synthesis
 3. **Tool authoring and policy** - `create_dspy_tool` + `ToolRegistry`
 4. **Runtime adaptation** - `DspyAgentEngine` (run, stream, durable approvals)
@@ -23,10 +25,11 @@ FleetAgent(dspy.Module)
       |
       +-- router: dspy.Predict(ToolRoutingSignature)  (least-privilege route)
       |
-      +-- evidence agents: ApprovalAwareReActV2(EvidenceSignature, evidence_only=True)
-      |     one per route profile (research, artifact, workspace_read,
-      |     workspace_write, workspace_shell); they gather evidence only and
-      |     never submit an answer themselves
+      +-- evidence_agents: dict[ToolRoute, ApprovalAwareReActV2]
+      |     one per route profile (direct, research, artifact,
+      |     workspace_read, workspace_write, workspace_shell); each holds
+      |     only its profile's tools, gathers evidence, and never submits an
+      |     answer itself
       |
       +-- synthesizer: dspy.Predict(SynthesisSignature)
             streams answer + process_summary tokens through
@@ -52,11 +55,12 @@ persistence, and result mapping do not access `ReActV2.tools`, its internal
 `Predict`, or its `submit` implementation.
 
 The routed program uses ReActV2 in a deliberately restricted mode
-(`evidence_only=True`): the loop's `submit` step terminates evidence
-gathering and the terminal fields are filled by a separate `SynthesisSignature`
-predictor. This is what makes clean token streaming possible: the ReAct loop
-runs to completion first, then the synthesis predictor's two public fields
-stream to the browser while the loop's history stays server-side.
+(`evidence_only=True`): its loops run `EvidenceSignature`, which declares no
+output fields, so a loop ends when the model stops asking for tools and the
+terminal fields are filled by a separate `SynthesisSignature` predictor. This
+is what makes clean token streaming possible: the ReAct loop runs to
+completion first, then the synthesis predictor's two public fields stream to
+the browser while the loop's history stays server-side.
 
 ## First-class program
 
@@ -66,24 +70,35 @@ sub-modules, so DSPy's module tree can discover them. That keeps
 `named_predictors()`, state serialization, callbacks, usage tracking, and
 future optimizer integration on the normal DSPy path.
 
+The profile agents live in one `evidence_agents` dict keyed by route rather
+than in six named attributes. DSPy discovers sub-modules by walking
+`self.__dict__` and recursing into dicts, so a dict is a normal place to hold
+them — `named_predictors()` reports them as
+`evidence_agents['workspace_read'].react`. One route table also means adding a
+capability is a change to `routing.py`, not to the program.
+
+There is one construction path: `tool_profiles` is required. An un-routed
+`FleetAgent` would be a way to hand a run tools outside its least-privilege
+profile, so the program does not offer one.
+
 The engine always invokes the program through `program(...)`, never by calling
 `forward()` directly. Programs without `synthesis_stream_fields` (the staged
-strategy, legacy single-pass ReAct) keep the non-streaming contract: the
-engine settles on the final prediction's fields only.
+strategy) keep the non-streaming contract: the engine settles on the final
+prediction's fields only.
 
 ## Saving optimized program state
 
 Treat tools as run-scoped infrastructure and optimized predictor state as the
-portable DSPy artifact. Build a fresh `FleetAgent` with the same signature and
+portable DSPy artifact. Build a fresh `FleetAgent` with the same routes and
 tool names, then save or load its DSPy state:
 
 ```python
-program = FleetAgent(tools=registry.dspy_tools(), max_iters=12)
+program = FleetAgent(tool_profiles=build_tool_profiles(registry), max_iters=12)
 optimized = optimizer.compile(program, trainset=trainset)
 optimized.save("fleet-agent.json")
 
 runtime_program = FleetAgent(
-    tools=run_registry.dspy_tools(),
+    tool_profiles=build_tool_profiles(run_registry),
     max_iters=12,
 )
 runtime_program.load("fleet-agent.json")
@@ -226,6 +241,29 @@ The evidence-gathering ReAct loop does not stream: its history stays
 server-side by design. Only the final synthesis fields cross the wire, token
 by token.
 
+## Evidence boundary (synthesis input)
+
+The evidence loop hands its work to the synthesizer through
+`SynthesisSignature.evidence_json`, a `str` input the model parses as JSON.
+That makes validity a hard requirement, not a nicety: a document the model
+cannot parse is worse than less evidence, because the model then answers from
+a broken fragment while believing it has the evidence.
+
+`app/agent/evidence.py` owns that contract for both programs (the routed
+`FleetAgent` and the staged strategy). `bounded_json` spends the whole budget
+on valid JSON: entries are kept in document order, and the entry that
+overflows is shortened to exactly the room that is left, so a single oversized
+tool result still delivers nearly the entire budget as evidence rather than a
+fraction of it. The previous renderer sliced the serialized payload
+(`text[:max_chars - 1] + "…"`), which produced unparseable JSON for any run
+whose evidence exceeded the cap; that is the common case once two or three
+tool results accumulate.
+
+What the synthesizer sees is still bounded and public-safe by construction:
+only tool names, their already-bounded results, and error flags are rendered.
+`next_thought` reasoning, provider payloads, and credentials stay out of the
+synthesis prompt.
+
 ## Durable approval checkpoints
 
 Approval-gated tools (`write`, `edit`, `bash`) pause the run with an AG-UI
@@ -287,9 +325,18 @@ mutation for discussion) and under-selection (phrasing mutation as a question,
 or a deletion that needs the shell because no delete tool exists).
 
 The metric scores least privilege: exact route 1.0, over-selection 0.35,
-under-selection 0.0 (the run cannot succeed). It satisfies dspy 3.3.1's
-GEPA metric contract so `compile_gepa_candidate` can optimize the router
-offline.
+under-selection 0.0 (the run cannot succeed). `routing_metric` returns the
+score/feedback prediction that satisfies dspy 3.3.1's GEPA metric contract, so
+`compile_gepa_candidate` can optimize the router offline; `routing_score` is
+its numeric projection for `dspy.Evaluate`.
+
+`evals/scoring.py` owns the scoring loop both offline callers share: it wraps
+the router in a timing module, runs it through `dspy.Evaluate`, and returns the
+mean score, the misses in devset order, and the mean per-request latency. The
+eval runner and the GEPA optimizer therefore cannot drift apart on the metric,
+the adapter, or the `dspy.context` they score under. Threads default to 1
+because the harness talks to operator gateways; `score_router(num_threads=...)`
+opts into `dspy.Evaluate`'s bounded parallelism.
 
 Run it without any provider (CI mode - dataset structure only):
 
@@ -448,6 +495,9 @@ It must never receive:
 
 - `FleetAgent` is a `dspy.Module` and exposes its nested predictors (router,
   evidence agents, synthesizer) to DSPy's module tree.
+- The routed program has exactly one construction path, and every profile
+  holds only its own route's tools, so no run can reach a tool outside the
+  profile its router selected.
 - Every default production tool is an explicit `dspy.Tool` before it reaches
   ReActV2.
 - Duplicate, reserved, undocumented, variadic, or untyped tools fail early.
@@ -457,6 +507,12 @@ It must never receive:
 - Streamed synthesis equals batch synthesis: token concatenation always
   equals the scrubbed final fields, for every delta split
   (`tests/test_synthesis_streaming.py`, `tests/test_content_safety.py`).
+- The synthesizer's evidence input is always parseable JSON within its budget,
+  for both programs, including a single oversized tool result
+  (`tests/test_evidence.py`).
+- The eval runner and the GEPA optimizer score routers through one shared
+  `dspy.Evaluate` call and report the same mean, misses, and latency
+  (`tests/test_eval_scoring.py`).
 - Approval pauses survive server restarts; orphaned interrupted runs are
   swept on startup (`tests/test_durable_approvals.py`).
 - The self-improvement harness writes an artifact only when the evolved

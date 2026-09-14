@@ -101,6 +101,8 @@ class TestLogOptimizationRun:
         assert run.data.params["min_accuracy"] == "0.9"
         assert run.data.metrics["baseline_mean"] == pytest.approx(0.95)
         assert run.data.metrics["candidate_mean"] == pytest.approx(1.0)
+        assert run.data.metrics["baseline_failures"] == pytest.approx(0.0)
+        assert run.data.metrics["candidate_failures"] == pytest.approx(0.0)
         assert run.data.metrics["gates_passed"] == pytest.approx(1.0)
         assert run.data.tags["fleet.outcome"] == "artifact-written"
         nested = [a.path for a in client.list_artifacts(run.info.run_id, "candidate")]
@@ -141,7 +143,9 @@ class TestLogRoutingScore:
             ("c-request", "workspace_read", "workspace_shell", 0.35),
         ]
 
-        run_id = log_routing_score(mean=0.8, misses=misses, total=45, min_accuracy=0.9)
+        run_id = log_routing_score(
+            mean=0.8, misses=misses, total=45, min_accuracy=0.9, failures=2
+        )
 
         client = _client()
         experiment = client.get_experiment_by_name(ROUTING_EVAL_EXPERIMENT)
@@ -152,6 +156,9 @@ class TestLogRoutingScore:
         assert run.data.metrics["misses"] == pytest.approx(3)
         assert run.data.metrics["under_selected"] == pytest.approx(1)
         assert run.data.metrics["over_selected"] == pytest.approx(2)
+        # Raised examples are scored 0 by dspy.Evaluate, so the count is what
+        # separates a provider error from a routing miss in the history.
+        assert run.data.metrics["failures"] == pytest.approx(2)
         assert run.data.metrics["gate_passed"] == pytest.approx(0.0)
         artifacts = [a.path for a in client.list_artifacts(run.info.run_id)]
         assert "misses.json" in artifacts

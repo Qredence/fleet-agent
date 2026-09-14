@@ -18,13 +18,19 @@ from app.agent.engine import AgentRunContext, DspyAgentEngine
 from app.agent.factory import make_engine_builder
 from app.agent.program import FleetAgent
 from app.agent.provider import ProviderOverride
+from app.agent.routing import ToolRoute
 from app.agent.tool_registry import ToolMetadata
 from app.agent.tooling import create_dspy_tool
 from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.services.artifact_storage import LocalArtifactStorage
 from app.settings import Settings
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.scripted_lm import (
+    FixedRouter,
+    ScriptedLM,
+    evidence_end,
+    synthesis_call,
+)
 
 
 class RecordingLifecycle:
@@ -84,6 +90,7 @@ def _make_engine(
     provider_override: ProviderOverride | None = None,
     tool: dspy.Tool | None = None,
     approval_policy: dict[str, ToolMetadata | bool] | None = None,
+    route: ToolRoute = "workspace_write",
 ) -> DspyAgentEngine:
     selected_tool = tool or _write_tool([])
     policy = approval_policy or {
@@ -99,10 +106,11 @@ def _make_engine(
 
     def program_factory() -> FleetAgent:
         return FleetAgent(
-            tools=[selected_tool],
+            tool_profiles={route: [selected_tool]},
             max_iters=4,
             approval_policy=policy,
             lifecycle=lifecycle,
+            router=FixedRouter(route),
         )
 
     return DspyAgentEngine(
@@ -132,7 +140,8 @@ async def test_gated_tool_has_no_side_effect_until_approval_and_runs_once() -> N
     engine = _make_engine(
         [
             [{"name": "write", "args": {"path": "notes.txt", "content": "secret"}}],
-            [submit_call(answer="saved")],
+            evidence_end(),
+            synthesis_call(answer="saved"),
         ],
         registry=registry,
         lifecycle=lifecycle,
@@ -185,7 +194,8 @@ async def test_denial_is_a_safe_failure_and_agent_continues() -> None:
     engine = _make_engine(
         [
             [{"name": "write", "args": {"path": "denied.txt", "content": "x"}}],
-            [submit_call(answer="continued")],
+            evidence_end(),
+            synthesis_call(answer="continued"),
         ],
         registry=registry,
         tool=_write_tool(calls),
@@ -217,7 +227,11 @@ async def test_duplicate_expired_wrong_thread_missing_provider_and_restart_fail_
     registry = ApprovalRegistry(ttl_seconds=5)
     provider = ProviderOverride(api_key="sk-or-original", model="vendor/model")
     engine = _make_engine(
-        [[{"name": "write", "args": {"path": "x", "content": "y"}}], submit_call()],
+        [
+            [{"name": "write", "args": {"path": "x", "content": "y"}}],
+            evidence_end(),
+            synthesis_call(),
+        ],
         registry=registry,
         provider_override=provider,
         tool=_write_tool(calls),
@@ -301,10 +315,12 @@ async def test_read_only_tool_is_not_interrupted() -> None:
     engine = _make_engine(
         [
             [{"name": "read", "args": {"query": "state"}}],
-            [submit_call(answer="done")],
+            evidence_end(),
+            synthesis_call(answer="done"),
         ],
         registry=registry,
         tool=tool,
+        route="workspace_read",
         approval_policy={
             "read": ToolMetadata(
                 name="read",
@@ -409,7 +425,9 @@ async def test_coordinator_uses_native_interrupt_and_stable_resume_ids() -> None
             [*first_messages, assistant],
             [resume],
         ),
-        engine_builder=builder_factory([[submit_call(answer="saved")]]),
+        engine_builder=builder_factory(
+            [evidence_end(), synthesis_call(answer="saved")]
+        ),
         accept="text/event-stream",
         is_disconnected=lambda: _false(),
     )
@@ -459,8 +477,8 @@ def test_flex_mutating_path_uses_approval_aware_program(tmp_path) -> None:
         loop.close()
 
     assert isinstance(program, FleetAgent)
-    assert isinstance(program.workspace_write_agent, ApprovalAwareReActV2)
-    assert isinstance(program.workspace_shell_agent, ApprovalAwareReActV2)
+    assert isinstance(program.evidence_agents["workspace_write"], ApprovalAwareReActV2)
+    assert isinstance(program.evidence_agents["workspace_shell"], ApprovalAwareReActV2)
 
 
 def test_pinned_private_react_v2_symbols_exist() -> None:
@@ -521,7 +539,7 @@ def test_checkpoint_serde_roundtrip_preserves_hidden_state() -> None:
         ]
     )
     checkpoint = ApprovalCheckpoint(
-        profile_name="workspace_write_agent",
+        profile_name="workspace_write",
         history=history,
         pending_inputs={"user_request": "save this"},
         prediction=dspy.Prediction(next_thought="working"),

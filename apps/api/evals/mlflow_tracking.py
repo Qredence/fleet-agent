@@ -47,9 +47,16 @@ def log_optimization_run(
     baseline_latency_s: float,
     candidate_latency_s: float,
     dspy_version: str,
+    baseline_failures: int = 0,
+    candidate_failures: int = 0,
     artifact_dir: Path | None = None,
 ) -> str | None:
     """Log one optimization attempt (pass or fail) to MLflow.
+
+    ``baseline_failures`` / ``candidate_failures`` count held-out examples
+    whose router call raised: ``dspy.Evaluate`` scores those with its
+    ``failure_score`` (0.0 here) and continues, so a failing provider lowers a
+    mean without appearing anywhere else in the run.
 
     Returns the run id, or ``None`` when MLflow could not be reached — the
     harness treats logging as best-effort and never fails an optimization
@@ -81,6 +88,8 @@ def log_optimization_run(
                     "candidate_mean": candidate_mean,
                     "baseline_mean_latency_s": baseline_latency_s,
                     "candidate_mean_latency_s": candidate_latency_s,
+                    "baseline_failures": float(baseline_failures),
+                    "candidate_failures": float(candidate_failures),
                     "gates_passed": 1.0 if outcome == "artifact-written" else 0.0,
                 }
             )
@@ -100,8 +109,14 @@ def log_routing_score(
     misses: list[tuple[str, str, str, float]],
     total: int,
     min_accuracy: float,
+    failures: int = 0,
 ) -> str | None:
-    """Log one scored routing-eval run (misses land as a JSON artifact)."""
+    """Log one scored routing-eval run (misses land as a JSON artifact).
+
+    ``failures`` counts examples whose router call raised: ``dspy.Evaluate``
+    scores them with its ``failure_score`` (0.0) and continues, so without the
+    count a provider error is indistinguishable from a routing miss.
+    """
     try:
         mlflow = _mlflow()
         mlflow.set_experiment(ROUTING_EVAL_EXPERIMENT)
@@ -120,6 +135,7 @@ def log_routing_score(
                     "misses": len(misses),
                     "under_selected": under,
                     "over_selected": over,
+                    "failures": float(failures),
                     "gate_passed": float(mean >= min_accuracy),
                 }
             )

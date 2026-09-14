@@ -30,6 +30,7 @@ from app.agent.program import FleetAgent
 from app.agent.routing import ROUTES, ToolRoutingSignature, coerce_route
 from app.agent.tool_registry import ToolMetadata, ToolRegistry
 from evals.agent_tool_routing import ROUTING_EXAMPLES
+from evals.scoring import RoutingScore
 from tests.helpers.scripted_lm import ScriptedLM, router_call
 
 requires_deno = pytest.mark.skipif(
@@ -70,6 +71,8 @@ def _wire_harness(
     baseline_mean: float,
     candidate_mean: float,
     candidate_src: str = _FAKE_MODULE_SRC,
+    baseline_failures: int = 0,
+    candidate_failures: int = 0,
 ) -> None:
     """Point the optimizer at tmp_path with canned scores and no provider."""
     monkeypatch.setattr(optimize, "ARTIFACTS_DIR", tmp_path)
@@ -84,7 +87,22 @@ def _wire_harness(
     # spied separately where it matters and never writes a real store here.
     monkeypatch.setattr(optimize, "log_optimization_run", lambda **kwargs: None)
 
-    scores = iter([(baseline_mean, [], 0.01), (candidate_mean, [], 0.02)])
+    scores = iter(
+        [
+            RoutingScore(
+                mean=baseline_mean,
+                misses=[],
+                mean_latency_s=0.01,
+                failures=baseline_failures,
+            ),
+            RoutingScore(
+                mean=candidate_mean,
+                misses=[],
+                mean_latency_s=0.02,
+                failures=candidate_failures,
+            ),
+        ]
+    )
 
     def fake_score(router: Any, lm: Any, examples: Any) -> Any:
         del router, lm, examples
@@ -253,6 +271,40 @@ class TestOptimizerGates:
         # The state is loadable and the promote instructions name the artifact.
         assert load_flex_router(state).module_src() == _FAKE_MODULE_SRC
         assert str(artifact_dir) in capsys.readouterr().out
+
+    def test_reports_raised_held_out_calls(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        """A provider error has to be visible next to the held-out means.
+
+        ``dspy.Evaluate`` scores a raised example 0 and keeps going, so a
+        candidate whose calls errored would otherwise read as a plain
+        regression against the baseline.
+        """
+        _wire_harness(
+            monkeypatch,
+            tmp_path,
+            baseline_mean=0.8,
+            candidate_mean=1.0,
+            baseline_failures=3,
+        )
+
+        assert optimize.main(["--auto", "light"]) == 0
+
+        (artifact_dir,) = [p for p in tmp_path.iterdir() if p.is_dir()]
+        manifest = json.loads(
+            (artifact_dir / "manifest.json").read_text(encoding="utf-8")
+        )
+        assert manifest["baseline_failures"] == 3
+        assert manifest["candidate_failures"] == 0
+
+        report = (artifact_dir / "report.md").read_text(encoding="utf-8")
+        assert "raised held-out calls: baseline 3, candidate 0" in report
+
+        assert "WARNING: baseline: 3 of" in capsys.readouterr().err
 
     def test_promote_copies_pointer_without_optimizing(
         self,

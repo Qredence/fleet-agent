@@ -171,6 +171,16 @@ def routing_metric(
     return dspy.Prediction(score=score, feedback=feedback)
 
 
+def routing_score(gold: dspy.Example, pred: dspy.Prediction) -> float:
+    """Numeric form of ``routing_metric`` for ``dspy.Evaluate``.
+
+    ``routing_metric`` returns the score/feedback prediction GEPA consumes;
+    ``dspy.Evaluate`` aggregates floats. Deriving one from the other keeps a
+    single definition of least privilege for both callers.
+    """
+    return float(routing_metric(gold, pred).score)
+
+
 def compile_gepa_candidate(
     program: dspy.Module,
     *,

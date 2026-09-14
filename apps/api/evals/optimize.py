@@ -46,11 +46,11 @@ from app.agent.flex_router import ROUTER_STATE_FORMAT, FlexToolRouter
 from evals.agent_tool_routing import (
     ROUTING_EXAMPLES,
     compile_gepa_candidate,
-    routing_metric,
     validate_routing_dataset,
 )
 from evals.mlflow_tracking import log_optimization_run
 from evals.run import _resolve_lm
+from evals.scoring import RoutingScore, score_router
 
 EVALS_DIR = Path(__file__).resolve().parent
 ARTIFACTS_DIR = EVALS_DIR / "artifacts"
@@ -85,34 +85,26 @@ def _score_router(
     router: dspy.Module,
     lm: dspy.BaseLM,
     examples: list[dspy.Example],
-) -> tuple[float, list[tuple[str, str, str, float]], float]:
-    """Score one router over examples; return (mean, misses, mean latency)."""
-    import time
+) -> RoutingScore:
+    """Score one router over examples through the shared harness.
 
-    misses: list[tuple[str, str, str, float]] = []
-    scores: list[float] = []
-    latencies: list[float] = []
-    adapter = dspy.JSONAdapter(use_native_function_calling=True)
-    with dspy.context(lm=lm, adapter=adapter):
-        for example in examples:
-            started = time.perf_counter()
-            prediction = router(user_request=str(example.user_request))
-            latencies.append(time.perf_counter() - started)
-            verdict = routing_metric(example, prediction)
-            score = float(verdict.score)  # type: ignore[attr-defined]
-            scores.append(score)
-            if score < 1.0:
-                misses.append(
-                    (
-                        str(example.user_request),
-                        str(example.expected_route),
-                        str(getattr(prediction, "route", "<missing>")),
-                        score,
-                    )
-                )
-    mean = sum(scores) / len(scores) if scores else 0.0
-    mean_latency = sum(latencies) / len(latencies) if latencies else 0.0
-    return mean, misses, mean_latency
+    Returns the whole ``RoutingScore`` — mean, misses, latency, and the count
+    of examples whose call raised — because ``dspy.Evaluate`` scores a raised
+    example with its ``failure_score`` and keeps going, so the mean alone
+    cannot tell a broken provider from a wrong route.
+    """
+    return score_router(router, lm, examples)
+
+
+def _failure_note(label: str, failures: int, total: int) -> str | None:
+    """Warn when held-out examples raised instead of mis-routing."""
+    if not failures:
+        return None
+    return (
+        f"WARNING: {label} {failures} of {total} routing calls raised "
+        "(scored 0 by dspy.Evaluate); the mean mixes provider errors with "
+        "routing misses"
+    )
 
 
 def _miss_summary(misses: list[tuple[str, str, str, float]]) -> str:
@@ -264,12 +256,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"split: {len(train)} train / {len(val)} held-out val examples")
 
     baseline = FlexToolRouter()
-    baseline_mean, baseline_misses, baseline_latency = _score_router(baseline, lm, val)
+    baseline_score = _score_router(baseline, lm, val)
+    baseline_mean, baseline_misses, baseline_latency = baseline_score.as_tuple()
     print(
         f"baseline held-out mean: {baseline_mean:.3f} "
         f"({baseline_latency:.2f}s per routed request)"
     )
     print(_miss_summary(baseline_misses))
+    baseline_note = _failure_note("baseline:", baseline_score.failures, len(val))
+    if baseline_note:
+        print(baseline_note, file=sys.stderr)
 
     print(f"compiling GEPA candidate (auto={args.auto}, seed={args.seed}) ...")
     gepa_log_dir = str(
@@ -288,14 +284,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     module_src = _extract_module_src(candidate)
 
-    candidate_mean, candidate_misses, candidate_latency = _score_router(
-        load_candidate(module_src), lm, val
-    )
+    candidate_score = _score_router(load_candidate(module_src), lm, val)
+    candidate_mean, candidate_misses, candidate_latency = candidate_score.as_tuple()
     print(
         f"candidate held-out mean: {candidate_mean:.3f} "
         f"({candidate_latency:.2f}s per routed request)"
     )
     print(_miss_summary(candidate_misses))
+    candidate_note = _failure_note("candidate:", candidate_score.failures, len(val))
+    if candidate_note:
+        print(candidate_note, file=sys.stderr)
 
     gates_passed = (
         candidate_mean >= baseline_mean and candidate_mean >= args.min_accuracy
@@ -311,6 +309,8 @@ def main(argv: list[str] | None = None) -> int:
         candidate_misses=candidate_misses,
         baseline_latency=baseline_latency,
         candidate_latency=candidate_latency,
+        baseline_failures=baseline_score.failures,
+        candidate_failures=candidate_score.failures,
         gates_passed=gates_passed,
         min_accuracy=args.min_accuracy,
         module_src=module_src,
@@ -331,6 +331,8 @@ def main(argv: list[str] | None = None) -> int:
             candidate_mean=candidate_mean,
             baseline_latency_s=baseline_latency,
             candidate_latency_s=candidate_latency,
+            baseline_failures=baseline_score.failures,
+            candidate_failures=candidate_score.failures,
             dspy_version=dspy.__version__,
             artifact_dir=artifact_dir,
         )
@@ -360,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
         "candidate_mean": round(candidate_mean, 4),
         "baseline_mean_latency_s": round(baseline_latency, 3),
         "candidate_mean_latency_s": round(candidate_latency, 3),
+        "baseline_failures": baseline_score.failures,
+        "candidate_failures": candidate_score.failures,
         "min_accuracy": args.min_accuracy,
         "gepa_log_dir": gepa_log_dir,
     }
@@ -391,6 +395,8 @@ def _build_report(
     candidate_misses: list[tuple[str, str, str, float]],
     baseline_latency: float,
     candidate_latency: float,
+    baseline_failures: int,
+    candidate_failures: int,
     gates_passed: bool,
     min_accuracy: float,
     module_src: str,
@@ -404,6 +410,10 @@ def _build_report(
         f"({baseline_latency:.2f}s per routed request, Deno sandbox)",
         f"- candidate held-out mean: {candidate_mean:.3f} "
         f"({candidate_latency:.2f}s per routed request, Deno sandbox)",
+        # dspy.Evaluate scores a raised example 0 and continues, so the two
+        # means above are only comparable when neither side lost examples.
+        f"- raised held-out calls: baseline {baseline_failures}, "
+        f"candidate {candidate_failures} (of {val_count})",
         f"- gates: candidate >= baseline AND candidate >= {min_accuracy}"
         f" -> {'PASSED' if gates_passed else 'FAILED'}",
         "",
