@@ -179,6 +179,12 @@ VITE_API_BASE_URL=http://localhost:8001 pnpm dev:web
 If the web app uses a different origin or port, add that exact origin to
 `FLEET_AGENT_CORS_ORIGINS` in `apps/api/.env`. Wildcard CORS is not supported.
 
+The Vite dev server proxies `/api` to `http://127.0.0.1:8000`, so the browser
+can call the API on the page's own origin instead of a second origin. Amp orbs
+rely on that: `.amp/services.yaml` exposes the web dev server as a single
+portal and leaves the API on loopback, with `VITE_API_BASE_URL` set to the
+portal's own origin. Same-origin requests need no CORS entry.
+
 ## Agent modes and configuration
 
 The API defaults to deterministic fixture mode:

@@ -5,7 +5,7 @@ import { ArtifactMarkdown } from '@/features/artifacts/artifact-markdown'
 import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
 import { StatusChip } from '@/components/process-panel/status-chip'
 import { Button } from '@/components/ui/button'
-import { apiFetchText } from '@/lib/api-client'
+import { apiFetchText, API_BASE_URL } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { AgentArtifact } from '@/contracts/generated'
 
@@ -74,9 +74,6 @@ function useArtifactPreview(artifact: AgentArtifact | undefined): ArtifactPrevie
  * ready artifacts with an explicit (controlled) downloadUrl; relative URLs
  * resolve against the API base — never the frontend origin path.
  */
-const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-
 function resolveDownloadUrl(downloadUrl: string | undefined): string | undefined {
   if (!downloadUrl) return undefined
   return downloadUrl.startsWith('/') ? `${API_BASE_URL}${downloadUrl}` : downloadUrl

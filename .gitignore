@@ -27,8 +27,10 @@ __pycache__/
 # Artifacts & storage
 .artifacts/
 
-# Amp orb portal manifests (generated per orb and thread)
+# Amp orb portal manifests (generated per orb and thread) and local review
+# artifacts (screenshots captured while verifying UI changes).
 .amp/portals/
+.amp/in/
 
 # Optimized router artifacts (evals/optimize.py output)
 apps/api/evals/artifacts/

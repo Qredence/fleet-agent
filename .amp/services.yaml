@@ -1,0 +1,30 @@
+# Long-running development services for Fleet Agent orbs.
+#
+#   amp orb services ensure
+#
+# Only `web` has a portal. The browser talks to the Vite dev server, which
+# proxies /api to the API on loopback: browser requests between two portal
+# hosts are not supported, because CORS preflight requests carry no portal
+# authentication. The API therefore gets no portal of its own.
+#
+# The API runs the default fixtures mode, which replays canonical NDJSON mock
+# streams and needs no provider credentials. To exercise the live DSPy program
+# through the portal instead, set FLEET_AGENT_AGENT_MODE=engine together with
+# FLEET_AGENT_LLM_API_KEY in apps/api/.env (or in the `env` block below) and
+# run `amp orb service restart api`.
+services:
+  api:
+    command: uv run uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+    cwd: apps/api
+    # Fixed so the web dev server's proxy target is stable across orbs.
+    port: 8000
+    health: /health
+  web:
+    # PUBLIC_URL is this service's own portal origin, so the SPA calls /api on
+    # the origin the browser is already authenticated against.
+    command: VITE_API_BASE_URL="$PUBLIC_URL" pnpm exec vite --host 0.0.0.0 --port "$PORT"
+    cwd: apps/web
+    health: /
+    portal:
+      title: Fleet Agent
+      description: Fixtures mode. No provider credentials required.

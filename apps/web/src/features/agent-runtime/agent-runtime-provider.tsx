@@ -19,11 +19,10 @@ import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-pres
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
+import { API_BASE_URL } from '@/lib/api-client'
 import { getAgentProviderHeaders } from '@/lib/providers'
 
-const AGENT_URL = `${
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-}/api/agent`
+const AGENT_URL = `${API_BASE_URL}/api/agent`
 const AGENT_PATHNAME = new URL(AGENT_URL).pathname
 
 function isAgentRunRequest(url: string | URL, requestInit: RequestInit): boolean {
