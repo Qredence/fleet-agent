@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+#
+# Orb setup for the fleet-agent monorepo (https://ampcode.com/docs/orbs).
+#
+# Amp runs this once for a fresh orb, before the agent starts, and saves the
+# result as the project snapshot later orbs restore. Idempotent: safe to re-run,
+# and fast when the restored filesystem already has the work.
+#
+# What a prepared orb has that a bare one does not:
+#   - PostgreSQL 17 running as a systemd service, with the fleet role and the
+#     fleet_agent / fleet_agent_test databases migrated to head. Orbs cannot run
+#     the daemon compose.yaml expects, so the database is installed natively.
+#   - Node pinned to the version CI uses, with pnpm at the package.json pin.
+#   - pnpm workspace dependencies and the apps/api uv environment (Python 3.13).
+#   - apps/api/.env and apps/web/.env copied from their examples.
+#
+# Deliberately not installed: Deno, which only the opt-in Flex track needs
+# (FLEET_AGENT_FLEX_ENABLED; see README.md).
+#
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# CI (.circleci/config.yml) runs cimg/node:24.19.0. The orb image ships a newer
+# Node, where vitest's jsdom environment leaves localStorage undefined and
+# `pnpm --filter web test` fails, so the orb runs the CI version.
+NODE_VERSION="${FLEET_AGENT_ORB_NODE_VERSION:-24.19.0}"
+NODE_PREFIX="/usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64"
+# compose.yaml and CI both use PostgreSQL 17; Debian 12 only packages 15.
+PG_MAJOR=17
+# apps/api/tests/conftest.py redirects every test run to this database.
+TEST_DATABASE_URL="postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test"
+
+started_at=$SECONDS
+step() { printf '\n=== [%ss] %s ===\n' "$((SECONDS - started_at))" "$*"; }
+
+install_postgresql() {
+  if pg_lsclusters -h 2>/dev/null | awk '{print $1}' | grep -qx "$PG_MAJOR"; then
+    return
+  fi
+  local keyring=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+  local sources=/etc/apt/sources.list.d/pgdg.list
+  if [ ! -f "$keyring" ]; then
+    sudo install -d "$(dirname "$keyring")"
+    sudo curl -fsSL -o "$keyring" https://www.postgresql.org/media/keys/ACCC4CF8.asc
+  fi
+  if [ ! -f "$sources" ]; then
+    echo "deb [signed-by=$keyring] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+      | sudo tee "$sources" >/dev/null
+  fi
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    "postgresql-${PG_MAJOR}" "postgresql-client-${PG_MAJOR}"
+}
+
+start_postgresql() {
+  local tuning="/etc/postgresql/${PG_MAJOR}/main/conf.d/orb-tuning.conf"
+  local tuning_added=0
+  if [ ! -f "$tuning" ]; then
+    # Orbs are ephemeral and the snapshot carries the data directory, so trade
+    # durability for speed.
+    sudo tee "$tuning" >/dev/null <<'EOF'
+# Written by .agents/setup: orb-local tuning, speed over durability.
+fsync = off
+synchronous_commit = off
+full_page_writes = off
+EOF
+    tuning_added=1
+  fi
+  # systemd owns the cluster, so it survives setup and starts again in every orb
+  # restored from the snapshot.
+  sudo systemctl enable --now postgresql >/dev/null 2>&1 || true
+  if [ "$tuning_added" = 1 ]; then
+    sudo systemctl restart postgresql
+  fi
+  for _ in $(seq 1 30); do
+    if pg_isready -q -h localhost -p 5432; then
+      return
+    fi
+    sleep 1
+  done
+  echo "postgresql is not accepting connections on localhost:5432" >&2
+  return 1
+}
+
+seed_databases() {
+  # Credentials match compose.yaml and the apps/api settings default.
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'fleet'" | grep -q 1; then
+    sudo -u postgres psql -qc "CREATE ROLE fleet LOGIN PASSWORD 'fleet' SUPERUSER"
+  fi
+  local database
+  for database in fleet_agent fleet_agent_test; do
+    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$database'" | grep -q 1; then
+      sudo -u postgres createdb -O fleet "$database"
+    fi
+  done
+}
+
+install_node() {
+  if [ ! -x "$NODE_PREFIX/bin/node" ]; then
+    local download_dir archive
+    download_dir="$(mktemp -d)"
+    archive="${download_dir}/node.tar.xz"
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+      -o "$archive"
+    sudo mkdir -p "$NODE_PREFIX"
+    sudo tar -xJf "$archive" -C "$NODE_PREFIX" --strip-components=1
+    rm -rf "$download_dir"
+  fi
+  # Amp hands shells and services a PATH that already lists ~/.local/bin ahead of
+  # /usr/local/bin, so these links make the pinned Node the default without
+  # replacing the Node the orb image ships.
+  mkdir -p "$HOME/.local/bin"
+  local binary
+  for binary in node npm npx corepack; do
+    ln -sfn "$NODE_PREFIX/bin/$binary" "$HOME/.local/bin/$binary"
+  done
+}
+
+install_pnpm() {
+  local pinned
+  pinned="$(node -p "require('${REPO_ROOT}/package.json').packageManager.replace(/^pnpm@/, '')")"
+  if [ "$(pnpm --version 2>/dev/null || true)" != "$pinned" ]; then
+    # --prefix keeps the install user-owned and on PATH.
+    npm install --global --prefix "$HOME/.local" "pnpm@${pinned}"
+  fi
+  if [ "$(pnpm --version 2>/dev/null || true)" != "$pinned" ]; then
+    printf 'warning: pnpm resolves to %s (%s), expected %s\n' \
+      "$(pnpm --version 2>/dev/null || echo missing)" "$(command -v pnpm || echo missing)" \
+      "$pinned" >&2
+  fi
+}
+
+ensure_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    return
+  fi
+  curl -fsSL https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+}
+
+step "PostgreSQL ${PG_MAJOR}"
+install_postgresql
+start_postgresql
+seed_databases
+
+step "Node ${NODE_VERSION}"
+install_node
+if [ "$(node --version)" != "v${NODE_VERSION}" ]; then
+  printf 'warning: node resolves to %s (%s), expected v%s\n' \
+    "$(node --version)" "$(command -v node)" "$NODE_VERSION" >&2
+fi
+
+step "pnpm"
+install_pnpm
+
+step "uv"
+ensure_uv
+
+step "workspace dependencies: pnpm install --frozen-lockfile"
+pnpm install --frozen-lockfile
+
+step "apps/api dependencies: uv sync --locked --all-groups"
+# apps/api requires >=3.13 with no upper bound; pin the interpreter CI uses
+# (cimg/python:3.13) instead of taking the newest match.
+(cd apps/api && uv sync --locked --all-groups --python 3.13)
+
+step "root package dependencies: uv sync --locked"
+# The repository root is its own uv project (the fleet-agent package and the
+# configs/ suites). CircleCI's contracts job runs uv from the root, so prepare
+# that environment as well.
+uv sync --locked --python 3.13
+
+step "environment files"
+[ -f apps/api/.env ] || cp -- apps/api/.env.example apps/api/.env
+[ -f apps/web/.env ] || cp -- apps/web/.env.example apps/web/.env
+
+step "database migrations"
+(cd apps/api && uv run alembic upgrade head)
+(cd apps/api && FLEET_AGENT_DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head)
+
+printf '\n=== setup finished in %ss (node %s, pnpm %s, uv %s) ===\n' \
+  "$((SECONDS - started_at))" "$(node --version)" "$(pnpm --version)" \
+  "$(uv --version | cut -d' ' -f2)"

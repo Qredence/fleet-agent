@@ -27,6 +27,9 @@ __pycache__/
 # Artifacts & storage
 .artifacts/
 
+# Amp orb portal manifests (generated per orb and thread)
+.amp/portals/
+
 # Optimized router artifacts (evals/optimize.py output)
 apps/api/evals/artifacts/
 
@@ -37,7 +40,10 @@ qa-results/
 # Logs
 *.log
 
-.agents
+# Local agent tooling state; the orb lifecycle scripts stay tracked.
+/.agents/*
+!/.agents/setup
+!/.agents/resume
 .claude/
 .impeccable/
 skills-lock.json

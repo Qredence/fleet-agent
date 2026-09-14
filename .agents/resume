@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#
+# Orb resume hook for the fleet-agent monorepo (https://ampcode.com/docs/orbs).
+#
+# Amp runs this after activation and every time a paused orb wakes, and waits at
+# most 10 seconds for it. Fast, idempotent repair only: no installs, no
+# dependency work. Everything else belongs in .agents/setup.
+#
+set -euo pipefail
+
+# PostgreSQL runs as a systemd service and normally survives a pause. Restart it
+# if it stopped, and report rather than fail when it stays down: a non-zero exit
+# here is surfaced as a hook error, and an agent can repair a dead database.
+if command -v pg_isready >/dev/null 2>&1; then
+  if ! pg_isready -q -h localhost -p 5432; then
+    printf 'postgres is not accepting connections; starting it\n'
+    sudo systemctl start postgresql || true
+    attempts=5
+    while [ "$attempts" -gt 0 ]; do
+      if pg_isready -q -h localhost -p 5432; then
+        break
+      fi
+      sleep 1
+      attempts=$((attempts - 1))
+    done
+  fi
+  if ! pg_isready -q -h localhost -p 5432; then
+    printf 'warning: postgres is still unavailable; the API and its tests need it\n' >&2
+  fi
+fi
