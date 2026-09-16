@@ -61,10 +61,8 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import {
-  ComposerAccessPicker,
   ComposerModelPicker,
   ComposerContextIndicator,
-  ComposerPreferencesProvider,
   ComposerTriggerPopovers,
   type ComposerWorkspaceContext,
 } from "@/components/assistant-ui/composer-elements";
@@ -271,50 +269,51 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
   // matching the dialog and card step (24px in pill mode).
   const shape = useShape();
   return (
-    <ComposerPreferencesProvider>
-      <ComposerPrimitive.Unstable_TriggerPopoverRoot>
-        <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col overflow-visible">
-          <ComposerTriggerPopovers workspaceContext={workspaceContext} />
-          <ComposerPrimitive.AttachmentDropzone
-            render={
-              <div
-                data-slot="aui_composer-shell"
-                className={cn(
-                  "border-border/40 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/20 dark:focus-within:border-muted-foreground/40 flex min-w-0 w-full cursor-text flex-col gap-2 border bg-surface-2 p-3 shadow-surface-2 transition-[border-color] data-[dragging=true]:border-dashed",
-                  shape.container,
-                )}
-              />
-            }
-          >
-            <ComposerAttachments />
-            <ComposerPrimitive.Input
-              placeholder="Do anything"
-              className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-11 min-w-0 w-full resize-none bg-transparent px-2.5 py-1 text-sm leading-6 outline-none"
-              rows={1}
-              autoFocus
-              enterKeyHint="send"
-              name="message"
-              id="message-input"
-              aria-label="Message input"
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col overflow-visible">
+        <ComposerTriggerPopovers workspaceContext={workspaceContext} />
+        <ComposerPrimitive.AttachmentDropzone
+          render={
+            <div
+              data-slot="aui_composer-shell"
+              className={cn(
+                "border-border/40 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/20 dark:focus-within:border-muted-foreground/40 flex min-w-0 w-full cursor-text flex-col gap-2 border bg-surface-2 p-3 shadow-surface-2 transition-[border-color] motion-reduce:transition-none data-[dragging=true]:border-dashed",
+                shape.container,
+              )}
             />
-            <ComposerAction />
-          </ComposerPrimitive.AttachmentDropzone>
-        </ComposerPrimitive.Root>
-      </ComposerPrimitive.Unstable_TriggerPopoverRoot>
-    </ComposerPreferencesProvider>
+          }
+        >
+          <ComposerAttachments />
+          <ComposerPrimitive.Input
+            placeholder="Ask anything"
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-11 min-w-0 w-full resize-none bg-transparent px-2.5 py-1 text-[15px] leading-6 outline-none"
+            rows={1}
+            autoFocus
+            enterKeyHint="send"
+            submitMode="enter"
+            cancelOnEscape
+            unstable_insertNewlineOnTouchEnter
+            addAttachmentOnPaste
+            name="message"
+            id="message-input"
+            aria-label="Message input"
+          />
+          <ComposerAction />
+        </ComposerPrimitive.AttachmentDropzone>
+      </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 };
 
 const ComposerAction: FC = () => {
   return (
-    <div className="aui-composer-action-wrapper relative flex min-w-0 flex-wrap items-center justify-between gap-2 pt-1">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="aui-composer-action-wrapper relative flex min-w-0 flex-wrap items-center justify-between gap-2 pt-0.5">
+      <div className="flex min-w-0 items-center gap-1">
         <ComposerAddAttachment />
-        <ComposerAccessPicker />
+        <ComposerModelPicker />
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-        <ComposerModelPicker />
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
         <ComposerContextIndicator />
 
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -345,7 +344,7 @@ const ComposerAction: FC = () => {
                 />
               }
             >
-              <SquareIcon className="size-3.5 animate-pulse fill-current" />
+              <SquareIcon className="size-3.5 animate-pulse fill-current motion-reduce:animate-none" />
             </ComposerPrimitive.StopDictation>
           </AuiIf>
         </AuiIf>
@@ -364,7 +363,7 @@ const ComposerAction: FC = () => {
             <ArrowUpIcon className="size-4 stroke-[2.5]" />
           </ComposerPrimitive.Send>
         </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
+        <AuiIf condition={(s) => s.thread.isRunning && s.composer.canCancel}>
           <ComposerPrimitive.Cancel
             render={
               <Button

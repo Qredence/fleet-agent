@@ -14,7 +14,6 @@ import {
 } from '@assistant-ui/react'
 
 import {
-  ComposerAccessPicker,
   ComposerModelPicker,
   ComposerPreferencesProvider,
   ComposerTriggerPopovers,
@@ -48,7 +47,23 @@ function RuntimeComposer() {
   const runtime = useLocalRuntime(noOpAdapter)
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <Thread workspaceContext={workspaceContext} />
+      <ComposerPreferencesProvider>
+        <Thread workspaceContext={workspaceContext} />
+      </ComposerPreferencesProvider>
+    </AssistantRuntimeProvider>
+  )
+}
+
+function RuntimeInputComposer() {
+  const runtime = useLocalRuntime(noOpAdapter)
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ComposerPreferencesProvider>
+        <ComposerPrimitive.Root>
+          <ComposerPrimitive.Input aria-label="Message input" />
+          <ComposerPrimitive.Send type="submit">Send</ComposerPrimitive.Send>
+        </ComposerPrimitive.Root>
+      </ComposerPreferencesProvider>
     </AssistantRuntimeProvider>
   )
 }
@@ -74,10 +89,15 @@ function AttachmentRuntimeComposer({
   )
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // The composer reads providers and keys from localStorage; clear it so each
+  // test starts from the shipped defaults instead of the previous test's state.
+  localStorage.clear()
+})
 
 describe('composer preferences', () => {
-  it('selects the run provider from the settings store while effort, speed, and access stay session-only', async () => {
+  it('selects the run model route from the settings store while effort, speed, and access stay session-only', async () => {
     localStorage.setItem(
       PROVIDERS_STORAGE_KEY,
       JSON.stringify({
@@ -105,63 +125,221 @@ describe('composer preferences', () => {
         activeProviderId: 'server',
       }),
     )
+    localStorage.setItem('openrouter_api_key', 'sk-test-openrouter')
 
     const user = userEvent.setup()
     render(
       <ComposerPreferencesProvider>
         <ComposerModelPicker />
-        <ComposerAccessPicker />
       </ComposerPreferencesProvider>,
     )
 
     const getModelTrigger = () =>
       screen.getByRole('button', { name: 'Model and reasoning preferences' })
-    expect(getModelTrigger()).toHaveTextContent('Server default High')
-    expect(screen.getByRole('button', { name: 'Access mode' })).toHaveTextContent(
-      'Full access',
-    )
+    expect(getModelTrigger()).toHaveTextContent('Server default model')
 
     await user.click(getModelTrigger())
+    expect(await screen.findByText('Model')).toBeInTheDocument()
+    expect(screen.queryByText(/^Provider$/)).not.toBeInTheDocument()
     expect(
-      await screen.findByRole('menuitemradio', { name: /server default/i }),
+      await screen.findByRole('menuitemradio', {
+        name: /server default model.*server configuration/i,
+      }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('menuitemradio', { name: /openrouter/i }),
+      screen.getByRole('menuitemradio', {
+        name: /GPT-4o mini \(OpenAI\).*openai\/gpt-4o-mini.*via OpenRouter/i,
+      }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('menuitemradio', { name: /modal gateway/i }),
+      screen.getByRole('menuitemradio', {
+        name: /Muse Spark 1\.3.*muse-spark-1\.3-contributor-free.*via OpenCode Zen/i,
+      }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitemradio', {
+        name: /zai-org\/GLM-5\.3-Flash.*via modal gateway/i,
+      }),
+    ).toBeInTheDocument()
+    // A profile that pins a model id always sends that id, so no second
+    // "default model" row may claim to route the provider default.
+    expect(
+      screen.queryByRole('menuitemradio', {
+        name: /modal gateway default model/i,
+      }),
+    ).not.toBeInTheDocument()
 
     await user.click(
-      await screen.findByRole('menuitemradio', { name: /modal gateway/i }),
+      screen.getByRole('menuitemradio', {
+        name: /GPT-4o mini \(OpenAI\).*openai\/gpt-4o-mini.*via OpenRouter/i,
+      }),
     )
-    expect(getModelTrigger()).toHaveTextContent('Modal Gateway High')
+    expect(getModelTrigger()).toHaveTextContent('GPT-4o mini (OpenAI)')
+
+    const openRouterStored = JSON.parse(
+      localStorage.getItem(PROVIDERS_STORAGE_KEY) ?? '{}',
+    ) as { activeProviderId?: string }
+    expect(openRouterStored.activeProviderId).toBe('openrouter')
+    expect(localStorage.getItem('openrouter_selected_model')).toBe(
+      'openai/gpt-4o-mini',
+    )
+
+    await user.click(
+      await screen.findByRole('menuitemradio', {
+        name: /zai-org\/GLM-5\.3-Flash.*via modal gateway/i,
+      }),
+    )
+    expect(getModelTrigger()).toHaveTextContent('zai-org/GLM-5.3-Flash')
 
     const stored = JSON.parse(
       localStorage.getItem(PROVIDERS_STORAGE_KEY) ?? '{}',
     ) as { activeProviderId?: string }
     expect(stored.activeProviderId).toBe('modal-gw')
 
+    // Effort and speed are local preferences: they change the menu state
+    // without changing the selected model route.
     await user.click(await screen.findByRole('menuitemradio', { name: /^Low/ }))
-    expect(getModelTrigger()).toHaveTextContent('Modal Gateway Low')
+    expect(
+      screen.getByRole('menuitemradio', { name: /^Low/ }),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(getModelTrigger()).toHaveTextContent('zai-org/GLM-5.3-Flash')
 
-    await user.click(await screen.findByRole('menuitem', { name: /fast mode/i }))
-    expect(getModelTrigger()).toHaveTextContent('(Standard)')
+    // Speed is a plain menu item, so selecting it closes the menu.
+    const fastMode = await screen.findByRole('menuitem', { name: /fast mode/i })
+    expect(fastMode.querySelectorAll('svg')).toHaveLength(2)
+    await user.click(fastMode)
+    await waitFor(() => {
+      expect(getModelTrigger()).toHaveAttribute('aria-expanded', 'false')
+    })
 
-    const accessTrigger = screen.getByRole('button', { name: 'Access mode' })
-    await user.click(accessTrigger)
+    await user.click(getModelTrigger())
+    expect(
+      (await screen.findByRole('menuitem', { name: /fast mode/i })).querySelectorAll(
+        'svg',
+      ),
+    ).toHaveLength(1)
+    expect(getModelTrigger()).toHaveTextContent('zai-org/GLM-5.3-Flash')
+
+    // Access lives in the model menu with the other local controls, and the
+    // compact action bar no longer carries its own trigger.
+    const readOnly = await screen.findByRole('menuitemradio', {
+      name: /read-only/i,
+    })
+    await user.click(readOnly)
+    expect(readOnly).toHaveAttribute('aria-checked', 'true')
+    expect(
+      screen.queryByRole('button', { name: 'Access mode' }),
+    ).not.toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => {
+      expect(getModelTrigger()).toHaveAttribute('aria-expanded', 'false')
+    })
+    expect(getModelTrigger()).toHaveFocus()
+  })
+
+  it('does not mark an unconfigured provider model as the effective route', async () => {
+    localStorage.removeItem('openrouter_api_key')
+    localStorage.removeItem('opencode_zen_api_key')
+    localStorage.setItem(
+      PROVIDERS_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        profiles: [
+          {
+            id: 'openrouter',
+            name: 'OpenRouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            chatCompletionFormat: 'openai-chat-completions',
+            responseFormat: 'native_function_calling',
+            messagesFormat: 'system_role',
+          },
+        ],
+        activeProviderId: 'openrouter',
+      }),
+    )
+
+    render(
+      <ComposerPreferencesProvider>
+        <ComposerModelPicker />
+      </ComposerPreferencesProvider>,
+    )
+
+    const trigger = screen.getByRole('button', {
+      name: 'Model and reasoning preferences',
+    })
+    expect(trigger).toHaveTextContent('Server default model')
+
+    expect(trigger).toHaveAttribute('data-unconfigured', 'true')
+
+    const user = userEvent.setup()
+    await user.click(trigger)
+    expect(
+      await screen.findByText(/OpenRouter has no API key yet/i),
+    ).toBeInTheDocument()
+    const openRouterModel = await screen.findByRole('menuitemradio', {
+      name: /GPT-4o mini \(OpenAI\).*via OpenRouter/i,
+    })
+    expect(openRouterModel).toHaveAttribute('aria-disabled', 'true')
+    await user.click(openRouterModel)
+    expect(trigger).toHaveTextContent('Server default model')
+
+    // The composer names the fallback and keeps the stored choice, so a key
+    // added later resumes the provider the user picked.
+    const stored = JSON.parse(
+      localStorage.getItem(PROVIDERS_STORAGE_KEY) ?? '{}',
+    ) as { activeProviderId?: string }
+    expect(stored.activeProviderId).toBe('openrouter')
+  })
+
+  it('keeps local preferences when the thread-specific Composer remounts', async () => {
+    const user = userEvent.setup()
+    function PickerView({ viewKey }: { viewKey: string }) {
+      return (
+        <div key={viewKey}>
+          <ComposerModelPicker />
+        </div>
+      )
+    }
+
+    const view = render(
+      <ComposerPreferencesProvider>
+        <PickerView viewKey="thread-a" />
+      </ComposerPreferencesProvider>,
+    )
+
+    const getModelTrigger = () =>
+      screen.getByRole('button', { name: 'Model and reasoning preferences' })
+
+    await user.click(getModelTrigger())
     await user.click(
       await screen.findByRole('menuitemradio', { name: /read-only/i }),
     )
-    expect(accessTrigger).toHaveTextContent('Read-only')
-    expect(screen.getByText(/not sent to the agent/i)).toBeInTheDocument()
-    await user.keyboard('{Escape}')
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/not sent to the agent/i),
-      ).not.toBeInTheDocument()
+    const fastModeBefore = await screen.findByRole('menuitem', {
+      name: /fast mode/i,
     })
-    expect(accessTrigger).toHaveFocus()
+    expect(fastModeBefore.querySelectorAll('svg')).toHaveLength(2)
+    await user.click(fastModeBefore)
+    await waitFor(() => {
+      expect(getModelTrigger()).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    view.rerender(
+      <ComposerPreferencesProvider>
+        <PickerView viewKey="thread-b" />
+      </ComposerPreferencesProvider>,
+    )
+
+    await user.click(getModelTrigger())
+    expect(
+      await screen.findByRole('menuitemradio', { name: /read-only/i }),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(
+      (await screen.findByRole('menuitem', { name: /fast mode/i })).querySelectorAll(
+        'svg',
+      ),
+    ).toHaveLength(1)
+    expect(getModelTrigger()).toHaveTextContent('Server default model')
   })
 })
 
@@ -175,6 +353,25 @@ describe('composer context and trigger popovers', () => {
     expect(screen.getByText('Estimated context')).toBeInTheDocument()
     expect(
       screen.getByText(/visible messages and registered tools/i),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the runtime composer surface compact while retaining local controls in the model menu', async () => {
+    const user = userEvent.setup()
+    render(<RuntimeComposer />)
+
+    expect(screen.getByPlaceholderText('Ask anything')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add attachment' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Access mode' })).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Model and reasoning preferences' }),
+    )
+    expect(await screen.findByText('Access')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('menuitemradio', {
+        name: /full access.*session preference only/i,
+      }),
     ).toBeInTheDocument()
   })
 
@@ -237,6 +434,19 @@ describe('composer context and trigger popovers', () => {
     expect(screen.getByRole('option', { name: /First thread/i })).toBeInTheDocument()
     await user.keyboard('{Enter}')
     expect(input).toHaveValue('@First thread ')
+  })
+
+  it('uses the runtime input for newline and submit behavior', async () => {
+    const user = userEvent.setup()
+    render(<RuntimeInputComposer />)
+
+    const input = screen.getByRole('textbox', { name: 'Message input' })
+    await user.type(input, 'hello')
+    await user.keyboard('{Shift>}{Enter}{/Shift}')
+    expect(input).toHaveValue('hello\n')
+
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(input).toHaveValue(''))
   })
 })
 
