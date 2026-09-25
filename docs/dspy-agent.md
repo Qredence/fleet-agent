@@ -5,13 +5,15 @@
 Fleet Agent should be a real DSPy program, not a FastAPI service that happens
 to instantiate a DSPy class inside a closure. The application now separates:
 
-1. **Task contract** - `EvidenceSignature` / `SynthesisSignature` for the routed
-   `FleetAgent`, and `AgentSignature` / `StagedSynthesisSignature` for the staged
-   `StagedDspyEngine`
+1. **Declarative definition** - `app/agent/agents/fleet_agent.yaml` plus Markdown
+   prompts; `app/agent/spec/` compiles them into real `dspy.Signature` classes and
+   a real `dspy.Module` tree
 2. **DSPy program** - `FleetAgent(dspy.Module)`: routed evidence loops + streamed synthesis
-3. **Tool authoring and policy** - `create_dspy_tool` + `ToolRegistry`
-4. **Runtime adaptation** - `DspyAgentEngine` (run, stream, durable approvals)
-5. **UI/public state** - AG-UI coordinator and reducers
+3. **Tool authoring and policy** - one `TOOL_SPECS` table in `tool_registry.py`, and
+   `create_dspy_tool` for schema validation
+4. **Runtime adaptation** - `DspyAgentEngine` (run, stream, cancellation)
+5. **Transport** - the AG-UI coordinator and reducers, which depend on the agent
+   layer and never the reverse (`tests/test_architecture.py` enforces it)
 
 ```text
 FastAPI / AG-UI
@@ -23,15 +25,18 @@ DspyAgentEngine
       v
 FleetAgent(dspy.Module)
       |
-      +-- router: dspy.Predict(ToolRoutingSignature)  (least-privilege route)
+      +-- router: dspy.Predict over the routing contract
+      |     plus the conditional that dispatches on its answer, in Python: the
+      |     spec layer wires by field name and has no switch
       |
-      +-- evidence_agents: dict[ToolRoute, ApprovalAwareReActV2]
-      |     one per route profile (direct, research, artifact,
-      |     workspace_read, workspace_write, workspace_shell); each holds
-      |     only its profile's tools, gathers evidence, and never submits an
-      |     answer itself
+      +-- evidence_agents: dict[ToolRoute, spec React node]
+      |     one per non-empty capability profile (research, artifact,
+      |     workspace_read, workspace_write, workspace_shell); built from the
+      |     spec, holding only that profile's tools, never submitting an answer.
+      |     `direct` has no profile tools, so it goes straight to synthesis
+      |     rather than spending a call on a loop with nothing to gather.
       |
-      +-- synthesizer: dspy.Predict(SynthesisSignature)
+      +-- synthesizer: spec Predict node
             streams answer + process_summary tokens through
             dspy.streamify + StreamListener (ChatAdapter)
 ```
@@ -82,9 +87,9 @@ There is one construction path: `tool_profiles` is required. An un-routed
 profile, so the program does not offer one.
 
 The engine always invokes the program through `program(...)`, never by calling
-`forward()` directly. Programs without `synthesis_stream_fields` (the staged
-strategy) keep the non-streaming contract: the engine settles on the final
-prediction's fields only.
+`forward()` directly. A program without `synthesis_stream_fields` keeps the
+non-streaming contract: the engine settles on the final prediction's fields
+rather than emitting token updates.
 
 ## Saving optimized program state
 
@@ -141,10 +146,9 @@ registry = ToolRegistry(
             tool,
             ToolMetadata(
                 name="find_customer",
+                description="Look up one customer by id.",
                 read_only=True,
-                idempotent=True,
                 parallelizable=True,
-                timeout_seconds=10,
             ),
         )
     ]
@@ -169,13 +173,18 @@ plugin boundary, or a future MCP connector.
 
 ## Tool policy scope
 
-`ToolMetadata` records application policy for catalog display, staged
-orchestration, isolation, timeout selection, and bounded results. ReActV2
-receives the corresponding `dspy.Tool` schema and callable; it does not natively
-understand Fleet Agent's `read_only`, `idempotent`, or `parallelizable` flags.
-Network-facing tools therefore continue to own their request timeouts, and a
-future approval-required tool must be gated before it is placed in the run's
-allowlist.
+`TOOL_SPECS` is the single table every tool's policy comes from: its
+model-facing description, its capability tag, whether it reads only, whether it
+may run in parallel, and whether it requires approval. The engine builds each
+`dspy.Tool` from that table and `GET /api/tools` renders the same strings, so the
+browser and the model cannot disagree about what a tool is.
+
+Only enforced policy lives there. `idempotent`, `timeout_seconds` and
+`max_output_chars` were removed: nothing on the live path read them, because
+ReActV2 is handed raw `dspy.Tool` objects and the registry's own execution
+wrapper never ran. Network-facing tools own their request timeouts, and a tool
+that requires approval is withheld from every profile until the run authorizes
+it.
 
 ## Async and MCP boundary
 
@@ -228,10 +237,7 @@ the next section.
   reconstructs fields exactly from token deltas.
 - The engine runs one `StreamingScrubber` per streamed field: emitted text is
   always a stable prefix of the scrubbed field (see "Secret scrubbing").
-- Approval pauses raised inside the streamed evidence loop surface through
-  streamify's anyio task group as an exception group; the engine flattens it
-  and maps `ApprovalPause` / `ApprovalDecisionError` to interrupted/failed
-  results, re-raising anything unrelated.
+
 - The AG-UI coordinator accumulates `answer` tokens into incremental
   `TextMessageContentEvent`s and the live `process_summary` into state deltas;
   the final fields event suppresses the answer text when tokens already
@@ -249,8 +255,7 @@ That makes validity a hard requirement, not a nicety: a document the model
 cannot parse is worse than less evidence, because the model then answers from
 a broken fragment while believing it has the evidence.
 
-`app/agent/evidence.py` owns that contract for both programs (the routed
-`FleetAgent` and the staged strategy). `bounded_json` spends the whole budget
+`app/agent/evidence.py` owns that contract. `bounded_json` spends the whole budget
 on valid JSON: entries are kept in document order, and the entry that
 overflows is shortened to exactly the room that is left, so a single oversized
 tool result still delivers nearly the entire budget as evidence rather than a
@@ -264,28 +269,53 @@ only tool names, their already-bounded results, and error flags are rendered.
 `next_thought` reasoning, provider payloads, and credentials stay out of the
 synthesis prompt.
 
-## Durable approval checkpoints
+## Code capability (understand, change, verify)
 
-Approval-gated tools (`write`, `edit`, `bash`) pause the run with an AG-UI
-interrupt. The pause state is durable:
+The second program shape: `app/agent/agents/code.yaml` declares an
+`understand` predictor, a tool-using `change` loop, and an `answer` predictor,
+and `app/agent/code.py` drives them. The driver loop is plain Python because
+"did the tests pass?" is a computed condition, not a field mapping - the same
+boundary that keeps routing and evidence-rendering in `program.py`.
 
-- `DurableApprovalRegistry` persists each interrupt as an
-  `approval_checkpoints` row (payload, thread, run, tool call id) inside the
-  run's database session before the SSE stream surfaces the interrupt. The
-  browser decision is consumed exactly once, in a database transaction, and
-  the row is deleted when applied.
-- On server restart, `main.py` lifespan reconciliation sweeps orphaned
-  `interrupted` runs whose pending checkpoints no longer belong to a live
-  process, so a crashed server cannot leave an unapprovable run forever.
-- Resumed runs replay the durable history: the evidence loop continues from
-  the persisted DSPy history, the approved tool call executes, and synthesis
-  streams normally. Denials terminate the run with a safe error code; the
-  raw tool arguments never leave the server beyond the bounded single-line
-  action preview the approver needs.
+The loop is the product: plan once, then change-and-verify until the suite is
+green or the attempt budget is spent. The test command is a required parameter,
+never a default - a code agent that silently skips verification is the failure
+mode this capability exists to remove. On exhaustion the run reports failure
+honestly (`termination_reason="unverified"`) instead of claiming success.
 
-Non-durable (in-memory) registries remain available for single-process
-deployments without a database; the engine treats both through the same
-`ApprovalRegistryProtocol`.
+Its eval (`python -m evals.run --suite code`) scores a fixture task by running
+the real suite before and after: exit 0 requires green-after plus red-before,
+so a task whose suite already passes proves nothing and fails loudly.
+
+## Approval is a decision, not a pause
+
+Approval-gated tools (`write`, `edit`, `bash`) are **withheld from the model**
+unless the run authorizes them up front. `app/agent/approval.py` reads the
+decision from the request (`forwardedProps.approvedTools`: `"*"`, one name, or a
+list) and `build_tool_profiles` drops every gated tool the run did not authorize
+from every profile before the program is built.
+
+The consequence is stronger than declining a call: an unauthorized tool is never
+placed in a profile, so the model cannot see it and cannot be talked into calling
+it. `withheld_tool_names` reports what a run would have had to authorize, so the
+client can make the refusal actionable.
+
+This replaced a mid-loop pause. That design needed an 846-line fork of
+`dspy.ReActV2.forward` over four private DSPy symbols, a hard `dspy == 3.3.1`
+pin, a durable checkpoint table, a boot-time database dependency, and two
+registries - to cover a checkpoint with a **five-minute TTL that was never
+written** (`approval_checkpoints` held zero rows).
+
+Nothing here needs a database. The API still reconciles orphaned runs at startup,
+and a database outage no longer stops the service from booting: the sweep
+degrades to a warning and the app serves.
+
+The `interrupted` value is still accepted (`_SAFE_RUN_STATUSES`) and still present
+in the public contract enum, but **nothing produces it**. The startup sweep
+(`mark_orphaned_interrupted`) rewrites any surviving `interrupted` run *and* its
+persisted snapshot to `failed` / `server_restart`, so the value has no producer and
+no long-lived rows. It is listed defensively for the one window where the sweep has
+not run yet - a boot whose database was unreachable, which now degrades to a warning.
 
 ## Secret scrubbing (batch and streaming)
 
@@ -354,12 +384,11 @@ mutators, that read-only routes can never reach a gated tool, and that
 untrusted router output degrades to `direct`) is pinned by
 `tests/test_routing_gating.py` in the normal pytest suite.
 
-## Self-improvement (Flex + GEPA)
+## Self-improvement (GEPA over the router)
 
-The router has a self-improving counterpart: `FlexToolRouter`
-(`app/agent/flex_router.py`) implements the same routing task as a
-`dspy.Flex` program, so GEPA's update unit is the router's *source code* —
-decomposed predictors plus plain Python — not just its instructions.
+`python -m evals.optimize` evolves the capability router's **instructions**. The
+router is the one component with both a labelled dataset and a deterministic
+metric, so a run costs one LM call per example rather than a full agent turn.
 
 The loop is offline, manual, and gated:
 
@@ -368,45 +397,48 @@ cd apps/api && uv run python -m evals.optimize --auto light
 ```
 
 1. The 45-example set (27 canonical + 18 adversarial) is split per route
-   (fixed seed, 32 train / 13 held-out validation examples).
-2. The baseline Flex router is scored on the held-out half. Every forward —
-   baseline included — runs inside dspy's Deno sandbox; the optimizer never
-   executes in the host process, and only predictor construction/calls bridge
-   back to it.
-3. GEPA (`dspy.GEPA`, `auto=light|medium|heavy`) compiles a candidate with
-   the production LM as both candidate and reflection model.
-4. The candidate is scored on the same held-out half. It must beat the
-   baseline **and** clear `--min-accuracy` (default 0.9) or nothing is
-   written and the runner exits nonzero.
+   (fixed seed, stratified so a two-example route cannot vanish from the test
+   half).
+2. The baseline router is scored on the **held-out** half.
+3. GEPA (`dspy.GEPA`, `auto=light|medium|heavy`) compiles a candidate with the
+   production LM as both candidate and reflection model - over the **train half
+   only**. Handing GEPA the held-out set would tune the candidate against the
+   very examples the gate is measured on, which makes a pass meaningless. (The
+   earlier Flex-based runner did exactly that; its 0.95 -> 1.00 result was
+   selected on the set it was reported against.)
+4. The candidate is scored on the same held-out half. It must beat the baseline
+   **and** clear `--min-accuracy` (default 0.9) or nothing is written and the
+   runner exits 2.
 5. On success the runner writes a versioned artifact directory under
-   `evals/artifacts/` (gitignored): `state.json` (the only state a Flex
-   router carries is `module_src`; any embedded LM state is dropped on
-   purpose), `module_src.py` (the evolved source for human review),
-   `report.md` (baseline vs. candidate, misses, measured sandbox latency),
-   and `manifest.json` (scores, budget, seed, versions).
+   `evals/artifacts/` (gitignored): `router_state.json` (the promoted
+   instructions, plus the scores that justified them), `report.md` (baseline vs.
+   candidate, misses on both sides, raised-call counts), and `manifest.json`
+   (scores, budget, seeds, per-route train counts, dspy version). Every attempt,
+   passing or not, is logged to MLflow as a `fleet-agent/router-optimization`
+   run.
 
 Promotion is a second, explicit human step:
 
 ```bash
-uv run python -m evals.optimize --promote --artifact evals/artifacts/<dir>
+uv run python -m evals.optimize --auto light --promote
 ```
 
-This copies the chosen state to `evals/artifacts/flex_router_active.json`.
-Going live still requires the operator to set `FLEET_AGENT_ROUTER_STATE` to
-that file and restart the server. At startup the engine builder validates the
-pinned artifact (parseable JSON, non-empty `module_src`, Deno present) and
-fails fast otherwise; each run-scoped program then builds a fresh Flex router
-from the pinned source. Unset, the production router stays the plain
-zero-shot `dspy.Predict`.
+This copies a passing candidate to `evals/artifacts/router_active.json`. Going
+live still requires the operator to point `FLEET_AGENT_ROUTER_STATE_PATH` at
+that file and restart. At startup the engine builder reads the artifact once and
+logs the path it accepted, so a pin can be confirmed; a malformed or
+unrecognized file **fails startup with a clear error** rather than being silently
+ignored - an operator who pinned a file expects it in effect.
 
 Safety properties that promotion cannot weaken:
 
-- The evolved source only ever runs inside the Deno interpreter; it cannot
-  touch the host process, the database, or the filesystem.
-- Its output still flows through `coerce_route`; a degenerate candidate
-  degrades to `direct`, it can never widen a profile.
-- Approval gating is registry-structural (profile tool sets), not prompt
-  based, so evolved prompts cannot unlock gated tools.
+- The artifact carries instruction text only; `coerce_route` still converts any
+  router answer to a least-privileged route, so a degenerate candidate degrades
+  to `direct` and can never widen a profile.
+- Overriding one program's router uses a fresh signature class
+  (`with_instructions`), so it cannot leak into the shared contract.
+- Approval gating is profile-structural (gated tools are withheld before the
+  program is built), not prompt based, so evolved prompts cannot unlock a tool.
 
 ## MLflow observability
 
@@ -414,9 +446,9 @@ The self-improvement loop keeps its history in MLflow:
 
 - Every optimization attempt — gates passed **or** failed — is logged
   (`evals/mlflow_tracking.py`) with params (budget, seeds, split sizes),
-  metrics (baseline/candidate means, per-request sandbox latency,
-  `gates_passed`), and, on pass, the full candidate artifact directory
-  (`state.json`, `module_src.py`, `report.md`, `manifest.json`). A rejected
+  metrics (baseline/candidate means, latency, `gates_passed`), and, on pass,
+  the full candidate artifact directory (`router_state.json`, `report.md`,
+  `manifest.json`). A rejected
   candidate is logged too: the history of failed attempts is as valuable as
   the winners.
 - Scored routing evals (`python -m evals.run --suite routing`) log mean
@@ -455,13 +487,12 @@ provider data to the browser, with or without the flag.
   one.** Route mistakes degrade to least privilege (`coerce_route`), and the
   evidence loop can still ask for tools within its own profile, but the
   default router is not optimizer-compiled; self-improvement is real but
-  opt-in (`FLEET_AGENT_ROUTER_STATE`).
-- **A promoted Flex router adds runtime dependencies.** It needs a Deno
-  runtime on every API server (validated at startup), and each routed
-  request pays one sandboxed interpreter round-trip (measured ~1s locally,
-  reported per run in the artifact manifest) before the evidence loop even
-  starts. Operators who value latency over route precision simply do not pin
-  the state.
+  opt-in (`FLEET_AGENT_ROUTER_STATE_PATH`).
+- **Promoting a router costs nothing at runtime.** The artifact is instruction
+  text, read once when the engine builder is constructed; an unpinned
+  deployment keeps the baseline contract. The earlier Flex-based promotion
+  needed a Deno sandbox and about a second of interpreter round-trip per routed
+  request, which is why it was replaced.
 - **The eval set is small and hand-authored.** 45 examples (27 canonical +
   18 adversarial), 13 held out. A
   candidate that clears the gates generalizes as well as that set measures;
@@ -513,11 +544,13 @@ It must never receive:
 - The eval runner and the GEPA optimizer score routers through one shared
   `dspy.Evaluate` call and report the same mean, misses, and latency
   (`tests/test_eval_scoring.py`).
-- Approval pauses survive server restarts; orphaned interrupted runs are
-  swept on startup (`tests/test_durable_approvals.py`).
+- Gated tools are withheld before the program is built, so an unauthorized
+  tool is never offered to the model (`tests/test_fleet_agent_routing.py`).
+  Orphaned runs are still reconciled on startup, and a database outage no longer
+  stops the service from booting (`tests/test_health.py`).
 - The self-improvement harness writes an artifact only when the evolved
-  candidate beats the baseline and clears the accuracy floor on held-out
-  examples; promoted state carries `module_src` only, never an LM
-  (`tests/test_flex_router_optimize.py`).
+  candidate beats the baseline and clears the accuracy floor on a held-out split
+  GEPA never saw; promoted state carries instruction text only
+  (`tests/test_router_optimize.py`).
 - Existing history, termination, usage, cleanup, AG-UI, and no-chain-of-thought
   contract tests continue to pass.
