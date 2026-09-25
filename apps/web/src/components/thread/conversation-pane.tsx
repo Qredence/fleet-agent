@@ -35,24 +35,27 @@ export function ConversationPane({
       aria-label="Conversation"
       className="flex h-full min-w-0 flex-1 flex-col bg-surface-1"
     >
-      <header className="flex h-12 shrink-0 items-center justify-between border-b px-3">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-surface-1/80 backdrop-blur-xs px-3.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            className="size-8 text-muted-foreground hover:bg-surface-2 hover:text-foreground rounded-lg transition-colors"
             aria-label="Toggle sidebar"
             onClick={onSidebarToggle}
           >
             <PanelLeft className="size-4" />
           </Button>
-          <h1 className="truncate px-1 text-sm font-medium text-foreground">{title}</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="size-2 shrink-0 rounded-full bg-emerald-500/80 shadow-xs" title="Ready" />
+            <h1 className="truncate text-sm font-medium tracking-tight text-foreground">{title}</h1>
+          </div>
         </div>
 
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-muted-foreground hover:text-foreground"
+          className="size-8 text-muted-foreground hover:bg-surface-2 hover:text-foreground rounded-lg transition-colors"
           aria-label="Toggle process panel"
           aria-pressed={processPanelActive}
           onClick={onProcessToggle}
