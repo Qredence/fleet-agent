@@ -160,7 +160,10 @@ function ModelCardsRowContent({
                 <CardFooter>
                   <CardButton
                     variant={isSelected ? 'primary' : 'secondary'}
-                    onClick={() => onSelectModel(model.id)}
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation()
+                      onSelectModel(model.id)
+                    }}
                   >
                     {isSelected ? 'Connected' : 'Connect'}
                   </CardButton>

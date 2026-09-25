@@ -331,9 +331,10 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     // Depend on the stable registerItem callback, not the whole group context —
     // the context object's identity changes on every hover/selection frame,
     // which would otherwise re-register every card each frame.
-    // Only a card that can be clicked joins the highlight: a highlight on an
-    // informational card would promise a click that has nowhere to land.
-    const registerItem = !disabled && (href || onClick) ? group?.registerItem : undefined;
+    // Only an enabled card that can be clicked joins the highlight: a highlight on an
+    // informational or disabled card would promise a click that has nowhere to land.
+    const registerItem =
+      !disabled && (href || onClick) ? group?.registerItem : undefined;
     useRegisterFluidHoverItem(registerItem, index, internalRef);
 
     // Divider geometry: draw a hairline toward the neighbour below / to the
@@ -971,7 +972,7 @@ const CARD_BUTTON_VARIANTS: Record<CardButtonVariant, string> = {
 
 interface CardButtonProps {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   href?: string;
   variant?: CardButtonVariant;
   icon?: IconComponent;

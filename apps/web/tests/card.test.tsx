@@ -162,6 +162,18 @@ describe('Card accessibility and interactive overlay', () => {
     expect(link).toHaveAttribute('href', '/settings/tools')
   })
 
+  it('does not render overlay when disabled even if onClick or href is passed', () => {
+    const handleClick = () => {}
+    render(
+      <Card onClick={handleClick} href="/test" disabled>
+        <CardTitle>Disabled Card</CardTitle>
+      </Card>
+    )
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
   it('does not render overlay when disabled', () => {
     const handleClick = () => {}
     render(

@@ -78,7 +78,10 @@ export function CardSection({
               <CardFooter>
                 <CardButton
                   variant={isSelected ? "primary" : "secondary"}
-                  onClick={() => !disabled && onSelectModel?.(item.id)}
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!disabled) onSelectModel?.(item.id);
+                  }}
                 >
                   {isSelected ? "Connected" : "Connect"}
                 </CardButton>
