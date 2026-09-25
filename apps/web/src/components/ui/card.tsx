@@ -333,7 +333,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     // which would otherwise re-register every card each frame.
     // Only a card that can be clicked joins the highlight: a highlight on an
     // informational card would promise a click that has nowhere to land.
-    const registerItem = href || onClick ? group?.registerItem : undefined;
+    const registerItem = !disabled && (href || onClick) ? group?.registerItem : undefined;
     useRegisterFluidHoverItem(registerItem, index, internalRef);
 
     // Divider geometry: draw a hairline toward the neighbour below / to the

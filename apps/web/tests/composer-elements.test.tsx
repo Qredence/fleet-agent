@@ -97,6 +97,51 @@ afterEach(() => {
 })
 
 describe('composer preferences', () => {
+  it.each([
+    ['openrouter', 'openrouter', 'OpenRouter', 'openai/gpt-4o-mini', 'GPT-4o mini (OpenAI)'],
+    ['opencode-zen', 'opencode_zen', 'OpenCode Zen', 'muse-spark-1.3-contributor-free', 'Muse Spark 1.3 (Contributor Free)'],
+  ])('shows the %s default route when custom mode is off and enables popular model selection', async (providerId, storagePrefix, providerName, modelId, modelLabel) => {
+    localStorage.setItem(`${storagePrefix}_api_key`, 'synthetic-test-key')
+    localStorage.setItem(`${storagePrefix}_custom_model_enabled`, 'false')
+    localStorage.setItem(`${storagePrefix}_selected_model`, 'previous-custom-model')
+    localStorage.setItem(PROVIDERS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      profiles: [],
+      activeProviderId: providerId,
+    }))
+
+    const user = userEvent.setup()
+    render(
+      <ComposerPreferencesProvider>
+        <ComposerModelPicker />
+      </ComposerPreferencesProvider>,
+    )
+
+    const trigger = screen.getByRole('button', { name: 'Model and reasoning preferences' })
+    expect(trigger).toHaveTextContent(`${providerName} default model`)
+    await user.click(trigger)
+    const defaultOption = await screen.findByRole('menuitemradio', {
+      name: new RegExp(`${providerName} default model.*Provider default.*via ${providerName}`),
+    })
+    expect(defaultOption).toHaveAttribute('aria-checked', 'true')
+
+    // Switching routes through the default option must leave custom mode off.
+    await user.click(screen.getByRole('menuitemradio', { name: /Server default model/ }))
+    await user.click(defaultOption)
+    expect(trigger).toHaveTextContent(`${providerName} default model`)
+    expect(localStorage.getItem(`${storagePrefix}_custom_model_enabled`)).toBe('false')
+
+    await user.click(screen.getByRole('menuitemradio', {
+      name: new RegExp(`${modelId}.*via ${providerName}`),
+    }))
+    expect(trigger).toHaveTextContent(modelLabel)
+    expect(localStorage.getItem(`${storagePrefix}_custom_model_enabled`)).toBe('true')
+    expect(localStorage.getItem(`${storagePrefix}_selected_model`)).toBe(modelId)
+    expect(screen.getByRole('menuitemradio', {
+      name: new RegExp(`${modelId}.*via ${providerName}`),
+    })).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('selects the run model route from the settings store while effort, speed, and access stay session-only', async () => {
     localStorage.setItem(
       PROVIDERS_STORAGE_KEY,

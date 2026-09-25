@@ -59,7 +59,7 @@ export function CardSection({
           const isSelected = selectedModel === item.id;
           const iconComponent =
             typeof item.icon === "string"
-              ? icons[item.icon as IconName]
+              ? icons[item.icon as IconName] || Circle
               : item.icon || Circle;
 
           return (

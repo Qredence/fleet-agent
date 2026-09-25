@@ -987,7 +987,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   className={
                     openCodeZenCustomModelEnabled
                       ? 'space-y-3 opacity-100'
-                      : 'space-y-3 opacity-60 pointer-events-none'
+                      : 'space-y-3 opacity-60'
                   }
                 >
                   <ModelCardsRow
@@ -1064,7 +1064,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
                 }
               >
-                <div className={customModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60 pointer-events-none'}>
+                <div className={customModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60'}>
                   <ModelCardsRow
                     providerId={OPENROUTER_PROFILE_ID}
                     baseUrl={OPENROUTER_BASE_URL}

@@ -20,6 +20,17 @@ export interface UseProviderModelsOptions {
   enabled?: boolean
 }
 
+// A 64-bit FNV-1a fingerprint distinguishes credentials in the query cache
+// without exposing the raw key in query keys or devtools.
+function apiKeyFingerprint(apiKey?: string | null): string | null {
+  if (!apiKey) return null
+  let hash = 0xcbf29ce484222325n
+  for (let i = 0; i < apiKey.length; i++) {
+    hash = BigInt.asUintN(64, (hash ^ BigInt(apiKey.charCodeAt(i))) * 0x100000001b3n)
+  }
+  return hash.toString(16).padStart(16, '0')
+}
+
 /**
  * Fetches available models from the active LLM provider.
  * Only models successfully returned by the provider API are returned.
@@ -31,7 +42,7 @@ export function useProviderModels({
   enabled = true,
 }: UseProviderModelsOptions) {
   return useQuery({
-    queryKey: ['provider-models', providerId, baseUrl, Boolean(apiKey)],
+    queryKey: ['provider-models', providerId, baseUrl, apiKeyFingerprint(apiKey)],
     queryFn: async ({ signal }): Promise<ProviderModel[]> => {
       let url = ''
       const headers: Record<string, string> = {

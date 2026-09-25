@@ -403,6 +403,15 @@ export const ComposerModelPicker: FC = () => {
     ];
 
     if (openRouterReady) {
+      if (!openRouterCustomModelEnabled) {
+        options.push({
+          key: modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY),
+          label: "OpenRouter default model",
+          description: "Provider default · via OpenRouter",
+          providerId: OPENROUTER_PROFILE_ID,
+          ready: true,
+        });
+      }
       for (const model of POPULAR_OPENROUTER_MODELS) {
         options.push({
           key: modelOptionKey(OPENROUTER_PROFILE_ID, model.id),
@@ -430,6 +439,15 @@ export const ComposerModelPicker: FC = () => {
     }
 
     if (openCodeZenReady) {
+      if (!openCodeZenCustomModelEnabled) {
+        options.push({
+          key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY),
+          label: "OpenCode Zen default model",
+          description: "Provider default · via OpenCode Zen",
+          providerId: OPENCODE_ZEN_PROFILE_ID,
+          ready: true,
+        });
+      }
       for (const model of POPULAR_OPENCODE_ZEN_MODELS) {
         options.push({
           key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, model.id),
@@ -507,6 +525,9 @@ export const ComposerModelPicker: FC = () => {
     if (activeProviderId === SERVER_DEFAULT_ID) return SERVER_DEFAULT_ID;
     if (activeProviderId === OPENROUTER_PROFILE_ID) {
       if (!openRouterReady) return SERVER_DEFAULT_ID;
+      if (!openRouterCustomModelEnabled) {
+        return modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY);
+      }
       const targetModel = openRouterModel || "openai/gpt-4o-mini";
       const option = modelOptions.find(
         (entry) =>
@@ -517,6 +538,9 @@ export const ComposerModelPicker: FC = () => {
     }
     if (activeProviderId === OPENCODE_ZEN_PROFILE_ID) {
       if (!openCodeZenReady) return SERVER_DEFAULT_ID;
+      if (!openCodeZenCustomModelEnabled) {
+        return modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY);
+      }
       const targetModel = openCodeZenModel || "muse-spark-1.3-contributor-free";
       const option = modelOptions.find(
         (entry) =>
