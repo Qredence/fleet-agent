@@ -8,11 +8,13 @@ import pytest
 from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 
+from app.agent.callbacks import AgUiRunCallback
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.main import create_app
 from app.persistence.repositories import (
     ProjectsRepository,
     RunsRepository,
+    RunStatesRepository,
     ThreadsRepository,
 )
 from app.settings import Settings
@@ -54,7 +56,7 @@ async def post(app, body, headers=None):
 
 
 async def test_api_key_required_when_configured():
-    app = make_test_app(api_key="secret-1")
+    app = make_test_app(api_key="secret-1", agent_mode="fixtures")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -64,14 +66,50 @@ async def test_api_key_required_when_configured():
         )
         health = await client.get("/health")
     assert denied.status_code == 401
+    assert denied.headers.get("x-request-id")
     assert allowed.status_code != 401  # fixtures mode streams
     assert health.status_code == 200
+
+
+async def test_api_key_protects_unprefixed_routes_too():
+    """Regression: /metrics shipped unauthenticated.
+
+    The gate used to require ``path.startswith("/api/")``, so routes registered
+    without that prefix (and the OpenAPI docs) bypassed auth entirely.
+    """
+    app = make_test_app(api_key="secret-1", agent_mode="fixtures")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        metrics = await client.get("/metrics")
+        openapi = await client.get("/openapi.json")
+        health = await client.get("/health")
+        ready = await client.get("/ready")
+        authorized = await client.get("/metrics", headers={"x-api-key": "secret-1"})
+
+    assert metrics.status_code == 401
+    assert openapi.status_code == 401
+    assert health.status_code == 200  # explicitly public liveness probe
+    assert ready.status_code in (200, 503)  # explicitly public readiness probe
+    assert authorized.status_code == 200
+
+
+async def test_metrics_is_open_when_no_api_key_is_configured():
+    """Local/dev runs without a key stay fully open (advisory logged at startup)."""
+    app = make_test_app(agent_mode="fixtures")
+    app.state.settings = Settings(agent_mode="fixtures", api_key=None)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/metrics")
+    assert response.status_code == 200
 
 
 async def test_request_size_cap_returns_413():
     app = make_test_app(max_body_bytes="16")
     response = await post(app, run_input("t", text="x" * 100))
     assert response.status_code == 413
+    assert response.headers.get("x-request-id")
 
 
 async def test_request_id_header_present():
@@ -112,17 +150,23 @@ def slow_engine_app(db_sessions):
     import dspy
 
     from app.agent.engine import DspyAgentEngine
-    from app.agent.instrumented import instrument_tool
-    from app.agent.signature import AgentSignature
     from tests.helpers.scripted_lm import ScriptedLM, submit_call
+    from tests.helpers.signatures import AgentSignature
 
     def encoder_side(query: str) -> str:
         """Blocks so the first run holds the semaphore."""
         _time.sleep(0.4)
         return "ok"
 
-    def build(bus, *, thread_id: str = "t"):
-        tools = [instrument_tool(encoder_side, bus)]
+    def build(
+        bus,
+        *,
+        thread_id,
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
+        tools = [encoder_side]
 
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=3)
@@ -133,6 +177,7 @@ def slow_engine_app(db_sessions):
                 [[{"name": "encoder_side", "args": {"query": "x"}}], [submit_call()]]
             ),
             adapter=dspy.JSONAdapter(),
+            callbacks=[AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)],
         )
 
     app.state.engine_builder = build
@@ -178,14 +223,20 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
     import dspy
 
     from app.agent.engine import DspyAgentEngine
-    from app.agent.instrumented import instrument_tool
-    from app.agent.signature import AgentSignature
     from app.agent.tools.docs import SearchDocsTool
     from app.services.run_persistence import RunPersistence
     from tests.helpers.scripted_lm import ScriptedLM
+    from tests.helpers.signatures import AgentSignature
 
-    def build(bus, *, thread_id: str = "t"):
-        tools = [instrument_tool(SearchDocsTool(), bus)]
+    def build(
+        bus,
+        *,
+        thread_id: str = "t",
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
+        tools = [SearchDocsTool()]
 
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
@@ -196,6 +247,7 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
                 [[{"name": "search_docs", "args": {"query": "x"}}], [submit_call()]]
             ),
             adapter=dspy.JSONAdapter(),
+            callbacks=[AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)],
         )
 
     stream = LiveDSPyCoordinator().stream(
@@ -224,8 +276,8 @@ async def test_run_times_out_with_public_code():
     import dspy
 
     from app.agent.engine import DspyAgentEngine
-    from app.agent.signature import AgentSignature
     from tests.helpers.scripted_lm import ScriptedLM
+    from tests.helpers.signatures import AgentSignature
 
     def sleepy(query: str) -> str:
         """Sleeps past the configured timeout."""
@@ -234,10 +286,15 @@ async def test_run_times_out_with_public_code():
         _t.sleep(1.5)
         return "slept"
 
-    from app.agent.instrumented import instrument_tool
-
-    def build(bus, *, thread_id: str = "t"):
-        tools = [instrument_tool(sleepy, bus)]
+    def build(
+        bus,
+        *,
+        thread_id: str = "t",
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
+        tools = [sleepy]
 
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
@@ -248,6 +305,7 @@ async def test_run_times_out_with_public_code():
                 [[{"name": "sleepy", "args": {"query": "x"}}], [submit_call()]]
             ),
             adapter=dspy.JSONAdapter(),
+            callbacks=[AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)],
         )
 
     stream = LiveDSPyCoordinator().stream(
@@ -335,7 +393,17 @@ async def test_orphaned_running_runs_corrected_at_startup(db_sessions):
         project_id=project.id, title="T"
     )
     thread_id = thread.id
-    await RunsRepository(db_sessions).started(run_id="run-old", thread_id=thread_id)
+    # Put one run in "running" the way the engine does: reserve, then start it.
+    async with db_sessions() as session:
+        await RunsRepository.reserve_in_session(
+            session,
+            run_id="run-old",
+            thread_id=thread_id,
+            input_message_id=None,
+            continuation_message_id=None,
+        )
+        await RunsRepository.mark_running_in_session(session, run_id="run-old")
+        await session.commit()
 
     app = create_app()
     app.state.db_sessions = db_sessions
@@ -394,3 +462,58 @@ async def test_metrics_endpoint_reports_shape():
     assert response.status_code == 200
     body = response.json()
     assert "counters" in body and "gauges" in body and "durations" in body
+
+
+async def test_startup_sweep_also_rewrites_the_restored_snapshot(db_sessions):
+    """The browser restores the panel from the snapshot, not from the run row.
+
+    Rewriting only `runs.status` would leave a snapshot telling the panel a run is
+    still live, and the UI has no way to act on that. This pins both halves: the
+    orphaned row *and* the AgentWorkspaceState snapshot it points at.
+    """
+    project = await ProjectsRepository(db_sessions).create(name="S")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Snapshot sweep"
+    )
+    async with db_sessions() as session:
+        await RunsRepository.reserve_in_session(
+            session,
+            run_id="run-snapshot",
+            thread_id=thread.id,
+            input_message_id=None,
+            continuation_message_id=None,
+        )
+        await RunsRepository.mark_running_in_session(session, run_id="run-snapshot")
+        await RunStatesRepository.upsert_in_session(
+            session,
+            thread_id=thread.id,
+            state_json={
+                "schemaVersion": 1,
+                "threadId": thread.id,
+                "run": {
+                    "id": "run-snapshot",
+                    "status": "interrupted",
+                    "terminationReason": "approval_required",
+                },
+                "steps": [],
+                "toolCalls": [],
+                "sources": [],
+                "artifacts": [],
+                "decisions": [],
+                "metrics": {},
+            },
+            run_id="run-snapshot",
+        )
+        await session.commit()
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with app.router.lifespan_context(app):
+        pass
+
+    state = await RunStatesRepository(db_sessions).get(thread.id)
+    assert state is not None
+    run = state["run"]
+    assert run["status"] == "failed"
+    assert run["terminationReason"] == "server_restart"
+    assert run["errorCode"] == "internal_error"

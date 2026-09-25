@@ -8,7 +8,7 @@ failed and ReActV2 can recover.
 
 import uuid
 
-from app.agui.event_bus import RunEventBus
+from app.agent.event_bus import RunEventBus
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,

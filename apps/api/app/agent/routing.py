@@ -1,8 +1,23 @@
-"""Capability routing for the production DSPy program."""
+"""Capability routing for the production DSPy program.
 
-from typing import Literal
+The router is an ordinary ``dspy.Predict``; the conditional that dispatches on
+its answer lives in ``program.py``. This module owns the routing contract, the
+fail-closed coercion of an untrusted answer, and the artifact contract an offline
+optimizer writes when it promotes improved router instructions.
+"""
+
+import json
+import logging
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Literal, cast
 
 import dspy
+
+logger = logging.getLogger(__name__)
+
+ROUTER_STATE_FORMAT = "fleet-agent/router-state@1"
+"""Format tag of a promoted router artifact; ``evals/optimize.py`` writes it."""
 
 ToolRoute = Literal[
     "direct",
@@ -68,3 +83,46 @@ def coerce_route(value: object) -> ToolRoute:
     if value in ROUTES:
         return value
     return "direct"
+
+
+@lru_cache(maxsize=8)
+def routing_signature(instructions: str | None = None) -> type[dspy.Signature]:
+    """Return the routing contract, optionally carrying promoted instructions.
+
+    A fresh class per instruction set: ``Signature.instructions`` lives on the
+    class itself, so overriding the shared ``ToolRoutingSignature`` would leak
+    one promoted artifact into every other program in the process.
+    ``with_instructions`` keeps the declared fields and the route ``Literal``.
+    """
+    if not instructions:
+        return ToolRoutingSignature
+    # dspy is untyped here: with_instructions returns a new Signature class.
+    promoted = ToolRoutingSignature.with_instructions(instructions)
+    return cast("type[dspy.Signature]", promoted)
+
+
+def read_router_state(path: str | Path) -> str | None:
+    """Return the promoted router instructions from ``path``, or ``None``.
+
+    A malformed or unrecognized artifact is refused loudly at engine-build time
+    rather than silently ignored: an operator who pinned a state file expects it
+    to be in effect.
+    """
+    state_path = Path(path)
+    if not state_path.is_file():
+        raise FileNotFoundError(f"router state file not found: {state_path}")
+    try:
+        payload: Any = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"router state file is not readable JSON: {error}") from error
+    if not isinstance(payload, dict):
+        raise ValueError("router state must be a JSON object")
+    if payload.get("format") != ROUTER_STATE_FORMAT:
+        raise ValueError(
+            f"router state format {payload.get('format')!r} is not "
+            f"{ROUTER_STATE_FORMAT!r}"
+        )
+    instructions = payload.get("router_instructions")
+    if not isinstance(instructions, str) or not instructions.strip():
+        raise ValueError("router state carries no router_instructions text")
+    return instructions

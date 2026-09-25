@@ -19,7 +19,7 @@ async def get_catalog(app):
         return await client.get("/api/tools")
 
 
-async def test_tools_catalog_without_web_key():
+async def test_tool_catalog_without_a_web_key():
     app = make_test_app(tavily_api_key=None)
     response = await get_catalog(app)
     assert response.status_code == 200
@@ -36,18 +36,14 @@ async def test_tools_catalog_without_web_key():
     assert all(tool["description"] for tool in tools)
     report = next(tool for tool in tools if tool["name"] == "write_report")
     assert report["read_only"] is False
-    assert report["idempotent"] is True
     assert report["parallelizable"] is False
     assert report["capability"] == "artifact"
-    assert report["timeout_seconds"] > 0
-    clock = next(tool for tool in tools if tool["name"] == "get_current_time")
-    assert clock["idempotent"] is False
     workspace_read = next(tool for tool in tools if tool["name"] == "read")
     assert workspace_read["capability"] == "workspace_read"
     assert workspace_read["read_only"] is True
 
 
-async def test_tools_catalog_with_web_key():
+async def test_tool_catalog_includes_web_tools_with_a_key():
     app = make_test_app(tavily_api_key="tvly-test-key")
     response = await get_catalog(app)
     assert response.status_code == 200
@@ -69,7 +65,7 @@ async def test_tools_catalog_with_web_key():
     assert web_search["parallelizable"] is True
 
 
-async def test_tools_catalog_fails_closed_without_a_production_workspace_root():
+async def test_tool_catalog_omits_workspace_tools_without_a_production_root():
     app = make_test_app(environment="production", workspace_root=None)
     response = await get_catalog(app)
     assert response.status_code == 200

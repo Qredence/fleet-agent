@@ -1,17 +1,13 @@
+import json
+
 import dspy
 
-from app.agent.approval import (
-    ApprovalCheckpoint,
-    ApprovalContext,
-    ApprovalRegistry,
-    ResolvedApproval,
-    reset_approval_context,
-    set_approval_context,
-)
+from app.agent.approval import offered_tool_names
 from app.agent.factory import build_tool_profiles
 from app.agent.program import FleetAgent
 from app.agent.routing import ROUTES, ToolRoute, coerce_route
 from app.agent.tool_registry import ToolMetadata, ToolRegistry
+from tests.helpers.scripted_lm import ScriptedLM
 
 
 def _registry() -> ToolRegistry:
@@ -97,7 +93,9 @@ def test_routed_program_builds_router_and_react_children_in_init():
 
     assert isinstance(program.router, dspy.Predict)
     assert all(
-        isinstance(program.evidence_agents[route], dspy.ReActV2) for route in ROUTES
+        isinstance(program.evidence_agents[route], dspy.ReActV2)
+        for route in ROUTES
+        if route not in {"direct"}
     )
     # Each route carries exactly its least-privileged tool set.
     assert program.tool_names["direct"] == ()
@@ -145,19 +143,30 @@ def test_selected_profile_receives_history_without_rebuilding_modules(monkeypatc
 
 
 def test_invalid_router_output_falls_back_to_direct_without_escalation(monkeypatch):
+    """An out-of-vocabulary router answer must not widen capability."""
     program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
-    captured: dict[str, object] = {}
     monkeypatch.setattr(
         program.router,
         "forward",
         lambda **kwargs: dspy.Prediction(route="not-a-route"),
     )
 
-    def fake_evidence(**kwargs):
-        captured.update(kwargs)
-        return dspy.Prediction(history=None, termination_reason="evidence_submit")
+    ran: list[str] = []
 
-    monkeypatch.setattr(program.evidence_agents["direct"], "forward", fake_evidence)
+    def spy(route: ToolRoute):
+        def forward(**kwargs):
+            del kwargs
+            ran.append(route)
+            return dspy.Prediction(history=None, termination_reason="evidence_submit")
+
+        return forward
+
+    for route, agent in program.evidence_agents.items():
+        monkeypatch.setattr(agent, "forward", spy(route))
+
+    # ``direct`` has no evidence loop: a tool-less profile goes straight to
+    # synthesis, so the synthesizer is the only step that can run.
+    assert "direct" not in program.evidence_agents
     monkeypatch.setattr(
         program.synthesizer,
         "forward",
@@ -171,84 +180,108 @@ def test_invalid_router_output_falls_back_to_direct_without_escalation(monkeypat
     prediction = program(user_request="explain pytest", history=None)
 
     assert prediction.answer == "direct"
-    assert captured["user_request"] == "explain pytest"
+    assert prediction.agent_route == "direct"
+    assert ran == [], "a degraded route must not run any tool-bearing profile"
     assert coerce_route("not-a-route") == "direct"
 
 
-def _record_evidence(ran: list[str], route: ToolRoute):
-    def forward(**kwargs):
-        del kwargs
-        ran.append(route)
-        return dspy.Prediction(history=None, termination_reason="evidence_submit")
-
-    return forward
-
-
-def test_resumed_run_reuses_its_checkpoint_profile_instead_of_rerouting(
-    monkeypatch,
-) -> None:
-    """A resume must not re-route: the checkpoint's profile already binds it.
-
-    Re-running the router would let a second route selection widen the
-    capability the approver was shown, so the resumed profile wins and the
-    router is never called.
-    """
+def test_json_router_literal_value_error_falls_back_to_direct():
     program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
-    routed: list[str] = []
+    lm = ScriptedLM([{"content": '{"route": "code"}'}])
 
-    def wide_router(**kwargs):
-        del kwargs
-        routed.append("called")
-        return dspy.Prediction(route="workspace_shell")
+    with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
+        assert program._select_route("inspect the code") == "direct"
 
-    monkeypatch.setattr(program.router, "forward", wide_router)
-    ran: list[str] = []
-    for route in ROUTES:
-        monkeypatch.setattr(
-            program.evidence_agents[route], "forward", _record_evidence(ran, route)
-        )
+
+def test_direct_route_keeps_dict_history_evidence(monkeypatch):
+    program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
     monkeypatch.setattr(
-        program.synthesizer,
+        program.router,
         "forward",
-        lambda **kwargs: dspy.Prediction(
-            answer="resumed",
-            process_summary="reused the checkpoint",
+        lambda **kwargs: dspy.Prediction(route="direct"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_synthesis(**kwargs):
+        captured.update(kwargs)
+        return dspy.Prediction(
+            answer="used prior evidence",
+            process_summary="",
             key_decisions=[],
             caveats=[],
-        ),
-    )
+        )
 
-    context = ApprovalContext(
-        thread_id="thread-resume",
-        run_id="run-resume",
-        provider_binding="server",
-        registry=ApprovalRegistry(),
-        resumed=ResolvedApproval(
-            checkpoint=ApprovalCheckpoint(
-                profile_name="workspace_read",
-                history=dspy.History(messages=[]),
-                pending_inputs={"user_request": "inspect"},
-                prediction=dspy.Prediction(next_thought="working"),
-                tool_calls=dspy.ToolCalls(tool_calls=[]),
-                values=(),
-                errors=(),
-                next_index=0,
-                turn_index=0,
-                tool_name="ls",
-                tool_call_id="call_0_0",
-                assistant_message_id="assistant-resume",
+    monkeypatch.setattr(program.synthesizer, "forward", fake_synthesis)
+    history = {
+        "messages": [
+            {
+                "tool_calls": {
+                    "tool_call_results": [
+                        {"name": "search", "value": "prior fact", "is_error": False}
+                    ]
+                }
+            }
+        ]
+    }
+
+    prediction = program(user_request="follow up", history=history)
+
+    assert prediction.answer == "used prior evidence"
+    assert json.loads(captured["evidence_json"]) == [
+        {"tool": "search", "result": "prior fact", "is_error": False}
+    ]
+
+
+def _gated_registry() -> ToolRegistry:
+    def search(query: str) -> str:
+        """Search trusted test evidence."""
+        return query
+
+    def write(path: str, content: str) -> str:
+        """Write a test workspace file."""
+        return f"{path}:{content}"
+
+    return ToolRegistry(
+        [
+            (search, ToolMetadata(name="search", capability="retrieval")),
+            (
+                write,
+                ToolMetadata(
+                    name="write",
+                    capability="workspace_write",
+                    read_only=False,
+                    parallelizable=False,
+                    requires_approval=True,
+                ),
             ),
-            approved=True,
-            interrupt_id="approval_1",
-        ),
+        ]
     )
-    token = set_approval_context(context)
-    try:
-        prediction = program(user_request="inspect", history=None)
-    finally:
-        reset_approval_context(token)
 
-    assert routed == []
-    assert ran == ["workspace_read"]
-    assert prediction.answer == "resumed"
-    assert prediction.agent_route == "workspace_read"
+
+def test_gated_tools_are_withheld_unless_the_run_approves_them() -> None:
+    """The security control that replaced mid-loop approval.
+
+    A tool that requires approval is not merely declined when the run offers no
+    approval: it is never placed in the profile, so the model cannot see it or
+    be persuaded to call it.
+    """
+    registry = _gated_registry()
+
+    unapproved = build_tool_profiles(registry, None)
+    for route, tools in unapproved.items():
+        assert "write" not in {tool.name for tool in tools}, route
+
+    approved = build_tool_profiles(registry, frozenset({"write"}))
+    assert "write" in {tool.name for tool in approved["workspace_write"]}
+    # approval is scoped to the gated tool; read-only routes still never see it
+    assert "write" not in {tool.name for tool in approved["workspace_read"]}
+
+
+def test_wildcard_approval_offers_every_gated_tool() -> None:
+    registry = _gated_registry()
+    profiles = build_tool_profiles(registry, frozenset({"*"}))
+    assert offered_tool_names(registry.approval_policy(), frozenset({"*"})) == {
+        "search",
+        "write",
+    }
+    assert "write" in {tool.name for tool in profiles["workspace_write"]}

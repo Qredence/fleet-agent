@@ -1,32 +1,38 @@
-"""Typed DSPy tool creation, registration, and bounded execution.
+"""The single tool registry: policy, catalog, and DSPy tool construction.
 
-The registry adds execution policy, allowlisting, isolation, and bounded
-results around the validated ``dspy.Tool`` objects built by ``tooling.py``.
+``TOOL_SPECS`` is the authoritative, model-facing contract for every tool: its
+description, its capability tag, and its execution policy. The engine builds
+``dspy.Tool`` objects from that table and the prompt text it sends the model is
+the table's ``description``; ``GET /api/tools`` renders the same strings. The
+browser and the model therefore cannot disagree about what a tool is.
+
+That property is the point. A second catalog used to declare the same tools
+separately, and it had already drifted: 6 of the 7 workspace tools showed
+different text in the Tools page than the model received.
+
+Only genuinely enforced policy lives here. ``idempotent``, ``timeout_seconds``
+and ``max_output_chars`` were dropped because nothing on the live path read
+them: ReActV2 is handed raw ``dspy.Tool`` objects, so the registry's own
+execution wrapper never ran.
 """
 
 from __future__ import annotations
 
-import asyncio
-import functools
-import inspect
-import time
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, cast, get_type_hints
+from pathlib import Path
+from typing import Literal
 
 import dspy
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent.instrumented import preview
 from app.agent.tooling import (
     TOOL_NAME_PATTERN,
     ToolSource,
-    clone_dspy_tool,
     create_dspy_tool,
     is_async_tool,
 )
-from app.agui.cancel_token import RunCancelledError, RunCancelToken
-from app.contracts.domain import ArtifactResult, SourceResult
+from app.settings import Settings
 
 ToolCapability = Literal[
     "retrieval",
@@ -39,32 +45,211 @@ ToolCapability = Literal[
 
 
 class ToolMetadata(BaseModel):
-    """Execution policy for one registered tool."""
+    """One tool's model-facing description and enforced execution policy."""
 
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(pattern=TOOL_NAME_PATTERN)
+    # The text the model receives. Empty falls back to the source's own docstring.
+    description: str = ""
     capability: ToolCapability = "utility"
     read_only: bool = True
-    idempotent: bool = True
-    timeout_seconds: float = Field(default=30.0, gt=0)
     parallelizable: bool = True
-    max_output_chars: int = Field(default=2000, gt=0)
-    # Executable by the approval-aware ReAct boundary before the tool is called.
+    # Gated by the approval policy before the tool is called.
     requires_approval: bool = False
 
 
-class ToolExecutionResult(BaseModel):
-    """Bounded internal result shared by workers and the synthesizer."""
+class ToolCatalogEntry(BaseModel):
+    """Public, browser-safe description of one enabled tool."""
 
-    status: Literal["completed", "failed", "cancelled"]
-    model_output: str = ""
-    structured_value: Any = None
-    sources: list[SourceResult] = Field(default_factory=list)
-    artifacts: list[ArtifactResult] = Field(default_factory=list)
-    error_code: str | None = None
-    error_message: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    name: str
+    description: str
+    capability: ToolCapability
+    read_only: bool
+    parallelizable: bool
+    requires_approval: bool
+
+
+TOOL_SPECS: Mapping[str, ToolMetadata] = {
+    "web_search": ToolMetadata(
+        name="web_search",
+        description=(
+            "Search the web for current information.\n"
+            "\n"
+            "Returns numbered results, each as an id line, URL line, and "
+            "short\n"
+            "excerpt. Use fetch_page with one id to read a result in "
+            "full."
+        ),
+        capability="retrieval",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "fetch_page": ToolMetadata(
+        name="fetch_page",
+        description=(
+            "Fetch a current-run web_search result by its id.\n"
+            "\n"
+            "Result ids from earlier conversation turns are not valid for "
+            "this run."
+        ),
+        capability="retrieval",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "search_docs": ToolMetadata(
+        name="search_docs",
+        description=(
+            "Search the bundled documentation corpus for a short query.\n"
+            "\n"
+            "Returns up to three brief excerpts (title plus text), best "
+            "matches first."
+        ),
+        capability="retrieval",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "write_report": ToolMetadata(
+        name="write_report",
+        description=(
+            "Write a short markdown report and return it as a downloadable artifact."
+        ),
+        capability="artifact",
+        read_only=False,
+        parallelizable=False,
+        requires_approval=False,
+    ),
+    "get_current_time": ToolMetadata(
+        name="get_current_time",
+        description=("Return the current UTC date and time in ISO 8601 format."),
+        capability="utility",
+        read_only=True,
+        parallelizable=False,
+        requires_approval=False,
+    ),
+    "ls": ToolMetadata(
+        name="ls",
+        description=("List one workspace directory. Do not use shell for inspection."),
+        capability="workspace_read",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "find": ToolMetadata(
+        name="find",
+        description=("Find workspace paths matching a filename or glob pattern."),
+        capability="workspace_read",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "grep": ToolMetadata(
+        name="grep",
+        description=("Search workspace UTF-8 text files for matching lines."),
+        capability="workspace_read",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "read": ToolMetadata(
+        name="read",
+        description=("Read an exact bounded line range from a known workspace file."),
+        capability="workspace_read",
+        read_only=True,
+        parallelizable=True,
+        requires_approval=False,
+    ),
+    "write": ToolMetadata(
+        name="write",
+        description=("Create or atomically replace a workspace text file."),
+        capability="workspace_write",
+        read_only=False,
+        parallelizable=False,
+        requires_approval=True,
+    ),
+    "edit": ToolMetadata(
+        name="edit",
+        description=(
+            "Replace exact text in a workspace file; ambiguous matches fail safely."
+        ),
+        capability="workspace_write",
+        read_only=False,
+        parallelizable=False,
+        requires_approval=True,
+    ),
+    "bash": ToolMetadata(
+        name="bash",
+        description=(
+            "Run a bounded command with a minimal environment in the workspace."
+        ),
+        capability="shell",
+        read_only=False,
+        parallelizable=False,
+        requires_approval=True,
+    ),
+}
+
+
+def workspace_root(settings: Settings) -> Path:
+    """Resolve the one server-configured workspace root, fail-closed in prod."""
+    if settings.workspace_root:
+        return Path(settings.workspace_root)
+    if settings.environment == "development":
+        # tool_registry -> agent -> app -> api -> apps -> repository root
+        return Path(__file__).resolve().parents[4]
+    raise RuntimeError(
+        "workspace_root must be explicitly configured outside development"
+    )
+
+
+def workspace_root_available(settings: Settings) -> bool:
+    """Return whether the configured workspace can actually be opened."""
+    if not settings.workspace_read_tools_enabled:
+        return False
+    if settings.workspace_root:
+        root = Path(settings.workspace_root).expanduser()
+    elif settings.environment == "development":
+        root = Path(__file__).resolve().parents[4]
+    else:
+        return False
+    return root.resolve().is_dir()
+
+
+def enabled_tool_names(settings: Settings) -> tuple[str, ...]:
+    """The single statement of which tools this deployment enables.
+
+    The engine build and the public Tools page both read it, so a tool cannot be
+    listed but unavailable, or available but unlisted.
+    """
+    names: list[str] = []
+    if settings.tavily_api_key:
+        names += ["web_search", "fetch_page"]
+    names += ["search_docs", "write_report", "get_current_time"]
+    if workspace_root_available(settings):
+        names += ["ls", "find", "grep", "read"]
+        if settings.workspace_write_tools_enabled:
+            names += ["write", "edit"]
+        if settings.workspace_bash_tool_enabled:
+            names += ["bash"]
+    return tuple(names)
+
+
+def tool_catalog(settings: Settings) -> list[ToolCatalogEntry]:
+    """Render the enabled tools for the browser from the same table."""
+    return [
+        ToolCatalogEntry(
+            name=name,
+            description=TOOL_SPECS[name].description,
+            capability=TOOL_SPECS[name].capability,
+            read_only=TOOL_SPECS[name].read_only,
+            parallelizable=TOOL_SPECS[name].parallelizable,
+            requires_approval=TOOL_SPECS[name].requires_approval,
+        )
+        for name in enabled_tool_names(settings)
+    ]
 
 
 @dataclass(frozen=True)
@@ -84,22 +269,28 @@ class ToolRegistry:
     def register(self, source: ToolSource, metadata: ToolMetadata) -> dspy.Tool:
         """Create/register a tool before an agent run starts.
 
-        Existing ``dspy.Tool`` objects must already use the catalog name. This
-        prevents the model-visible schema, execution registry, and public tools
-        page from silently referring to one tool by different names.
+        The registry name, the model-visible schema name, and the public catalog
+        name must all agree, so one tool can never be referred to by two names.
         """
         if metadata.name in self._tools:
             raise ValueError(f"duplicate tool: {metadata.name}")
 
-        if isinstance(source, dspy.Tool):
-            if source.name != metadata.name:
-                raise ValueError(
-                    "prebuilt dspy.Tool name does not match metadata: "
-                    f"{source.name!r} != {metadata.name!r}"
-                )
-            tool = create_dspy_tool(source)
+        if isinstance(source, dspy.Tool) and source.name != metadata.name:
+            raise ValueError(
+                "prebuilt dspy.Tool name does not match metadata: "
+                f"{source.name!r} != {metadata.name!r}"
+            )
+
+        if isinstance(source, dspy.Tool) and not metadata.description:
+            # Nothing to apply, so keep the object the caller built: a caller
+            # that already constructed a dspy.Tool keeps a stable identity.
+            tool = source
         else:
-            tool = create_dspy_tool(source, name=metadata.name)
+            tool = create_dspy_tool(
+                source,
+                name=metadata.name,
+                description=metadata.description or None,
+            )
 
         if tool.name != metadata.name:
             raise ValueError(
@@ -133,17 +324,12 @@ class ToolRegistry:
         *,
         read_only_only: bool = False,
         allowed_names: Iterable[str] | None = None,
-        isolate: bool = False,
     ) -> list[dspy.Tool]:
         """Return the exact tools available to one DSPy program.
 
         ``allowed_names`` is the safe dynamic-selection mechanism: the server
         decides which trusted tools are available, then ReActV2 decides which of
         those tools to invoke. It never generates executable Python at runtime.
-
-        ``isolate`` creates fresh Tool wrappers and asks stateful callable
-        objects that implement ``clone_for_worker`` for per-worker instances.
-        Plain functions remain shared because they have no instance state.
         """
         allowed = set(allowed_names) if allowed_names is not None else None
         unknown = allowed.difference(self._tools) if allowed is not None else set()
@@ -151,25 +337,17 @@ class ToolRegistry:
             names = ", ".join(sorted(unknown))
             raise KeyError(f"unknown tool(s): {names}")
 
-        result: list[dspy.Tool] = []
-        clones: dict[int, Callable[..., Any]] = {}
-        for name, registered in self._tools.items():
-            if allowed is not None and name not in allowed:
-                continue
-            if read_only_only and not (
-                registered.metadata.read_only and registered.metadata.parallelizable
-            ):
-                continue
-            if not isolate:
-                result.append(registered.tool)
-                continue
-
-            function = _clone_for_worker(registered.tool.func, clones)
-            cloned = clone_dspy_tool(registered.tool, function)
-            if is_async_tool(cloned):
-                raise TypeError(f"isolated tool {name!r} unexpectedly became async")
-            result.append(cloned)
-        return result
+        return [
+            registered.tool
+            for name, registered in self._tools.items()
+            if (allowed is None or name in allowed)
+            and not (
+                read_only_only
+                and not (
+                    registered.metadata.read_only and registered.metadata.parallelizable
+                )
+            )
+        ]
 
     def dspy_tools_for_capabilities(
         self, capabilities: set[ToolCapability]
@@ -180,193 +358,3 @@ class ToolRegistry:
             for registered in self._tools.values()
             if registered.metadata.capability in capabilities
         ]
-
-    def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-        *,
-        cancel_token: RunCancelToken | None = None,
-    ) -> ToolExecutionResult:
-        """Execute synchronously and convert all failures to safe results."""
-        try:
-            registered = self.get(name)
-        except KeyError:
-            return ToolExecutionResult(
-                status="failed",
-                error_code="unknown_tool",
-                error_message="The requested tool is not available.",
-            )
-
-        started = time.monotonic()
-        try:
-            if cancel_token is not None:
-                cancel_token.check()
-            value = registered.tool(**arguments)
-            sources = list(getattr(registered.tool.func, "last_sources", None) or [])
-            artifacts = list(
-                getattr(registered.tool.func, "last_artifacts", None) or []
-            )
-            output = _bounded_output(value, registered.metadata.max_output_chars)
-            return ToolExecutionResult(
-                status="completed",
-                model_output=output,
-                structured_value=value,
-                sources=sources,
-                artifacts=artifacts,
-                metadata=_execution_metadata(registered.metadata, started),
-            )
-        except RunCancelledError:
-            return ToolExecutionResult(
-                status="cancelled",
-                error_code="run_cancelled",
-                error_message="The task was cancelled before the tool completed.",
-                metadata=_execution_metadata(registered.metadata, started),
-            )
-        except Exception:
-            return ToolExecutionResult(
-                status="failed",
-                error_code="tool_execution_failed",
-                error_message=f"The {registered.metadata.name} tool call failed.",
-                metadata=_execution_metadata(registered.metadata, started),
-            )
-
-
-class BoundedReadOnlyExecutor:
-    """Run eligible registry tools concurrently with a per-run fan-out cap."""
-
-    def __init__(
-        self,
-        registry: ToolRegistry,
-        *,
-        max_parallel: int,
-        task_timeout_seconds: float,
-        cancel_token: RunCancelToken | None = None,
-    ) -> None:
-        self._registry = registry
-        self._semaphore = asyncio.Semaphore(max_parallel)
-        self._task_timeout_seconds = task_timeout_seconds
-        self._cancel_token = cancel_token
-
-    async def execute(
-        self, name: str, arguments: dict[str, Any]
-    ) -> ToolExecutionResult:
-        try:
-            registered = self._registry.get(name)
-        except KeyError:
-            return ToolExecutionResult(
-                status="failed",
-                error_code="unknown_tool",
-                error_message="The requested tool is not available.",
-            )
-
-        if not registered.metadata.read_only or not registered.metadata.parallelizable:
-            return ToolExecutionResult(
-                status="failed",
-                error_code="tool_not_parallelizable",
-                error_message="This tool is reserved for serialized execution.",
-            )
-        if self._cancel_token is not None and self._cancel_token.cancelled:
-            return ToolExecutionResult(
-                status="cancelled",
-                error_code="run_cancelled",
-                error_message="The task was cancelled before the tool started.",
-            )
-
-        async with self._semaphore:
-            if self._cancel_token is not None and self._cancel_token.cancelled:
-                return ToolExecutionResult(
-                    status="cancelled",
-                    error_code="run_cancelled",
-                    error_message="The task was cancelled before the tool started.",
-                )
-            timeout = min(
-                registered.metadata.timeout_seconds, self._task_timeout_seconds
-            )
-            try:
-                return await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self._registry.execute,
-                        name,
-                        arguments,
-                        cancel_token=self._cancel_token,
-                    ),
-                    timeout=timeout,
-                )
-            except TimeoutError:
-                return ToolExecutionResult(
-                    status="failed",
-                    error_code="tool_timeout",
-                    error_message="The tool call exceeded its time limit.",
-                    metadata={"timeoutSeconds": timeout},
-                )
-            except asyncio.CancelledError:
-                if self._cancel_token is not None:
-                    self._cancel_token.cancel()
-                raise
-
-
-def _clone_for_worker(
-    function: Callable[..., Any], clones: dict[int, Callable[..., Any]]
-) -> Callable[..., Any]:
-    identity = id(function)
-    if identity in clones:
-        return clones[identity]
-
-    clone_method = getattr(function, "clone_for_worker", None)
-    if clone_method is None:
-        clones[identity] = function
-        return function
-
-    clone = cast(Callable[..., Any], clone_method(clones))
-    if not callable(clone):
-        raise TypeError("clone_for_worker must return a callable")
-    clones[identity] = clone
-    return clone
-
-
-def wrap_tool_with_guard(tool: dspy.Tool, guard: Callable[[], None]) -> dspy.Tool:
-    """Return a clone of ``tool`` whose calls run ``guard`` first.
-
-    DSPy 3.3.1's ``with_callbacks`` swallows exceptions raised inside start
-    callbacks, so budget and cancellation hooks cannot abort a call from
-    ``BaseCallback`` handlers. Wrapping the callable puts the check on the
-    real execution path while preserving the original signature, type hints,
-    and JSON schema so DSPy tool inference is unchanged.
-    """
-    original = tool.func
-    hints_target = (
-        original
-        if inspect.isfunction(original) or inspect.ismethod(original)
-        else type(original).__call__
-    )
-
-    @functools.wraps(original)
-    def guarded(**kwargs: Any) -> Any:
-        guard()
-        return original(**kwargs)
-
-    # Preserve the real signature and annotations: clone_dspy_tool's
-    # validation and DSPy's schema inference must see the original contract.
-    guarded.__annotations__ = dict(get_type_hints(hints_target))
-    guarded.__signature__ = inspect.signature(hints_target)  # type: ignore[attr-defined]
-    return clone_dspy_tool(tool, guarded)
-
-
-def _bounded_output(value: Any, limit: int) -> str:
-    if isinstance(value, str):
-        return preview(value)[:limit]
-    try:
-        return preview(str(value))[:limit]
-    except Exception:
-        return "The tool returned a value that could not be displayed."
-
-
-def _execution_metadata(metadata: ToolMetadata, started: float) -> dict[str, Any]:
-    return {
-        "tool": metadata.name,
-        "durationMs": int((time.monotonic() - started) * 1000),
-        "readOnly": metadata.read_only,
-        "idempotent": metadata.idempotent,
-        "capability": metadata.capability,
-    }

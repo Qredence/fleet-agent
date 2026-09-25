@@ -1,0 +1,65 @@
+# The declarative agent definition. Two nodes live here and app/agent/program.py
+# assembles them around one computed field, which is the only part this layer
+# cannot express: it wires by field NAME, never field math.
+#
+#   gather (react)  ->  evidence_json  ->  synthesize (predict)
+#                        ^ computed from the loop's dspy.History in Python
+
+agent: fleet-agent
+root: synthesize
+version: 1
+policy_file: prompts/policy.md
+
+signatures:
+  - name: Evidence
+    instructions_file: prompts/evidence.md
+    inherit_policy: true
+    inputs:
+      - name: user_request
+        type: str
+        description: The user's request.
+    # No output fields by design: the loop ends when the model stops asking for
+    # tools, and the synthesis step writes the public fields.
+    outputs: []
+
+  - name: Synthesis
+    instructions_file: prompts/synthesize.md
+    inherit_policy: true
+    inputs:
+      - name: user_request
+        type: str
+        description: The user's request.
+      - name: evidence_json
+        type: str
+        description: Bounded successful and failed evidence.
+      - name: history
+        type: History
+        description: Prior conversation turns.
+    outputs:
+      - name: answer
+        type: str
+        description: Direct final answer to the user.
+      - name: process_summary
+        type: str
+        description: Concise user-safe process summary.
+      - name: key_decisions
+        type: list[str]
+        description: Important decisions made.
+      - name: caveats
+        type: list[str]
+        description: Remaining uncertainty or limitations.
+
+modules:
+  gather:
+    type: react
+    signature: Evidence
+    # Replaced per run by the route's least-privilege profile. The schema requires
+    # a react node to bind at least one tool, and this list is the honest floor:
+    # the weakest capability the agent may use for a routed request.
+    tools:
+      - search_docs
+    max_iters: 6
+
+  synthesize:
+    type: predict
+    signature: Synthesis

@@ -403,7 +403,12 @@ class WorkspaceTools:
         return bounded
 
     def dspy_tools(self) -> list[dspy.Tool]:
-        """Build the explicit tools allowed by this run's workspace policy."""
+        """Build the explicit tools allowed by this run's workspace policy.
+
+        The ``description`` passed to each tool is the authoring intent; the
+        registry overwrites it with ``TOOL_SPECS``, which is the single text the
+        model and the public Tools page both read (see tests/test_tool_contract.py).
+        """
         tools = [
             create_dspy_tool(
                 self.ls,

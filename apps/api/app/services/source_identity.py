@@ -18,19 +18,6 @@ def canonical_source_key(source: SourceResult | dict[str, object]) -> str:
     return f"id:{source_id}"
 
 
-def public_source_id(
-    source: SourceResult | dict[str, object], *, thread_id: str
-) -> str:
-    """Return a stable, thread-scoped identifier without exposing a hash key."""
-
-    raw_id = source.get("id") if isinstance(source, dict) else source.id
-    key = canonical_source_key(source)
-    digest = sha256(f"{thread_id}\x00{key}".encode()).hexdigest()[:12]
-    if isinstance(raw_id, str) and raw_id:
-        return f"{raw_id}-{digest}"
-    return f"source-{digest}"
-
-
 def disambiguated_source_id(source_id: str, identity_key: str) -> str:
     """Keep legacy IDs stable and suffix only an intra-thread collision."""
 

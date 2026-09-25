@@ -215,11 +215,6 @@ def compile_gepa_candidate(
     )
 
 
-def public_routes() -> tuple[ToolRoute, ...]:
-    """Expose the route vocabulary to offline evaluation/reporting only."""
-    return ROUTES
-
-
 def validate_routing_dataset() -> list[str]:
     """Structural invariants of the evaluation set (no LM required).
 

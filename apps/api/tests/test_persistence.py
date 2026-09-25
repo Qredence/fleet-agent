@@ -3,13 +3,11 @@
 import json
 
 import dspy
-from ag_ui.core import Interrupt, RunAgentInput
+from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
 
-from app.agent.engine import AgentRunResult
 from app.agui.live_coordinator import LiveDSPyCoordinator
-from app.agui.trace_reducer import TraceReducer
 from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     MessagesRepository,
@@ -153,6 +151,72 @@ async def test_second_turn_uses_persisted_history(db_sessions):
     assert len(tool_card_history.messages) >= first_depth
 
 
+async def test_root_and_unknown_heads_do_not_reuse_thread_history(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+    await drive_live_run(
+        None,
+        persistence,
+        [[submit_call(answer="prior branch answer")]],
+        thread_id,
+        "run-history-heads",
+    )
+
+    assert (
+        await persistence.get_continuation_history(thread_id, head_message_id=None)
+        is None
+    )
+    assert (
+        await persistence.get_continuation_history(
+            thread_id, head_message_id="unknown-message"
+        )
+        is None
+    )
+
+
+async def test_continuation_history_falls_back_to_messages_when_dspy_history_absent(
+    db_sessions,
+):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+
+    # Seed messages directly without DspyHistory row
+    await MessagesRepository(db_sessions).append(
+        thread_id=thread_id,
+        role="user",
+        message_json={
+            "role": "user",
+            "content": [{"type": "text", "text": "What is an RLM?"}],
+        },
+        message_id="msg-u1",
+    )
+    await MessagesRepository(db_sessions).append(
+        thread_id=thread_id,
+        role="assistant",
+        message_json={
+            "role": "assistant",
+            "content": [{"type": "text", "text": "RLM is a recursive language model."}],
+        },
+        message_id="msg-a1",
+        parent_message_id="msg-u1",
+    )
+
+    # DspyHistory row is absent
+    from app.persistence.repositories import DspyHistoriesRepository
+
+    record = await DspyHistoriesRepository(db_sessions).get(thread_id)
+    assert record is None
+
+    # But continuation history is reconstructed from message rows!
+    history = await persistence.get_continuation_history(
+        thread_id, head_message_id="msg-a1"
+    )
+    assert history is not None
+    assert len(history.messages) == 1
+    assert history.messages[0]["user_request"] == "What is an RLM?"
+    assert history.messages[0]["answer"] == "RLM is a recursive language model."
+
+
 async def test_regeneration_keeps_user_parent_and_uses_sibling_history(db_sessions):
     _, thread_id = await seed_project_and_thread(db_sessions)
     persistence = RunPersistence(db_sessions)
@@ -239,60 +303,6 @@ async def test_failed_run_keeps_user_message_only(db_sessions):
 
     state = await RunStatesRepository(db_sessions).get(thread_id)
     assert state["run"]["status"] == "failed"
-
-
-async def test_interrupted_run_persists_safe_state_without_hidden_history(db_sessions):
-    _, thread_id = await seed_project_and_thread(db_sessions)
-    persistence = RunPersistence(db_sessions)
-    input_data = RunAgentInput.model_validate(run_input(thread_id, "run-interrupted"))
-    await persistence.reserve_run(input_data=input_data)
-
-    reducer = TraceReducer(thread_id=thread_id, run_id="run-interrupted")
-    reducer.begin()
-    result = AgentRunResult(
-        status="interrupted",
-        answer=None,
-        process_summary="Waiting for approval.",
-        termination_reason="approval_required",
-        interrupts=[
-            Interrupt(
-                id="approval-test",
-                reason="tool_call",
-                message="Approval is required before this action can run.",
-                tool_call_id="call-write",
-                metadata={"toolName": "write", "action": "approval_required"},
-            )
-        ],
-    )
-
-    assert await persistence.run_interrupted(
-        thread_id=thread_id,
-        run_id="run-interrupted",
-        result=result,
-        state_json=reducer.state,
-        assistant_message_id="assistant-interrupted",
-    )
-
-    run = await RunsRepository(db_sessions).get("run-interrupted")
-    assert run is not None
-    assert run.status == "interrupted"
-    assert run.output_message_id == "assistant-interrupted"
-
-    messages = await MessagesRepository(db_sessions).list_for_thread(thread_id)
-    assistant = next(message for message in messages if message["role"] == "assistant")
-    assert assistant["content"][0]["toolName"] == "write"
-    assert assistant["content"][0]["args"] == {}
-    assert "call-write" in json.dumps(assistant)
-    assert "secret" not in json.dumps(assistant)
-
-    from app.persistence.repositories import DspyHistoriesRepository
-
-    assert await DspyHistoriesRepository(db_sessions).get(thread_id) is None
-    assert await persistence.reopen_interrupted_run(
-        thread_id=thread_id, run_id="run-interrupted"
-    )
-    reopened = await RunsRepository(db_sessions).get("run-interrupted")
-    assert reopened is not None and reopened.status == "queued"
 
 
 async def test_thread_isolation(db_sessions):
@@ -536,3 +546,146 @@ async def test_reservation_after_tool_turn_anchors_to_assistant(db_sessions):
         run = await session.get(Run, "run-after-tools")
         assert run is not None
         assert run.continuation_message_id == "msg-run-tools"
+
+
+async def test_nearest_anchor_ignores_null_output_message(db_sessions):
+    """A run with output_message_id=None must not match the root anchor."""
+    import uuid
+
+    from app.persistence.branch import nearest_anchor
+    from app.persistence.models import DspyHistory, Message, Run
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    async with db_sessions() as session:
+        # Create root anchor (head_message_id=None)
+        root = DspyHistory(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            head_message_id=None,
+            dspy_version=dspy.__version__,
+            history_json={"root": True},
+        )
+        session.add(root)
+        # Add messages: user-1 -> assistant-1 -> user-2
+        m1 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="user-1",
+            role="user",
+            message_json={"role": "user", "content": "hi"},
+        )
+        m2 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="asst-1",
+            role="assistant",
+            parent_message_id="user-1",
+            message_json={"role": "assistant", "content": "turn1"},
+        )
+        m3 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="user-2",
+            role="user",
+            parent_message_id="asst-1",
+            message_json={"role": "user", "content": "turn2"},
+        )
+        session.add_all([m1, m2, m3])
+
+        # Run 1 completed with output asst-1 and anchor
+        h1 = DspyHistory(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            head_message_id="asst-1",
+            dspy_version=dspy.__version__,
+            history_json={"messages": [{"role": "user", "content": "turn1"}]},
+        )
+        session.add(h1)
+        r1 = Run(
+            id=f"run-1-{uuid.uuid4().hex[:8]}",
+            thread_id=thread_id,
+            status="completed",
+            input_message_id="user-1",
+            output_message_id="asst-1",
+        )
+        # Run 2 is still active/failed (output_message_id is None)
+        r2 = Run(
+            id=f"run-2-{uuid.uuid4().hex[:8]}",
+            thread_id=thread_id,
+            status="running",
+            input_message_id="user-2",
+            output_message_id=None,
+        )
+        session.add_all([r1, r2])
+        await session.commit()
+
+    async with db_sessions() as session:
+        # Looking up from user-2 should find asst-1 anchor, NOT the root anchor!
+        anchor = await nearest_anchor(
+            session,
+            thread_id=thread_id,
+            head_message_id="user-2",
+            model=DspyHistory,
+        )
+        assert anchor is not None
+        assert anchor.head_message_id == "asst-1"
+
+
+async def test_continuation_history_does_not_leak_cross_branch(db_sessions):
+    """When a branch lacks DspyHistory, it must not return another branch's history."""
+    import uuid
+
+    from app.persistence.models import DspyHistory, Message
+    from app.services.run_persistence import RunPersistence
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    async with db_sessions() as session:
+        # Branch A: user-A1 -> asst-A1
+        mA1 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="user-A1",
+            role="user",
+            message_json={"role": "user", "content": "Question A"},
+        )
+        mA2 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="asst-A1",
+            role="assistant",
+            parent_message_id="user-A1",
+            message_json={"role": "assistant", "content": "Answer A"},
+        )
+        # Branch B forked from user-A1: user-A1 -> user-B1
+        mB1 = Message(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            message_id="user-B1",
+            role="user",
+            parent_message_id="user-A1",
+            message_json={"role": "user", "content": "Question B"},
+        )
+        session.add_all([mA1, mA2, mB1])
+
+        # Stored DspyHistory only exists on Branch A (asst-A1)
+        hA = DspyHistory(
+            id=str(uuid.uuid4()),
+            thread_id=thread_id,
+            head_message_id="asst-A1",
+            dspy_version=dspy.__version__,
+            history_json={"messages": [{"role": "user", "content": "Secret Branch A"}]},
+        )
+        session.add(hA)
+        await session.commit()
+
+    persistence = RunPersistence(db_sessions)
+    history_b = await persistence.get_continuation_history(
+        thread_id=thread_id, head_message_id="user-B1"
+    )
+    # History for Branch B must NOT contain "Secret Branch A"
+    if history_b is not None and getattr(history_b, "messages", None):
+        contents = [
+            str(m.get("content") or m.get("answer") or m.get("user_request"))
+            for m in history_b.messages
+        ]
+        assert not any("Secret Branch A" in c for c in contents)

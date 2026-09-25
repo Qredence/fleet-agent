@@ -105,22 +105,3 @@ def test_production_router_signature_scores_through_the_shared_harness() -> None
 
     assert scored.mean == 1.0
     assert scored.misses == []
-
-
-def test_optimizer_scorer_returns_the_shared_routing_score() -> None:
-    """``evals.optimize._score_router`` hands back the whole RoutingScore.
-
-    The optimizer prints the failure count next to the means, so it needs more
-    than the ``(mean, misses, latency)`` tuple it used to unpack.
-    """
-    from evals.optimize import _score_router
-
-    examples = _examples("direct", "research")
-    lm = ScriptedLM([router_call(e.expected_route) for e in examples])
-
-    scored = _score_router(dspy.Predict("user_request -> route"), lm, examples)
-
-    assert isinstance(scored, RoutingScore)
-    assert (scored.mean, scored.misses) == (1.0, [])
-    assert scored.mean_latency_s > 0.0
-    assert scored.failures == 0

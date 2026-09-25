@@ -12,8 +12,13 @@ from pathlib import Path
 
 from app.agent.factory import build_tool_profiles
 from app.agent.routing import coerce_route
-from app.agent.tool_registry import ToolMetadata, ToolRegistry
-from app.agent.tools_catalog import tool_catalog_entries
+from app.agent.tool_registry import (
+    TOOL_SPECS,
+    ToolMetadata,
+    ToolRegistry,
+    enabled_tool_names,
+    tool_catalog,
+)
 from app.settings import Settings
 
 _GATED_TOOLS = {"write", "edit", "bash"}
@@ -46,27 +51,21 @@ def _named_noop(name: str) -> object:
 
 
 def _production_registry(workspace_root: Path) -> ToolRegistry:
-    """A registry carrying the real catalog's metadata (no live tool sources)."""
+    """A registry carrying the production table's metadata (no live sources).
+
+    The policy under test is the real one: ``TOOL_SPECS`` is what the engine
+    builds the model's tools from, so this exercises the shipping table rather
+    than a copy of it.
+    """
+    settings = _full_settings(workspace_root)
     registrations: list[tuple[object, ToolMetadata]] = [
-        (
-            _named_noop(entry.name),
-            ToolMetadata(
-                name=entry.name,
-                capability=entry.capability,
-                read_only=entry.read_only,
-                idempotent=entry.idempotent,
-                parallelizable=entry.parallelizable,
-                timeout_seconds=entry.timeout_seconds,
-                requires_approval=entry.requires_approval,
-            ),
-        )
-        for entry in tool_catalog_entries(_full_settings(workspace_root))
+        (_named_noop(name), TOOL_SPECS[name]) for name in enabled_tool_names(settings)
     ]
     return ToolRegistry(registrations)
 
 
 def test_every_workspace_mutator_is_approval_gated(tmp_path: Path) -> None:
-    entries = tool_catalog_entries(_full_settings(tmp_path))
+    entries = tool_catalog(_full_settings(tmp_path))
     by_name = {entry.name: entry for entry in entries}
 
     assert _GATED_TOOLS <= set(by_name), "gated workspace tools must be present"
@@ -79,7 +78,7 @@ def test_every_workspace_mutator_is_approval_gated(tmp_path: Path) -> None:
 
 
 def test_write_report_is_the_only_ungated_mutator(tmp_path: Path) -> None:
-    entries = tool_catalog_entries(_full_settings(tmp_path))
+    entries = tool_catalog(_full_settings(tmp_path))
     ungated_mutators = {
         entry.name for entry in entries if not entry.read_only
     } - _GATED_TOOLS
@@ -113,7 +112,9 @@ def test_read_only_routes_cannot_reach_gated_tools(tmp_path: Path) -> None:
 
 
 def test_mutating_routes_inherit_every_lesser_capability(tmp_path: Path) -> None:
-    profiles = build_tool_profiles(_production_registry(tmp_path))
+    """The lattice, stated for a run that authorized the gated tools."""
+    registry = _production_registry(tmp_path)
+    profiles = build_tool_profiles(registry, frozenset({"*"}))
     names = {route: {tool.name for tool in tools} for route, tools in profiles.items()}
 
     assert names["direct"] == set()
@@ -124,6 +125,30 @@ def test_mutating_routes_inherit_every_lesser_capability(tmp_path: Path) -> None
     assert names["workspace_write"] < names["workspace_shell"]
     assert {"write", "edit"} <= names["workspace_write"]
     assert "bash" in names["workspace_shell"]
+
+
+def test_without_approval_the_mutating_routes_gain_nothing(tmp_path: Path) -> None:
+    """A run that authorizes nothing must not be able to reach a gated tool.
+
+    This is the replacement for mid-loop approval: the mutating routes keep
+    their read-only tools and gain no capability at all.
+    """
+    registry = _production_registry(tmp_path)
+    unapproved = build_tool_profiles(registry, None)
+    unapproved_names = {
+        route: {tool.name for tool in tools} for route, tools in unapproved.items()
+    }
+    gated = {
+        name
+        for name, meta in registry.approval_policy().items()
+        if meta.requires_approval
+    }
+    assert gated, "the fixture must contain gated tools"
+
+    for route, names in unapproved_names.items():
+        assert not (names & gated), f"route {route} reached a gated tool"
+    assert unapproved_names["workspace_write"] == unapproved_names["workspace_read"]
+    assert unapproved_names["workspace_shell"] == unapproved_names["workspace_read"]
 
 
 def test_untrusted_router_output_degrades_to_direct() -> None:
