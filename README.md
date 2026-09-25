@@ -43,13 +43,14 @@ The React frontend renders the conversation and the live process projection.
   workspace write, or workspace shell. The routed agents gather evidence only;
   a separate synthesis predictor produces the final answer and streams it
   token-by-token through public DSPy streaming APIs (`dspy.streamify`).
-- Approval-gated workspace tools (`write`, `edit`, `bash`) pause the run with a
-  durable, database-backed interrupt that survives server restarts.
-- An optional staged strategy uses DSPy modules for planning, parallel
-  research, verification, and synthesis while keeping budgets and cancellation
-  outside the model.
-- An opt-in Flex/GEPA track is kept separate from production ReActV2 and uses
-  only a sanitized conversation history plus restricted tools by default.
+- Approval-gated workspace tools (`write`, `edit`, `bash`) are withheld from the
+  model unless the run authorizes them up front (`forwardedProps.approvedTools`),
+  so an unauthorized tool is never offered rather than merely declined.
+- Prompt text lives in Markdown (`apps/api/app/agent/agents/prompts/`) and the
+  program's structure in YAML, compiled into real DSPy objects at build time.
+- `python -m evals.optimize` evolves the capability router's instructions with
+  GEPA against the labelled routing set and promotes only a candidate that beats
+  the baseline on a held-out split.
 - The agent uses typed tools such as bundled documentation search, current
   time, and report generation. Optional Tavily configuration adds bounded
   `web_search` and `fetch_page` tools.
@@ -107,7 +108,7 @@ React workspace
 FastAPI run coordinator
   AgentEngine boundary + persistence + public-state reducer
                 │
-                ├── DSPy ReActV2 / optional staged strategy
+                ├── one DSPy program: routed ReActV2 evidence + synthesis
                 ├── typed tools and evidence sources
                 └── PostgreSQL + controlled artifact storage
 ```
@@ -229,7 +230,7 @@ file. The checked-in example contains the complete list. Common settings are:
 | Variable | Purpose |
 | --- | --- |
 | `FLEET_AGENT_AGENT_MODE` | `fixtures` or `engine`. |
-| `FLEET_AGENT_REASONING_PROGRAM` | `react`, opt-in `staged`, or disabled-by-default `flex`. |
+| `FLEET_AGENT_ROUTER_STATE_PATH` | Promoted router artifact from `python -m evals.optimize`. Unset keeps the baseline routing contract. |
 | `FLEET_AGENT_CORS_ORIGINS` | JSON array of exact allowed browser origins. |
 | `FLEET_AGENT_DATABASE_URL` | PostgreSQL connection URL. |
 | `FLEET_AGENT_LLM_MODEL` | Model identifier. With `FLEET_AGENT_LLM_BASE_URL` set it is sent to the gateway verbatim; without a base URL it follows DSPy/LiteLLM hosted-provider routing (`openai/gpt-4o-mini`). |
@@ -241,7 +242,6 @@ file. The checked-in example contains the complete list. Common settings are:
 | `FLEET_AGENT_WORKSPACE_ROOT` | Explicit filesystem root for workspace tools; development defaults to the repository root. |
 | `FLEET_AGENT_WORKSPACE_WRITE_TOOLS_ENABLED` | Enables `write` and `edit`; off by default. |
 | `FLEET_AGENT_WORKSPACE_BASH_TOOL_ENABLED` | Enables bounded `bash`; off by default. |
-| `FLEET_AGENT_FLEX_ENABLED` | Explicitly enables the experimental Flex runtime path. The read-only track needs a local Deno runtime (>= 2.0.0, < 3.0.0) on PATH. |
 | `FLEET_AGENT_API_KEY` | Optional shared `X-API-Key` for `/api/*`. |
 
 The web app reads `VITE_API_BASE_URL` for the API origin and `VITE_API_KEY` when
