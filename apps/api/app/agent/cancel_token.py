@@ -7,10 +7,11 @@ iteration already inside a provider call may finish — that is the documented
 limit — but nothing new starts, and late bus events are never emitted.
 """
 
+import asyncio
 import threading
 
 
-class RunCancelledError(Exception):
+class RunCancelledError(asyncio.CancelledError):
     """Raised by instrumented tools when their run was cancelled."""
 
 

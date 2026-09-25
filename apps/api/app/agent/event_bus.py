@@ -12,7 +12,7 @@ were scheduled earlier but have not run yet.
 
 import asyncio
 
-from app.agui.cancel_token import RunCancelToken
+from app.agent.cancel_token import RunCancelToken
 from app.contracts.domain import DomainEvent
 
 # Sentinel delivered when the producer side is finished.

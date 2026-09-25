@@ -4,12 +4,12 @@ import asyncio
 from typing import Any
 
 import dspy
+import pytest
 
 from app.agent.callbacks import AgUiRunCallback
-from app.agent.signature import AgentSignature
+from app.agent.cancel_token import RunCancelledError, RunCancelToken
+from app.agent.event_bus import DONE, RunEventBus
 from app.agent.tools.docs import SearchDocsTool
-from app.agui.cancel_token import RunCancelToken
-from app.agui.event_bus import DONE, RunEventBus
 from app.contracts.domain import (
     InlineDataEvent,
     SourceDiscovered,
@@ -19,6 +19,7 @@ from app.contracts.domain import (
     ToolStarted,
 )
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature
 
 
 async def _drain_bus(bus: RunEventBus) -> list[Any]:
@@ -151,12 +152,19 @@ async def test_callback_respects_cancel_token():
     cancel_token = RunCancelToken()
     callback = AgUiRunCallback(bus, cancel_token=cancel_token)
 
-    cancel_token.cancel()
+    tool_calls: list[str] = []
 
     def blocked_tool(query: str) -> str:
+        tool_calls.append(query)
         return "result"
 
-    lm = ScriptedLM(
+    class CancellingLM(ScriptedLM):
+        def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
+            response = super().forward(prompt=prompt, messages=messages, **kwargs)
+            cancel_token.cancel()
+            return response
+
+    lm = CancellingLM(
         [
             [{"name": "blocked_tool", "args": {"query": "test"}}],
             [submit_call(answer="done")],
@@ -172,11 +180,12 @@ async def test_callback_respects_cancel_token():
         ):
             return agent(user_request="should cancel")
 
-    pred = await asyncio.to_thread(run_sync)
-    assert pred.answer == "done"
+    with pytest.raises(RunCancelledError):
+        await asyncio.to_thread(run_sync)
+    assert tool_calls == []
 
     events = await _drain_bus(bus)
-    # When cancelled, no tool started/completed events should be published to the bus
+    # Cancellation stops execution before a tool starts or emits events.
     assert len(events) == 0
 
 

@@ -10,21 +10,17 @@ from typing import Any
 import dspy
 from dspy.utils.exceptions import AdapterParseError
 
-from app.agent.approval import (
-    ApprovalAwareReActV2,
-    ToolLifecycle,
-    current_approval_context,
-)
 from app.agent.evidence import DEFAULT_MAX_CHARS, bounded_json
-from app.agent.routing import ROUTES, ToolRoute, ToolRoutingSignature, coerce_route
-from app.agent.signature import EvidenceSignature, SynthesisSignature
+from app.agent.routing import ROUTES, ToolRoute, coerce_route, routing_signature
+from app.agent.signature import (
+    SYNTHESIS_STREAM_FIELDS,
+    build_gatherer,
+    build_synthesizer,
+)
 from app.agent.tooling import RESERVED_TOOL_NAMES, create_dspy_tool, is_async_tool
 
 logger = logging.getLogger(__name__)
 
-# Streaming contract: the synthesis predictor's public text fields.  The
-# engine streams exactly these fields with dspy.streamify listeners.
-SYNTHESIS_STREAM_FIELDS = ("answer", "process_summary")
 _MAX_EVIDENCE_CHARS = DEFAULT_MAX_CHARS
 
 
@@ -33,8 +29,10 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
 
     ``tool_profiles`` is the capability lattice: one entry per route holding
     exactly the ``dspy.Tool`` objects that route may call. The program builds
-    one ``ApprovalAwareReActV2`` per route, so a run can never reach a tool
-    outside the profile the router selected.
+    one ``dspy.ReActV2`` per route, so a run can never reach a tool outside the
+    profile the router selected. Tools that require approval are filtered out of
+    every profile before the program is built, so the model never sees them
+    unless the run authorized them up front.
 
     Those agents gather evidence only. The ``synthesizer`` writes the public
     fields from that evidence, and that split is what makes DSPy-native
@@ -48,21 +46,14 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         *,
         tool_profiles: Mapping[ToolRoute, Sequence[dspy.Tool]],
         max_iters: int = 20,
-        approval_policy: Mapping[str, Any] | None = None,
-        lifecycle: ToolLifecycle | None = None,
-        router: dspy.Module | None = None,
+        router_instructions: str | None = None,
     ) -> None:
         super().__init__()
         if max_iters < 1:
             raise ValueError("max_iters must be at least 1")
-        self.application_tool_lifecycle = lifecycle is not None
-        # The router slot accepts the promoted Flex program (loaded from a
-        # GEPA-optimized state); the default stays the plain Predict over the
-        # routing signature. Either way the output is coerced downstream.
-        self.router = (
-            router if router is not None else dspy.Predict(ToolRoutingSignature)
-        )
-        policy = dict(approval_policy or {})
+        # Promoted instructions come from an offline optimizer artifact; unset
+        # keeps the baseline contract declared in routing.py.
+        self.router = dspy.Predict(routing_signature(router_instructions))
         profiles = {
             route: _validate_tools(tool_profiles.get(route, ())) for route in ROUTES
         }
@@ -70,18 +61,19 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             route: tuple(str(tool.name) for tool in tools)
             for route, tools in profiles.items()
         }
+        # Built from app/agent/agents/fleet_agent.yaml: one react node per
+        # least-privilege profile, each carrying that profile's tools only.
+        #
+        # A profile with no tools has nothing to gather - ``direct`` answers from
+        # the model's own knowledge - so it gets no loop at all rather than an LM
+        # call that can only decide to stop.
         self.evidence_agents = {
-            route: ApprovalAwareReActV2(
-                EvidenceSignature,
-                tools=tools,
-                max_iters=max_iters,
-                profile_name=route,
-                approval_policy=policy,
-                evidence_only=True,
-            )
+            route: build_gatherer(route, tools, max_iters=max_iters)
             for route, tools in profiles.items()
+            if tools
         }
-        self.synthesizer = dspy.Predict(SynthesisSignature)
+        # Built from app/agent/agents/fleet_agent.yaml + prompts/synthesize.md.
+        self.synthesizer = build_synthesizer()
         self.synthesis_stream_fields = SYNTHESIS_STREAM_FIELDS
 
     def forward(
@@ -93,20 +85,78 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         """Gather evidence in the selected profile, then write public fields."""
         if not user_request.strip():
             raise ValueError("user_request must not be empty")
+
+        incoming_history: dspy.History
+        if isinstance(history, dict):
+            incoming_history = dspy.History.model_validate(history)
+        elif isinstance(history, dspy.History):
+            incoming_history = history
+        else:
+            incoming_history = dspy.History(messages=[])
+
+        conversation_history = dspy.History(
+            messages=_extract_conversation_turns(incoming_history)
+        )
+
         route = self._select_route(user_request)
-        evidence = self.evidence_agents[route](
-            user_request=user_request, history=history
-        )
-        evidence_history = getattr(evidence, "history", None)
+        gatherer = self.evidence_agents.get(route)
+        # With no loop to run, the prior turns ARE the evidence: a follow-up that
+        # routes to ``direct`` still has to synthesize from what earlier turns
+        # gathered, so the incoming history is used as-is.
+        evidence_history = incoming_history
+        if gatherer is not None:
+            evidence = gatherer(user_request=user_request, history=incoming_history)
+            evidence_history = getattr(evidence, "history", None)
+
         synthesis = self._synthesize(
-            user_request=user_request, history=evidence_history
+            user_request=user_request,
+            evidence_history=evidence_history,
+            conversation_history=conversation_history,
         )
+
+        ans = getattr(synthesis, "answer", None)
+        summary = getattr(synthesis, "process_summary", None)
+        decisions = list(getattr(synthesis, "key_decisions", None) or [])
+        caveats = list(getattr(synthesis, "caveats", None) or [])
+
+        history_msgs = (
+            getattr(evidence_history, "messages", None)
+            if isinstance(evidence_history, dspy.History)
+            else None
+        )
+        if (
+            gatherer is not None
+            and isinstance(history_msgs, list)
+            and len(history_msgs) > 0
+        ):
+            # Evidence loop produced tool messages; attach synthesized answer
+            history_msgs[-1]["answer"] = ans
+            if summary:
+                history_msgs[-1]["process_summary"] = summary
+            if decisions:
+                history_msgs[-1]["key_decisions"] = decisions
+            if caveats:
+                history_msgs[-1]["caveats"] = caveats
+            final_history = evidence_history
+        else:
+            # Direct / tool-free turn: append this turn to conversation history
+            turn_msg: dict[str, Any] = {
+                "user_request": user_request,
+                "answer": ans,
+                "process_summary": summary,
+                "key_decisions": decisions,
+                "caveats": caveats,
+            }
+            output_messages = list(getattr(incoming_history, "messages", None) or [])
+            output_messages.append(turn_msg)
+            final_history = dspy.History(messages=output_messages)
+
         result = dspy.Prediction(
-            answer=getattr(synthesis, "answer", None),
-            process_summary=getattr(synthesis, "process_summary", None),
-            key_decisions=list(getattr(synthesis, "key_decisions", None) or []),
-            caveats=list(getattr(synthesis, "caveats", None) or []),
-            history=evidence_history,
+            answer=ans,
+            process_summary=summary,
+            key_decisions=decisions,
+            caveats=caveats,
+            history=final_history,
             termination_reason="synthesis",
         )
         # Diagnostic metadata stays on the server-side Prediction and is not
@@ -119,23 +169,14 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         return result
 
     def _select_route(self, user_request: str) -> ToolRoute:
-        """Pick the least-privileged profile, or the resumed run's profile.
+        """Pick the least-privileged profile for this request.
 
-        A paused run already belongs to a profile: re-routing it would let a
-        second router call widen the capability the approver saw, so the
-        checkpoint's profile wins.
+        A router answer outside the route vocabulary degrades to the
+        least-privileged profile instead of failing the run.
         """
-        context = current_approval_context()
-        resumed_route = (
-            context.resumed.checkpoint.profile_name
-            if context is not None and context.resumed is not None
-            else None
-        )
-        if resumed_route in ROUTES:
-            return resumed_route
         try:
             routing = self.router(user_request=user_request)
-        except AdapterParseError:
+        except (AdapterParseError, ValueError):
             # A router answer outside the route vocabulary degrades to the
             # least-privileged profile instead of failing the run.
             return "direct"
@@ -145,7 +186,9 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         self,
         *,
         user_request: str,
-        history: dspy.History | None,
+        evidence_history: dspy.History | None = None,
+        conversation_history: dspy.History | None = None,
+        history: dspy.History | None = None,
     ) -> dspy.Prediction:
         """Write the public fields from the evidence the loop gathered.
 
@@ -156,11 +199,50 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         consumer task, so the engine's listeners pin the same adapter when
         parsing chunks.
         """
+        ev_hist = evidence_history if evidence_history is not None else history
+        conv_hist = conversation_history
+        if conv_hist is None and ev_hist is not None:
+            conv_hist = dspy.History(messages=_extract_conversation_turns(ev_hist))
+        history_arg = conv_hist or dspy.History(messages=[])
         with dspy.context(adapter=dspy.ChatAdapter()):
             return self.synthesizer(
                 user_request=user_request,
-                evidence_json=_evidence_json(history),
+                evidence_json=_evidence_json(ev_hist),
+                history=history_arg,
             )
+
+
+def _extract_conversation_turns(history: dspy.History | None) -> list[dict[str, Any]]:
+    """Extract prior user and assistant turns for DSPy ChatAdapter context."""
+    if history is None:
+        return []
+    turns: list[dict[str, Any]] = []
+    current_req: str | None = None
+    for msg in getattr(history, "messages", None) or []:
+        if isinstance(msg, dict):
+            req = msg.get("user_request")
+            ans = msg.get("answer")
+            summary = msg.get("process_summary")
+        else:
+            req = getattr(msg, "user_request", None)
+            ans = getattr(msg, "answer", None)
+            summary = getattr(msg, "process_summary", None)
+
+        if req and ans:
+            item: dict[str, Any] = {"user_request": req, "answer": ans}
+            if summary:
+                item["process_summary"] = summary
+            turns.append(item)
+            current_req = None
+        elif req and not ans:
+            current_req = req
+        elif ans and current_req:
+            item = {"user_request": current_req, "answer": ans}
+            if summary:
+                item["process_summary"] = summary
+            turns.append(item)
+            current_req = None
+    return turns
 
 
 def _evidence_json(

@@ -21,6 +21,11 @@ _MODAL_AMBIENT_KEYS = (
     "MODAL_BASE_URL",
     "MODAL_MODEL_ID",
 )
+# mlflow.set_tracking_uri()/set_experiment() EXPORT MLFLOW_TRACKING_URI and
+# MLFLOW_EXPERIMENT_ID into os.environ ("so subprocesses inherit them"), and
+# resolve_tracking_uri() reads the environment first. Without this purge, the
+# first test that resolves a store repoints every later test at a deleted tmp db.
+_MLFLOW_AMBIENT_PREFIX = "MLFLOW_"
 _TEST_DB_URL = "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test"
 
 
@@ -38,6 +43,8 @@ def purge_ambient_settings_env() -> None:
     if not keep_llm:
         for key in _MODAL_AMBIENT_KEYS:
             os.environ.pop(key, None)
+    for key in [k for k in os.environ if k.startswith(_MLFLOW_AMBIENT_PREFIX)]:
+        os.environ.pop(key, None)
     os.environ["FLEET_AGENT_ENV_FILE"] = "/dev/null"
     os.environ["FLEET_AGENT_DATABASE_URL"] = _TEST_DB_URL
 
@@ -96,8 +103,8 @@ async def db_sessions(db_settings):
     # Start each test from empty tables (fast: truncate, not drop).
     async with engine.begin() as connection:
         await connection.exec_driver_sql(
-            "TRUNCATE messages, runs, run_states, dspy_histories, threads, projects, "
-            "approval_checkpoints RESTART IDENTITY CASCADE"
+            "TRUNCATE messages, runs, run_states, dspy_histories, threads, projects "
+            "RESTART IDENTITY CASCADE"
         )
     yield sessions
     await engine.dispose()

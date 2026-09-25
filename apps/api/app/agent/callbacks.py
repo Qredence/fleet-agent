@@ -12,9 +12,9 @@ from urllib.parse import urlsplit
 
 from dspy.utils.callback import BaseCallback
 
+from app.agent.cancel_token import RunCancelToken
+from app.agent.event_bus import RunEventBus
 from app.agent.instrumented import preview, public_tool_args, public_tool_args_json
-from app.agui.cancel_token import RunCancelToken
-from app.agui.event_bus import RunEventBus
 from app.contracts.domain import (
     InlineDataEvent,
     SourceDiscovered,
@@ -167,29 +167,6 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                     self.sources.append(source)
                 self._publish_sources()
             self._publish_web_search_finished(event_call_id, list(produced or []))
-
-    def resume_tool_end(
-        self,
-        call_id: str,
-        instance: Any,
-        outputs: Any | None,
-        exception: BaseException | None = None,
-    ) -> None:
-        """Publish a result for a tool started by an earlier SSE response.
-
-        A resumed approval request gets a fresh callback instance, so the
-        normal ``on_tool_end`` lookup has no in-process start record.  The
-        tool-call id remains stable across the two responses; seed only the
-        private timing/instance bookkeeping and emit the result, never a
-        second TOOL_CALL_START event.
-        """
-
-        event_call_id = f"{self._id_prefix}{call_id}"
-        self._tool_starts.setdefault(event_call_id, time.monotonic())
-        self._tool_instances.setdefault(event_call_id, instance)
-        self.on_tool_end(
-            event_call_id.removeprefix(self._id_prefix), outputs, exception
-        )
 
     def on_lm_start(
         self,

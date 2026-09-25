@@ -5,7 +5,7 @@ import threading
 import jsonpatch
 
 from app.agent.engine import AgentRunResult
-from app.agui.event_bus import DONE, RunEventBus
+from app.agent.event_bus import DONE, RunEventBus
 from app.agui.trace_reducer import TraceReducer
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.domain import (
@@ -100,7 +100,7 @@ def test_full_tool_run_stays_schema_valid_at_every_patch():
         arguments_json='{"query":"x"}',
         input_preview='{"query": "x"}',
     )
-    state = _state_after(reducer, wire, reducer.apply_tool_event(started))
+    state = _state_after(reducer, wire, reducer.apply_event(started))
     assert [s["id"] for s in state["steps"]] == [
         "step-understand",
         "step-research",
@@ -115,7 +115,7 @@ def test_full_tool_run_stays_schema_valid_at_every_patch():
         output_preview="3 docs",
         duration_ms=42,
     )
-    state = _state_after(reducer, wire, reducer.apply_tool_event(completed))
+    state = _state_after(reducer, wire, reducer.apply_event(completed))
     tool = state["toolCalls"][0]
     assert tool["status"] == "completed"
     assert tool["durationMs"] == 42
@@ -160,14 +160,14 @@ def test_failed_tool_marks_tool_not_run():
         arguments_json="{}",
         input_preview="{}",
     )
-    wire.feed(reducer.apply_tool_event(started))
+    wire.feed(reducer.apply_event(started))
     failed = ToolFailed(
         tool_call_id="tool_a",
         name="search_docs",
         error_message="The search_docs tool call failed.",
         duration_ms=500,
     )
-    state = _state_after(reducer, wire, reducer.apply_tool_event(failed))
+    state = _state_after(reducer, wire, reducer.apply_event(failed))
     tool = state["toolCalls"][0]
     assert tool["status"] == "failed"
     assert tool["errorMessage"] == "The search_docs tool call failed."

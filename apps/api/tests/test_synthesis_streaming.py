@@ -20,10 +20,10 @@ from app.agent.factory import build_tool_profiles
 from app.agent.program import FleetAgent
 from app.agent.tool_registry import ToolMetadata, ToolRegistry
 from app.agent.tooling import create_dspy_tool
-from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from tests.helpers.scripted_lm import (
     StreamingScriptedLM,
+    evidence_end,
     router_call,
     synthesis_call,
 )
@@ -65,7 +65,7 @@ def _stream_steps(answer: str = "Use the streaming seam.") -> list[Any]:
     return [
         router_call("research"),
         [{"name": "lookup", "args": {"query": "streaming"}}],
-        {"calls": [], "content": '{"next_thought": "enough evidence"}'},
+        evidence_end(),
         synthesis_call(
             answer=answer, summary="Routed, gathered evidence, synthesized."
         ),
@@ -128,186 +128,15 @@ async def test_non_streaming_lm_falls_back_to_settled_fields() -> None:
     assert updates[-1].result.status == "completed"
 
 
-async def test_streamed_secret_is_never_emitted_even_when_split() -> None:
-    """A secret split across synthesis deltas must never reach the stream."""
-    # The key is longer than the scripted chunk size, so it straddles deltas.
-    answer = "The gateway key is sk-ant-1234567890abcdef1234 and that is the risk."
-    engine = _routed_engine(_stream_steps(answer))
-
-    updates = [
-        update
-        async for update in engine.stream(
-            user_request="look it up", history=None, context=CTX
-        )
-    ]
-
-    streamed = "".join(
-        update.delta
-        for update in updates
-        if update.kind == "token" and update.stream_field == "answer"
-    )
-    assert "sk-ant-1234567890abcdef1234" not in streamed
-    assert "sk-ant-" not in streamed
-    # The settled answer is masked, and the streamed text matches it exactly
-    # (the scrubber releases the held-back tail on flush).
-    final = updates[-1].result
-    assert final is not None
-    assert final.answer == ("The gateway key is [redacted] and that is the risk.")
-    assert streamed == final.answer
-
-
-async def test_approval_pause_in_streamed_evidence_loop_interrupts() -> None:
-    """A gated tool in the evidence loop pauses the streamed run cleanly."""
-    from app.agent.approval import ApprovalRegistry
-    from app.agent.tool_registry import ToolMetadata as TM
-    from tests.helpers.scripted_lm import ScriptedLM
-
-    def write(path: str, content: str) -> str:
-        """Write a test workspace file."""
-        raise AssertionError("gated tool must not run before approval")
-
-    write_tool = create_dspy_tool(write)
-    registry = ToolRegistry(
-        [
-            (
-                write_tool,
-                TM(
-                    name="write",
-                    capability="workspace_write",
-                    read_only=False,
-                    idempotent=False,
-                    parallelizable=False,
-                    requires_approval=True,
-                ),
-            )
-        ]
-    )
-    profiles = build_tool_profiles(registry)
-    engine = DspyAgentEngine(
-        program_factory=lambda: FleetAgent(
-            tool_profiles=profiles,
-            max_iters=3,
-            approval_policy=registry.approval_policy(),
-        ),
-        lm=ScriptedLM(
-            [
-                router_call("workspace_write"),
-                [{"name": "write", "args": {"path": "notes.txt", "content": "s"}}],
-            ]
-        ),  # type: ignore[arg-type]
-        adapter=dspy.JSONAdapter(use_native_function_calling=True),
-        approval_registry=ApprovalRegistry(),
-    )
-
-    updates = [
-        update
-        async for update in engine.stream(
-            user_request="save this", history=None, context=CTX
-        )
-    ]
-
-    assert [update.kind for update in updates][-1] == "result"
-    result = updates[-1].result
-    assert result is not None
-    assert result.status == "interrupted"
-    assert result.termination_reason == "approval_required"
-    assert len(result.interrupts) == 1
-    # No synthesis tokens are emitted for a paused run.
-    assert not [u for u in updates if u.kind == "token"]
-
-
-async def test_streamed_resume_completes_after_approval() -> None:
-    """An approved resume streams the synthesis after the evidence continues."""
-    from ag_ui.core import ResumeEntry
-
-    from app.agent.approval import ApprovalRegistry
-
-    def write(path: str, content: str) -> str:
-        """Write a test workspace file."""
-        return "write completed"
-
-    calls: list[tuple[str, str]] = []
-
-    def tracked_write(path: str, content: str) -> str:
-        """Write a test workspace file."""
-        calls.append((path, content))
-        return "write completed"
-
-    tracked = create_dspy_tool(tracked_write, name="write")
-    registry = ToolRegistry(
-        [
-            (
-                tracked,
-                ToolMetadata(
-                    name="write",
-                    capability="workspace_write",
-                    read_only=False,
-                    idempotent=False,
-                    parallelizable=False,
-                    requires_approval=True,
-                ),
-            )
-        ]
-    )
-    profiles = build_tool_profiles(registry)
-    approvals = ApprovalRegistry()
-    engine = DspyAgentEngine(
-        program_factory=lambda: FleetAgent(
-            tool_profiles=profiles,
-            max_iters=3,
-            approval_policy=registry.approval_policy(),
-        ),
-        lm=StreamingScriptedLM(
-            [
-                router_call("workspace_write"),
-                [{"name": "write", "args": {"path": "notes.txt", "content": "s"}}],
-                {"calls": [], "content": '{"next_thought": "evidence done"}'},
-                synthesis_call(answer="Saved.", summary="Wrote the file."),
-            ]
-        ),  # type: ignore[arg-type]
-        adapter=dspy.JSONAdapter(use_native_function_calling=True),
-        approval_registry=approvals,
-    )
-
-    first = [
-        update
-        async for update in engine.stream(
-            user_request="save this", history=None, context=CTX
-        )
-    ]
-    result = first[-1].result
-    assert result is not None and result.status == "interrupted"
-    interrupt = result.interrupts[0]
-
-    second = [
-        update
-        async for update in engine.stream(
-            user_request="save this",
-            history=None,
-            context=CTX,
-            resume=[
-                ResumeEntry.model_validate(
-                    {
-                        "interruptId": interrupt.id,
-                        "status": "resolved",
-                        "payload": {"approved": True},
-                    }
-                )
-            ],
-        )
-    ]
-    final = second[-1].result
-    assert final is not None and final.status == "completed"
-    assert final.answer == "Saved."
-    assert calls == [("notes.txt", "s")]
-    answer_text = "".join(
-        u.delta for u in second if u.kind == "token" and u.stream_field == "answer"
-    )
-    assert answer_text == "Saved."
-
-
 def _coordinator_stream(engine: DspyAgentEngine, run_id: str):
-    def builder(bus: RunEventBus, *, thread_id: str):
+    def builder(
+        bus,
+        *,
+        thread_id,
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
         del bus, thread_id
         return engine
 
@@ -449,10 +278,11 @@ async def test_continuation_turn_synthesizes_from_prior_evidence() -> None:
                 [
                     router_call("research"),
                     [{"name": "probe", "args": {"query": "report"}}],
-                    {"calls": [], "content": '{"next_thought": "done"}'},
+                    evidence_end(),
                     synthesis_call(answer="Report written.", summary="Gathered."),
                     router_call("direct"),
-                    {"calls": [], "content": '{"next_thought": "recall prior turn"}'},
+                    # ``direct`` has no evidence loop: the tool-less profile goes
+                    # straight to synthesis, so no evidence step is consumed.
                     synthesis_call(
                         answer="It was AG-UI-State-Sync-How-It-Works.md.",
                         summary="Recalled.",

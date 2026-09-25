@@ -140,6 +140,7 @@ def test_generated_model_is_fresh():
             "ruff-check",
             "ruff-format",
         ],
+        cwd=REPO_ROOT / "apps" / "api",
         capture_output=True,
         text=True,
         check=True,

@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from app.agent.instrumented import instrument_tool
+from app.agent.callbacks import AgUiRunCallback
+from app.agent.event_bus import RunEventBus
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
-from app.agui.event_bus import RunEventBus
-from app.agui.trace_reducer import TraceReducer, _normalize_uri
+from app.agui.trace_reducer import TraceReducer
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactStarted,
@@ -22,6 +22,7 @@ from app.services.artifact_storage import (
     PathTraversalError,
     sanitize_artifact_name,
 )
+from app.services.source_identity import canonical_source_key
 
 
 def bus() -> RunEventBus:
@@ -36,11 +37,20 @@ async def drain(event_bus: RunEventBus, count: int) -> list:
 
 
 async def test_search_docs_tool_exposes_discovered_sources():
-    tool = SearchDocsTool()
-    wrapped = instrument_tool(tool, event_bus := bus())
-    assert "AG-UI" in wrapped(query="state deltas")
+    """The live callback seam publishes one SourceDiscovered per source.
 
-    events = await drain(event_bus, 2 + len(tool.last_sources))
+    Source events come from ``AgUiRunCallback``, which the engine installs on
+    every run - not from a wrapper around the tool.
+    """
+    tool = SearchDocsTool()
+    event_bus = bus()
+    callback = AgUiRunCallback(bus=event_bus)
+
+    assert "AG-UI" in tool(query="state deltas")
+    callback.on_tool_start("call-1", tool, {"kwargs": {"query": "state deltas"}})
+    callback.on_tool_end("call-1", "state deltas")
+
+    events = await drain(event_bus, 3 + len(tool.last_sources))
     discovered = [e for e in events if isinstance(e, SourceDiscovered)]
     assert len(discovered) == len(tool.last_sources) > 0
     for event in discovered:
@@ -97,11 +107,18 @@ def test_source_dedup_by_canonical_uri_and_id():
     assert len(reducer.state["sources"]) == 2
 
 
-def test_normalize_uri():
-    assert _normalize_uri("HTTPS://Docs.AG-UI.COM/sdk/python/core/events/#x") == (
-        "https://docs.ag-ui.com/sdk/python/core/events"
+def test_canonical_source_key_normalizes_a_uri():
+    """The reducer keys sources by this helper, so its shape is the contract."""
+    assert (
+        canonical_source_key(
+            {"id": "", "uri": "HTTPS://Docs.AG-UI.COM/sdk/python/core/events/#x"}
+        )
+        == "https://docs.ag-ui.com/sdk/python/core/events"
     )
-    assert _normalize_uri("https://x.test/a/") == "https://x.test/a"
+    assert (
+        canonical_source_key({"id": "", "uri": "https://x.test/a/"})
+        == "https://x.test/a"
+    )
 
 
 # -- storage safety ------------------------------------------------------------

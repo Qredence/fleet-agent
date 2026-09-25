@@ -8,9 +8,8 @@ import dspy  # noqa: E402
 from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 
+from app.agent.callbacks import AgUiRunCallback  # noqa: E402
 from app.agent.engine import DspyAgentEngine  # noqa: E402
-from app.agent.instrumented import instrument_tool  # noqa: E402
-from app.agent.signature import AgentSignature  # noqa: E402
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agui.live_coordinator import LiveDSPyCoordinator
@@ -26,23 +25,34 @@ from app.services.artifact_storage import LocalArtifactStorage
 from app.services.run_persistence import RunPersistence
 from tests.conftest import requires_db
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature  # noqa: E402
 
 pytestmark = requires_db
 
 
 def rich_builder(storage, steps):
-    def build(bus, *, thread_id: str = "t"):
+    def build(
+        bus,
+        *,
+        thread_id,
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
         docs = SearchDocsTool()
         report = WriteReportTool(
             storage=storage, bus=bus, thread_id=thread_id, max_bytes=10_000
         )
-        tools = [instrument_tool(t, bus) for t in [docs, report]]
+        tools = [docs, report]
 
         def factory():
             return dspy.ReActV2(AgentSignature, tools=tools, max_iters=6)
 
         return DspyAgentEngine(
-            program_factory=factory, lm=ScriptedLM(steps), adapter=dspy.JSONAdapter()
+            program_factory=factory,
+            lm=ScriptedLM(steps),  # type: ignore[arg-type]
+            adapter=dspy.JSONAdapter(),
+            callbacks=[AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)],
         )
 
     return build

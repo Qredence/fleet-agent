@@ -23,7 +23,11 @@ def test_fleet_agent_is_a_first_class_dspy_module() -> None:
     assert isinstance(program, dspy.Module)
     assert program.tool_names["research"] == ("lookup_docs",)
     assert program.tool_names["direct"] == ()
-    assert program.evidence_agents["research"].tools["lookup_docs"] is tool
+    # The spec resolves the tool by name, so the bound tool is an equivalent
+    # dspy.Tool rather than the same object; the model-visible contract is what
+    # must survive.
+    bound = program.evidence_agents["research"].tools["lookup_docs"]
+    assert (bound.name, bound.desc, bound.args) == (tool.name, tool.desc, tool.args)
     # DSPy's module tree walks the dict the profile agents live in, so the
     # router, every evidence loop, and the synthesizer stay optimizable.
     names = [name for name, _ in program.named_predictors()]

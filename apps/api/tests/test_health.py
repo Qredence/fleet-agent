@@ -84,3 +84,29 @@ async def test_agui_protocol_imports():
         )
     )
     assert encoded.startswith("data: ")
+
+
+async def test_lifespan_starts_without_a_reachable_database(monkeypatch):
+    """A database outage must not stop the service from booting.
+
+    Startup reconciliation used to run unguarded, so an unreachable database made
+    the whole API fail to start: /health was unreachable and the operator had no
+    way to see why. It now degrades to a warning and the app still serves.
+    """
+    from app.main import lifespan
+    from app.persistence.db import build_engine, build_sessionmaker
+
+    app = create_app()
+    app.state.settings = Settings(
+        database_url="postgresql+asyncpg://fleet:fleet@127.0.0.1:1/unreachable"  # type: ignore[arg-type]
+    )
+    app.state.db_engine = build_engine(app.state.settings)
+    app.state.db_sessions = build_sessionmaker(app.state.db_engine)
+
+    async with lifespan(app):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/health")
+
+    assert response.status_code == 200

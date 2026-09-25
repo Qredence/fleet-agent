@@ -13,9 +13,8 @@ A step is either:
 """
 
 import json
-from typing import Any
+from typing import Any, cast
 
-import dspy
 from dspy.utils.dummies import DummyLM, dotdict
 
 # The synthesis predictor runs under ChatAdapter (exact stream boundaries),
@@ -163,25 +162,30 @@ def router_call(route: str) -> dict[str, Any]:
 def evidence_end() -> dict[str, Any]:
     """A step that ends an evidence-gathering ReActV2 loop.
 
-    The routed program's loops run ``EvidenceSignature`` (no output fields),
-    so they end by returning no tool calls rather than by calling ``submit``.
-    The synthesis predictor then takes the next step.
+    ``EvidenceSignature`` declares no output fields, so the model ends the loop by
+    calling ``submit`` with no arguments - a real DSPy terminal condition. Ending
+    with an empty tool-call list instead makes vanilla ``dspy.ReActV2`` spend one
+    extra LM call on a forced submit, which no scripted sequence here accounts for.
     """
-    return {"calls": [], "content": json.dumps({"next_thought": "evidence complete"})}
+    return {"calls": [{"name": "submit", "args": {}}], "content": ""}
 
 
-class FixedRouter(dspy.Module):  # type: ignore[misc]
-    """A router that returns one route without an LM call.
+def fixed_route_agent(route: str, **kwargs: Any) -> Any:
+    """A ``FleetAgent`` whose route is pinned, so tests spend no LM step on routing.
 
-    Tests that pin gated-tool, persistence, or streaming behavior are not
-    about routing; a fixed router keeps their scripted step lists about the
-    evidence loop instead of spending a step on route selection.
+    Tests that pin gated-tool, persistence, or streaming behavior are not about
+    routing. The route is pinned by subclassing ``_select_route`` rather than by
+    keeping a router-injection hole on ``FleetAgent`` — the production class stays
+    free of test-only knobs.
     """
+    from app.agent.program import FleetAgent
+    from app.agent.routing import ToolRoute
 
-    def __init__(self, route: str) -> None:
-        super().__init__()
-        self.route = route
+    pinned = cast("ToolRoute", route)
 
-    def forward(self, *, user_request: str) -> dspy.Prediction:
-        del user_request
-        return dspy.Prediction(route=self.route)
+    class _FixedRouteAgent(FleetAgent):
+        def _select_route(self, user_request: str) -> ToolRoute:
+            del user_request
+            return pinned
+
+    return _FixedRouteAgent(**kwargs)

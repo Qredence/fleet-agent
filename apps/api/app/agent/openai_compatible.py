@@ -6,7 +6,12 @@ migration describes (https://dspy.ai/community/normalized-lm-api-migration/).
 Every provider configured with a base URL (browser BYOK overrides, the
 ``MODAL_*`` default trio, and ``FLEET_AGENT_LLM_BASE_URL``) is by definition
 OpenAI-compatible, so this LM talks to those gateways with the OpenAI SDK
-directly and never depends on LiteLLM's provider-prefix routing.
+directly and never uses LiteLLM's provider-prefix routing.
+
+LiteLLM still appears in exactly one place, as a *type* dependency: the streaming
+bridge must hand ``dspy.streamify`` litellm-shaped chunk objects, so it imports
+``ModelResponse``/``ModelResponseStream`` and nothing else. No LiteLLM transport,
+routing, or error mapping is used.
 
 Model ids are sent to the gateway exactly as configured. A leading
 ``openai/`` is stripped for non-OpenRouter gateways because that prefix only

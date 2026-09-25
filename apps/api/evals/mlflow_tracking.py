@@ -1,10 +1,12 @@
 """MLflow run history for offline evaluation and self-improvement.
 
 Every optimization attempt — gates passed or failed — and every scored
-routing-eval run is logged with params, metrics, and (on pass) the full
-candidate artifact, so the router's evolution is reviewable in one place:
-`mlflow ui` over the default local store, or any MLflow server the operator
-points ``FLEET_AGENT_MLFLOW_TRACKING_URI`` at.
+routing-eval run is logged with params, metrics, artifacts, and ``fleet.*``
+tags, so the router's evolution is filterable in one place: ``mlflow ui`` over
+the default local store, or any MLflow server the operator points
+``FLEET_AGENT_MLFLOW_TRACKING_URI`` at. The tags answer the questions the
+metrics alone cannot: which suite and dataset version a score belongs to, which
+kind of run it was, and whether the gate passed.
 
 Like the rest of the offline harness, these helpers never talk to the
 database, the live engine, or any remote system the operator has not
@@ -17,19 +19,29 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.services.mlflow_observability import resolve_tracking_uri
+import dspy
+
+from app.services.mlflow_observability import connect, ensure_experiment
 
 logger = logging.getLogger(__name__)
 
 OPTIMIZATION_EXPERIMENT = "fleet-agent/router-optimization"
 ROUTING_EVAL_EXPERIMENT = "fleet-agent/routing-eval"
 
+KIND_OPTIMIZATION = "router-optimization"
+KIND_ROUTING_EVAL = "routing-eval"
+SUITE_TAG = "fleet.suite"
 
-def _mlflow() -> Any:
-    """Connect MLflow to the resolved store and return the module."""
-    import mlflow
 
-    mlflow.set_tracking_uri(resolve_tracking_uri())
+def use_experiment(name: str) -> Any:
+    """Connect to the resolved store and select ``name`` with an explicit root.
+
+    ``mlflow.set_experiment(name)`` would create a missing experiment with an
+    artifact location resolved from the current directory; ``ensure_experiment``
+    creates it with an explicit one instead.
+    """
+    mlflow = connect()
+    mlflow.set_experiment(experiment_id=ensure_experiment(name))
     return mlflow
 
 
@@ -63,13 +75,16 @@ def log_optimization_run(
     because of it.
     """
     try:
-        mlflow = _mlflow()
-        mlflow.set_experiment(OPTIMIZATION_EXPERIMENT)
-        with mlflow.start_run(run_name=f"flex-router-{budget}-{outcome}") as run:
+        mlflow = use_experiment(OPTIMIZATION_EXPERIMENT)
+        with mlflow.start_run(run_name=f"router-{budget}-{outcome}") as run:
             mlflow.set_tags(
                 {
+                    "fleet.kind": KIND_OPTIMIZATION,
+                    SUITE_TAG: "routing",
                     "fleet.outcome": outcome,
                     "fleet.dspy_version": dspy_version,
+                    "fleet.gates_passed": str(outcome == "artifact-written"),
+                    "fleet.budget": budget,
                 }
             )
             mlflow.log_params(
@@ -110,19 +125,40 @@ def log_routing_score(
     total: int,
     min_accuracy: float,
     failures: int = 0,
+    dataset_name: str | None = None,
+    dataset_version: int | None = None,
+    dataset_digest: str | None = None,
 ) -> str | None:
     """Log one scored routing-eval run (misses land as a JSON artifact).
 
     ``failures`` counts examples whose router call raised: ``dspy.Evaluate``
     scores them with its ``failure_score`` (0.0) and continues, so without the
     count a provider error is indistinguishable from a routing miss.
+
+    The three ``dataset_*`` arguments tag the run with the exact eval set it
+    scored (``evals.datasets``); pass them so a score can be traced back to a
+    dataset version and digest.
     """
     try:
-        mlflow = _mlflow()
-        mlflow.set_experiment(ROUTING_EVAL_EXPERIMENT)
+        mlflow = use_experiment(ROUTING_EVAL_EXPERIMENT)
+        gate_passed = mean >= min_accuracy
+        tags = {
+            "fleet.kind": KIND_ROUTING_EVAL,
+            SUITE_TAG: "routing",
+            "fleet.dspy_version": dspy.__version__,
+            "fleet.gate_passed": str(gate_passed),
+            "fleet.min_accuracy": str(min_accuracy),
+        }
+        if dataset_name:
+            tags["fleet.dataset.name"] = dataset_name
+        if dataset_version is not None:
+            tags["fleet.dataset.version"] = str(dataset_version)
+        if dataset_digest:
+            tags["fleet.dataset.digest"] = dataset_digest
         under = sum(1 for miss in misses if miss[3] == 0.0)
         over = len(misses) - under
         with mlflow.start_run(run_name="routing-score") as run:
+            mlflow.set_tags(tags)
             mlflow.log_params(
                 {
                     "examples": total,
@@ -136,7 +172,7 @@ def log_routing_score(
                     "under_selected": under,
                     "over_selected": over,
                     "failures": float(failures),
-                    "gate_passed": float(mean >= min_accuracy),
+                    "gate_passed": float(gate_passed),
                 }
             )
             if misses:

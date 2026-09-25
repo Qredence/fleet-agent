@@ -18,11 +18,9 @@ import pytest
 
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentRunContext, DspyAgentEngine, _map_result
-from app.agent.instrumented import instrument_tool
-from app.agent.signature import AgentSignature
+from app.agent.event_bus import RunEventBus
 from app.agent.tooling import create_dspy_tool
 from app.agent.tools.report import WriteReportTool
-from app.agui.event_bus import RunEventBus
 from app.api.threads import _safe_bootstrap_agent_state
 from app.contracts.domain import ToolCompleted, ToolStarted
 from app.services.artifact_storage import LocalArtifactStorage
@@ -33,6 +31,7 @@ from app.services.content_safety import (
     scrub_public_text,
 )
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature
 
 CTX = AgentRunContext(thread_id="t-scrub", run_id="r-scrub")
 
@@ -201,18 +200,22 @@ async def test_callback_previews_scrub_raw_tool_output() -> None:
     assert "[redacted]" in completed.output_preview
 
 
-async def test_instrument_tool_scrubs_previews_but_not_return_values() -> None:
+async def test_tool_events_scrub_previews_but_not_return_values() -> None:
+    """The published preview is scrubbed; the model keeps the real output."""
     bus = RunEventBus(asyncio.get_running_loop())
+    callback = AgUiRunCallback(bus=bus)
 
     def leak() -> str:
         """Leak a credential in output."""
         return "found sk-abc123def456ghi789jklmno"
 
-    wrapped = instrument_tool(leak, bus)
-    value = wrapped()
+    value = leak()
 
     # Behavior preserved: the model still receives the real tool output.
     assert value == "found sk-abc123def456ghi789jklmno"
+
+    callback.on_tool_start("call-1", leak, {"kwargs": {}})
+    callback.on_tool_end("call-1", value)
 
     started = await bus.next()
     completed = await bus.next()
