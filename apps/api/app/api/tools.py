@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.agent.tools_catalog import ToolCatalogEntry, tool_catalog_entries
+from app.agent.tool_registry import ToolCatalogEntry, tool_catalog
 from app.settings import Settings
 
 router = APIRouter(prefix="/api", tags=["tools"])
@@ -13,11 +13,11 @@ class ToolCatalogResponse(BaseModel):
 
 @router.get("/tools", response_model=ToolCatalogResponse)
 async def list_tools(request: Request) -> ToolCatalogResponse:
-    """
-    Builds a browser-safe catalog of tools registered with the DSPy engine.
+    """Return the browser-safe catalog of the tools this deployment enables.
 
-    Returns:
-        ToolCatalogResponse: The catalog of registered tools.
+    The entries come from the same table the engine builds the model's tools
+    from, so the Tools page can never describe a tool differently from the text
+    the model receives.
     """
     settings: Settings = request.app.state.settings
-    return ToolCatalogResponse(tools=tool_catalog_entries(settings))
+    return ToolCatalogResponse(tools=tool_catalog(settings))

@@ -1,31 +1,24 @@
 """Offline self-improvement: ``python -m evals.optimize``.
 
-Evolves the tool router with GEPA over ``dspy.Flex``: the optimizer rewrites
-the router's *source* (decomposed predictors plus plain Python) instead of
-only tuning instructions, and the evolved code runs inside dspy's Deno
-sandbox — never in this process either.
+GEPA rewrites the capability router's instructions against the labelled routing
+set. The router is the one component with both a labelled dataset and a
+deterministic metric, so it is the honest optimization target: the run costs one
+LM call per example instead of a full agent turn.
 
-The loop is deliberately manual and offline:
+The loop is manual and offline, and it never touches the database or the runtime:
 
-1. Stratified train/val split of the routing eval set (fixed seed).
-2. Score the baseline Flex router on the held-out val split.
-3. GEPA-compile a candidate (``--auto light|medium|heavy`` budget) with the
-   production LM as both candidate and reflection model.
-4. Score the candidate on the same held-out split.
-5. Gates: the candidate must beat the baseline *and* clear
-   ``--min-accuracy``. On failure nothing is written and the exit code is 2.
-6. On success, write a versioned artifact directory under
-   ``evals/artifacts/``: the router state JSON, the evolved source for human
-   review, a report, and a manifest.
+1. Stratified train/test split of the routing set (fixed seed).
+2. Score the baseline router on the held-out test split.
+3. GEPA-compile a candidate over the TRAIN split only.
+4. Score the candidate on the same held-out test split.
+5. Gates: the candidate must beat the baseline AND clear ``--min-accuracy``.
+   On failure nothing is written and the exit code is 2.
+6. On success, write a versioned artifact directory holding the promoted
+   instructions, a report, and a manifest.
 
-Promotion is a separate, explicit step: ``--promote`` copies a chosen
-artifact's state to ``evals/artifacts/flex_router_active.json``. Going live
-still requires the operator to set ``FLEET_AGENT_ROUTER_STATE`` to that file
-and restart the server; nothing here touches the database, the runtime, or
-any remote system.
-
-This runner needs a configured provider (``MODAL_*`` or ``FLEET_AGENT_LLM_*``
-settings) and a local Deno runtime for the sandboxed interpreter.
+Promotion is a separate, explicit step (``--promote``). Going live still requires
+the operator to point ``FLEET_AGENT_ROUTER_STATE_PATH`` at the artifact and
+restart the server, which the startup log confirms.
 """
 
 from __future__ import annotations
@@ -38,11 +31,14 @@ import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import dspy
 
-from app.agent.flex_router import ROUTER_STATE_FORMAT, FlexToolRouter
+from app.agent.routing import (
+    ROUTER_STATE_FORMAT,
+    ToolRoutingSignature,
+    coerce_route,
+)
 from evals.agent_tool_routing import (
     ROUTING_EXAMPLES,
     compile_gepa_candidate,
@@ -54,385 +50,303 @@ from evals.scoring import RoutingScore, score_router
 
 EVALS_DIR = Path(__file__).resolve().parent
 ARTIFACTS_DIR = EVALS_DIR / "artifacts"
-ACTIVE_POINTER = ARTIFACTS_DIR / "flex_router_active.json"
+ACTIVE_POINTER = ARTIFACTS_DIR / "router_active.json"
 
 # Held-out fraction per route, stratified (fixed seed for reproducibility).
 _VAL_FRACTION = 0.3
-_SPLIT_SEED = 17
 
 
-def stratified_split(
-    examples: list[dspy.Example], *, seed: int = _SPLIT_SEED
+class RouterProgram(dspy.Module):  # type: ignore[misc]  # dspy is untyped
+    """The capability router alone, with the live program's predictor path.
+
+    Named ``router`` so a GEPA write-back targets the same predictor the
+    production program builds, which is what makes the promoted instructions
+    apply unchanged at runtime.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.router = dspy.Predict(ToolRoutingSignature)
+
+    def forward(self, user_request: str) -> dspy.Prediction:
+        return self.router(user_request=user_request)
+
+
+def _route_of(example: dspy.Example) -> str:
+    return coerce_route(getattr(example, "expected_route", None))
+
+
+def split_examples(
+    examples: list[dspy.Example], *, val_fraction: float = _VAL_FRACTION, seed: int = 17
 ) -> tuple[list[dspy.Example], list[dspy.Example]]:
-    """Split examples per expected route so every route stays in both halves."""
-    rng = random.Random(seed)
+    """Return a stratified ``(train, held_out)`` split.
+
+    Stratified by route so a small held-out set still covers every profile;
+    without that, a route with two examples could vanish from the test split.
+    """
     by_route: dict[str, list[dspy.Example]] = {}
     for example in examples:
-        by_route.setdefault(str(example.expected_route), []).append(example)
+        by_route.setdefault(_route_of(example), []).append(example)
 
+    rng = random.Random(seed)
     train: list[dspy.Example] = []
-    val: list[dspy.Example] = []
+    held_out: list[dspy.Example] = []
     for route in sorted(by_route):
-        group = list(by_route[route])
+        group = sorted(by_route[route], key=lambda item: item.user_request)
         rng.shuffle(group)
-        held_out = max(1, round(len(group) * _VAL_FRACTION))
-        val.extend(group[:held_out])
-        train.extend(group[held_out:])
-    return train, val
+        take = max(1, round(len(group) * val_fraction))
+        held_out.extend(group[:take])
+        train.extend(group[take:])
+    rng.shuffle(train)
+    rng.shuffle(held_out)
+    return train, held_out
 
 
-def _score_router(
-    router: dspy.Module,
-    lm: dspy.BaseLM,
-    examples: list[dspy.Example],
-) -> RoutingScore:
-    """Score one router over examples through the shared harness.
-
-    Returns the whole ``RoutingScore`` — mean, misses, latency, and the count
-    of examples whose call raised — because ``dspy.Evaluate`` scores a raised
-    example with its ``failure_score`` and keeps going, so the mean alone
-    cannot tell a broken provider from a wrong route.
-    """
-    return score_router(router, lm, examples)
+def _instructions(program: dspy.Module) -> str:
+    return str(getattr(program.router.signature, "instructions", "") or "")
 
 
-def _failure_note(label: str, failures: int, total: int) -> str | None:
-    """Warn when held-out examples raised instead of mis-routing."""
-    if not failures:
-        return None
-    return (
-        f"WARNING: {label} {failures} of {total} routing calls raised "
-        "(scored 0 by dspy.Evaluate); the mean mixes provider errors with "
-        "routing misses"
-    )
-
-
-def _miss_summary(misses: list[tuple[str, str, str, float]]) -> str:
-    if not misses:
-        return "all routes selected exactly (least privilege held)"
-    buckets: Counter[str] = Counter()
-    for _request, _expected, _actual, score in misses:
-        buckets["under-selected" if score == 0.0 else "over-selected"] += 1
-    lines = [f"misses: {len(misses)} ({dict(buckets)})"]
-    for request, expected, actual, score in misses:
-        lines.append(f"  [{score:.2f}] expected={expected} actual={actual}: {request}")
-    return "\n".join(lines)
-
-
-def _extract_module_src(candidate: dspy.Module) -> str:
-    """Pull the evolved Flex source out of a compiled candidate module."""
-    flex = getattr(candidate, "flex", None)
-    src = getattr(flex, "module_src", None) if flex is not None else None
-    if not isinstance(src, str) or not src.strip():
-        raise RuntimeError(
-            "GEPA returned a candidate without an evolved Flex module_src"
-        )
-    return src
-
-
-def _write_artifact(
+def _report(
     *,
-    module_src: str,
-    report: str,
-    manifest: dict[str, Any],
-    timestamp: str,
-) -> Path:
-    artifact_dir = ARTIFACTS_DIR / f"flex_router_gepa_{timestamp}"
-    artifact_dir.mkdir(parents=True, exist_ok=False)
-    (artifact_dir / "state.json").write_text(
-        json.dumps(
-            {
-                "format": ROUTER_STATE_FORMAT,
-                "module_src": module_src,
-                "lm": None,
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (artifact_dir / "module_src.py").write_text(module_src + "\n", encoding="utf-8")
-    (artifact_dir / "report.md").write_text(report, encoding="utf-8")
-    (artifact_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-    )
-    return artifact_dir
+    outcome: str,
+    baseline: RoutingScore,
+    candidate: RoutingScore,
+    min_accuracy: float,
+    budget: str,
+    split: tuple[int, int],
+    seed: int,
+) -> str:
+    lines = [
+        "# Router GEPA report",
+        "",
+        f"- outcome: **{outcome}**",
+        f"- budget: auto={budget}, seed={seed}",
+        f"- split: {split[0]} train / {split[1]} held out (stratified)",
+        f"- baseline held-out mean: {baseline.mean:.3f}"
+        f" ({baseline.failures} raised calls)",
+        f"- candidate held-out mean: {candidate.mean:.3f}"
+        f" ({candidate.failures} raised calls)",
+        f"- gate: candidate > baseline AND candidate >= {min_accuracy:.2f}",
+        "",
+        "## Baseline misses",
+    ]
+    lines += [f"- {miss}" for miss in baseline.misses] or ["- (none)"]
+    lines += ["", "## Candidate misses"]
+    lines += [f"- {miss}" for miss in candidate.misses] or ["- (none)"]
+    return "\n".join(lines) + "\n"
 
 
-def _promote(artifact: Path) -> int:
-    state_file = artifact / "state.json"
-    if not state_file.is_file():
-        print(f"artifact {artifact} has no state.json", file=sys.stderr)
-        return 1
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(state_file, ACTIVE_POINTER)
-    print(f"promoted {state_file} -> {ACTIVE_POINTER}")
-    print(
-        "to go live: set FLEET_AGENT_ROUTER_STATE="
-        f"{ACTIVE_POINTER} and restart the API server"
-    )
-    return 0
-
-
-def _latest_artifact() -> Path | None:
-    if not ARTIFACTS_DIR.is_dir():
-        return None
-    candidates = sorted(
-        (p for p in ARTIFACTS_DIR.iterdir() if p.is_dir()), key=lambda p: p.name
-    )
-    return candidates[-1] if candidates else None
+def _miss_lines(score: RoutingScore) -> list[str]:
+    return [str(miss) for miss in score.misses]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="python -m evals.optimize",
-        description=(
-            "Offline GEPA self-improvement for the Flex tool router. "
-            "Never touches the database, the runtime, or any remote system."
-        ),
-    )
-    parser.add_argument(
-        "--auto",
-        choices=["light", "medium", "heavy"],
-        default="light",
-        help="GEPA budget preset (default: light)",
-    )
-    parser.add_argument(
-        "--min-accuracy",
-        type=float,
-        default=0.9,
-        help="minimum held-out mean score for the candidate (default: 0.9)",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=0, help="GEPA RNG seed (default: 0)"
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--auto", choices=("light", "medium", "heavy"), default="light")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--split-seed", type=int, default=17)
+    parser.add_argument("--min-accuracy", type=float, default=0.9)
     parser.add_argument(
         "--promote",
         action="store_true",
-        help=(
-            "only copy a finished artifact's state to the active pointer "
-            "(default: latest); does not run any optimization"
-        ),
+        help="copy a passing candidate's state to the active pointer",
     )
     parser.add_argument(
-        "--artifact",
-        type=Path,
-        default=None,
-        help="artifact directory to promote (with --promote)",
+        "--validate",
+        action="store_true",
+        help="check the dataset and exit without needing a provider",
     )
+    parser.add_argument("--log-dir", default=None, help="GEPA trial log directory")
     args = parser.parse_args(argv)
-
-    if args.promote:
-        artifact = args.artifact or _latest_artifact()
-        if artifact is None:
-            print("no artifacts under evals/artifacts to promote", file=sys.stderr)
-            return 1
-        return _promote(artifact)
 
     problems = validate_routing_dataset()
     if problems:
-        print("routing dataset is structurally unsound:", file=sys.stderr)
         for problem in problems:
-            print(f"  - {problem}", file=sys.stderr)
-        return 1
-
-    if shutil.which("deno") is None:
-        print(
-            "the Flex sandbox needs a Deno runtime (>= 2.0.0, < 3.0.0) on PATH",
-            file=sys.stderr,
-        )
-        return 1
+            print(f"dataset problem: {problem}", file=sys.stderr)
+        return 2
+    if args.validate:
+        print(f"dataset OK: {len(ROUTING_EXAMPLES)} examples")
+        return 0
 
     lm = _resolve_lm()
     if lm is None:
         print(
-            "optimization needs a configured provider (MODAL_* or "
-            "FLEET_AGENT_LLM_*); none found",
+            "no provider configured: set MODAL_* or FLEET_AGENT_LLM_* to run "
+            "optimization (use --validate for an offline dataset check)",
             file=sys.stderr,
         )
-        return 1
-
-    train, val = stratified_split(ROUTING_EXAMPLES)
-    print(f"split: {len(train)} train / {len(val)} held-out val examples")
-
-    baseline = FlexToolRouter()
-    baseline_score = _score_router(baseline, lm, val)
-    baseline_mean, baseline_misses, baseline_latency = baseline_score.as_tuple()
-    print(
-        f"baseline held-out mean: {baseline_mean:.3f} "
-        f"({baseline_latency:.2f}s per routed request)"
-    )
-    print(_miss_summary(baseline_misses))
-    baseline_note = _failure_note("baseline:", baseline_score.failures, len(val))
-    if baseline_note:
-        print(baseline_note, file=sys.stderr)
-
-    print(f"compiling GEPA candidate (auto={args.auto}, seed={args.seed}) ...")
-    gepa_log_dir = str(
-        ARTIFACTS_DIR / "gepa_runs" / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    )
-    adapter = dspy.JSONAdapter(use_native_function_calling=True)
-    with dspy.context(lm=lm, adapter=adapter):
-        candidate = compile_gepa_candidate(
-            FlexToolRouter(),
-            trainset=train,
-            valset=val,
-            reflection_lm=lm,  # type: ignore[arg-type]
-            auto=args.auto,
-            seed=args.seed,
-            log_dir=gepa_log_dir,
-        )
-    module_src = _extract_module_src(candidate)
-
-    candidate_score = _score_router(load_candidate(module_src), lm, val)
-    candidate_mean, candidate_misses, candidate_latency = candidate_score.as_tuple()
-    print(
-        f"candidate held-out mean: {candidate_mean:.3f} "
-        f"({candidate_latency:.2f}s per routed request)"
-    )
-    print(_miss_summary(candidate_misses))
-    candidate_note = _failure_note("candidate:", candidate_score.failures, len(val))
-    if candidate_note:
-        print(candidate_note, file=sys.stderr)
-
-    gates_passed = (
-        candidate_mean >= baseline_mean and candidate_mean >= args.min_accuracy
-    )
-    report = _build_report(
-        auto=args.auto,
-        seed=args.seed,
-        train_count=len(train),
-        val_count=len(val),
-        baseline_mean=baseline_mean,
-        candidate_mean=candidate_mean,
-        baseline_misses=baseline_misses,
-        candidate_misses=candidate_misses,
-        baseline_latency=baseline_latency,
-        candidate_latency=candidate_latency,
-        baseline_failures=baseline_score.failures,
-        candidate_failures=candidate_score.failures,
-        gates_passed=gates_passed,
-        min_accuracy=args.min_accuracy,
-        module_src=module_src,
-    )
-    print(report)
-
-    def _log_mlflow_attempt(outcome: str, artifact_dir: Path | None) -> None:
-        """Best-effort MLflow history of every attempt, pass or fail."""
-        run_id = log_optimization_run(
-            outcome=outcome,
-            budget=args.auto,
-            seed=args.seed,
-            split_seed=_SPLIT_SEED,
-            train_examples=len(train),
-            val_examples=len(val),
-            min_accuracy=args.min_accuracy,
-            baseline_mean=baseline_mean,
-            candidate_mean=candidate_mean,
-            baseline_latency_s=baseline_latency,
-            candidate_latency_s=candidate_latency,
-            baseline_failures=baseline_score.failures,
-            candidate_failures=candidate_score.failures,
-            dspy_version=dspy.__version__,
-            artifact_dir=artifact_dir,
-        )
-        if run_id:
-            print(f"mlflow: optimization attempt logged as run {run_id}")
-
-    if not gates_passed:
-        print(
-            "gates failed: candidate did not beat the baseline and/or clear "
-            f"--min-accuracy {args.min_accuracy}; nothing written",
-            file=sys.stderr,
-        )
-        _log_mlflow_attempt("gates-failed", None)
         return 2
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    manifest = {
-        "format": ROUTER_STATE_FORMAT,
-        "created_at": datetime.now(UTC).isoformat(),
-        "dspy_version": dspy.__version__,
-        "budget": args.auto,
-        "seed": args.seed,
-        "split_seed": _SPLIT_SEED,
-        "train_examples": len(train),
-        "val_examples": len(val),
-        "baseline_mean": round(baseline_mean, 4),
-        "candidate_mean": round(candidate_mean, 4),
-        "baseline_mean_latency_s": round(baseline_latency, 3),
-        "candidate_mean_latency_s": round(candidate_latency, 3),
-        "baseline_failures": baseline_score.failures,
-        "candidate_failures": candidate_score.failures,
-        "min_accuracy": args.min_accuracy,
-        "gepa_log_dir": gepa_log_dir,
-    }
-    artifact_dir = _write_artifact(
-        module_src=module_src, report=report, manifest=manifest, timestamp=timestamp
+    train, held_out = split_examples(ROUTING_EXAMPLES, seed=args.split_seed)
+    try:
+        baseline_program = RouterProgram()
+        baseline = score_router(baseline_program.router, lm, held_out)
+        print(
+            f"baseline held-out mean {baseline.mean:.3f} over {len(held_out)} examples"
+        )
+
+        candidate_program = compile_gepa_candidate(
+            RouterProgram(),
+            # GEPA selects its Pareto candidates on the TRAIN split only. Handing it
+            # the held-out set would tune the candidate against the very examples the
+            # gate is measured on, which makes the pass meaningless.
+            trainset=train,
+            valset=train,
+            reflection_lm=lm,
+            auto=args.auto,
+            seed=args.seed,
+            log_dir=args.log_dir,
+        )
+        candidate = score_router(candidate_program.router, lm, held_out)
+        print(
+            f"candidate held-out mean {candidate.mean:.3f} "
+            f"over {len(held_out)} examples"
+        )
+    except Exception as error:  # noqa: BLE001 - provider failures are expected operations
+        print(f"optimization failed: {error}", file=sys.stderr)
+        log_optimization_run(
+            outcome="error",
+            budget=args.auto,
+            seed=args.seed,
+            split_seed=args.split_seed,
+            train_examples=len(train),
+            val_examples=len(held_out),
+            min_accuracy=args.min_accuracy,
+            baseline_mean=0.0,
+            candidate_mean=0.0,
+            baseline_latency_s=0.0,
+            candidate_latency_s=0.0,
+            dspy_version=dspy.__version__,
+        )
+        return 2
+
+    # Byte-identical instructions mean GEPA converged without rewriting anything:
+    # there is no improvement to promote, even if the numbers differ (a depressed
+    # baseline from transient provider failures would otherwise pass a "better"
+    # candidate that changed nothing).
+    baseline_text = _instructions(baseline_program).strip()
+    candidate_text = _instructions(candidate_program).strip()
+    if candidate_text == baseline_text:
+        print(
+            "rejected: GEPA converged without rewriting the router instructions",
+            file=sys.stderr,
+        )
+        log_optimization_run(
+            outcome="gates-failed",
+            budget=args.auto,
+            seed=args.seed,
+            split_seed=args.split_seed,
+            train_examples=len(train),
+            val_examples=len(held_out),
+            min_accuracy=args.min_accuracy,
+            baseline_mean=baseline.mean,
+            candidate_mean=candidate.mean,
+            baseline_latency_s=baseline.mean_latency_s,
+            candidate_latency_s=candidate.mean_latency_s,
+            dspy_version=dspy.__version__,
+            baseline_failures=baseline.failures,
+            candidate_failures=candidate.failures,
+        )
+        return 2
+
+    passed = candidate.mean > baseline.mean and candidate.mean >= args.min_accuracy
+    outcome = "artifact-written" if passed else "gates-failed"
+    train_counts = Counter(_route_of(example) for example in train)
+
+    artifact_dir: Path | None = None
+    if passed:
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        artifact_dir = ARTIFACTS_DIR / f"router_gepa_{stamp}"
+        artifact_dir.mkdir(parents=True, exist_ok=False)
+        state = {
+            "format": ROUTER_STATE_FORMAT,
+            "created_at": datetime.now(UTC).isoformat(),
+            "dspy_version": dspy.__version__,
+            "router_instructions": _instructions(candidate_program),
+            "metrics": {
+                "baseline_mean": baseline.mean,
+                "candidate_mean": candidate.mean,
+                "min_accuracy": args.min_accuracy,
+            },
+        }
+        (artifact_dir / "router_state.json").write_text(
+            json.dumps(state, indent=2) + "\n", encoding="utf-8"
+        )
+        (artifact_dir / "report.md").write_text(
+            _report(
+                outcome=outcome,
+                baseline=baseline,
+                candidate=candidate,
+                min_accuracy=args.min_accuracy,
+                budget=args.auto,
+                split=(len(train), len(held_out)),
+                seed=args.seed,
+            ),
+            encoding="utf-8",
+        )
+        (artifact_dir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "format": ROUTER_STATE_FORMAT,
+                    "created_at": state["created_at"],
+                    "dspy_version": dspy.__version__,
+                    "budget": args.auto,
+                    "seed": args.seed,
+                    "split_seed": args.split_seed,
+                    "train_examples": len(train),
+                    "val_examples": len(held_out),
+                    "train_routes": dict(sorted(train_counts.items())),
+                    "baseline_mean": baseline.mean,
+                    "candidate_mean": candidate.mean,
+                    "baseline_failures": baseline.failures,
+                    "candidate_failures": candidate.failures,
+                    "min_accuracy": args.min_accuracy,
+                    "baseline_misses": _miss_lines(baseline),
+                    "candidate_misses": _miss_lines(candidate),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    log_optimization_run(
+        outcome=outcome,
+        budget=args.auto,
+        seed=args.seed,
+        split_seed=args.split_seed,
+        train_examples=len(train),
+        val_examples=len(held_out),
+        min_accuracy=args.min_accuracy,
+        baseline_mean=baseline.mean,
+        candidate_mean=candidate.mean,
+        baseline_latency_s=baseline.mean_latency_s,
+        candidate_latency_s=candidate.mean_latency_s,
+        dspy_version=dspy.__version__,
+        baseline_failures=baseline.failures,
+        candidate_failures=candidate.failures,
+        artifact_dir=artifact_dir,
     )
-    print(f"artifact: {artifact_dir}")
-    print(f"promote with: python -m evals.optimize --promote --artifact {artifact_dir}")
-    _log_mlflow_attempt("artifact-written", artifact_dir)
+
+    if not passed:
+        print(
+            f"rejected: candidate {candidate.mean:.3f} did not clear "
+            f"baseline {baseline.mean:.3f} and min-accuracy {args.min_accuracy:.2f}",
+            file=sys.stderr,
+        )
+        return 2
+
+    assert artifact_dir is not None
+    print(f"wrote {artifact_dir}")
+    if args.promote:
+        ACTIVE_POINTER.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(artifact_dir / "router_state.json", ACTIVE_POINTER)
+        print(
+            f"promoted to {ACTIVE_POINTER}\n"
+            f"go live: FLEET_AGENT_ROUTER_STATE_PATH={ACTIVE_POINTER}, then restart"
+        )
     return 0
 
 
-def load_candidate(module_src: str) -> FlexToolRouter:
-    """Rebuild a router from evolved source (LM state is never honored)."""
-    router = FlexToolRouter()
-    router.flex.load_state({"module_src": module_src, "lm": None})
-    return router
-
-
-def _build_report(
-    *,
-    auto: str,
-    seed: int,
-    train_count: int,
-    val_count: int,
-    baseline_mean: float,
-    candidate_mean: float,
-    baseline_misses: list[tuple[str, str, str, float]],
-    candidate_misses: list[tuple[str, str, str, float]],
-    baseline_latency: float,
-    candidate_latency: float,
-    baseline_failures: int,
-    candidate_failures: int,
-    gates_passed: bool,
-    min_accuracy: float,
-    module_src: str,
-) -> str:
-    lines = [
-        "# Flex Router GEPA Report",
-        "",
-        f"- budget: auto={auto}, seed={seed}",
-        f"- split: {train_count} train / {val_count} held-out val (stratified)",
-        f"- baseline held-out mean: {baseline_mean:.3f} "
-        f"({baseline_latency:.2f}s per routed request, Deno sandbox)",
-        f"- candidate held-out mean: {candidate_mean:.3f} "
-        f"({candidate_latency:.2f}s per routed request, Deno sandbox)",
-        # dspy.Evaluate scores a raised example 0 and continues, so the two
-        # means above are only comparable when neither side lost examples.
-        f"- raised held-out calls: baseline {baseline_failures}, "
-        f"candidate {candidate_failures} (of {val_count})",
-        f"- gates: candidate >= baseline AND candidate >= {min_accuracy}"
-        f" -> {'PASSED' if gates_passed else 'FAILED'}",
-        "",
-        "## Baseline misses",
-        _miss_summary(baseline_misses),
-        "",
-        "## Candidate misses",
-        _miss_summary(candidate_misses),
-        "",
-        "## Evolved router source (module_src)",
-        "Runs only inside dspy's Deno sandbox; output is coerced to a route",
-        "downstream, so a degenerate candidate degrades to 'direct'.",
-        "",
-        "```python",
-        module_src,
-        "```",
-    ]
-    return "\n".join(lines) + "\n"
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == "__main__":  # pragma: no cover - process entry point
+    raise SystemExit(main())

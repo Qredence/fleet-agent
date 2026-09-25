@@ -8,8 +8,8 @@ import pytest
 from dspy.utils.exceptions import ContextWindowExceededError
 
 from app.agent.engine import AgentRunContext, AgentRunResult, DspyAgentEngine
-from app.agent.signature import AgentSignature
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature
 
 CTX = AgentRunContext(thread_id="t-1", run_id="r-1")
 

@@ -3,20 +3,16 @@ import json
 import dspy
 from httpx import ASGITransport, AsyncClient
 
-from app.agent.approval import ApprovalRegistry
-from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import DspyAgentEngine
+from app.agent.event_bus import RunEventBus
 from app.agent.program import FleetAgent
-from app.agent.tool_registry import ToolMetadata
-from app.agent.tooling import create_dspy_tool
-from app.agui.event_bus import RunEventBus
 from app.main import create_app
 from app.settings import Settings
 from tests.conftest import requires_db
 from tests.helpers.scripted_lm import (
-    FixedRouter,
     ScriptedLM,
     evidence_end,
+    fixed_route_agent,
     submit_call,
     synthesis_call,
 )
@@ -109,9 +105,15 @@ async def test_engine_mode_rejects_invalid_provider_headers():
     assert response.json() == {"detail": "The selected provider settings are invalid."}
 
 
-async def test_fixtures_mode_remains_default():
+async def test_engine_mode_is_the_default():
+    """The product default must be the live DSPy bridge, not the mock replay."""
     app = create_app()
-    assert app.state.settings.agent_mode == "fixtures"
+    assert app.state.settings.agent_mode == "engine"
+
+
+async def test_fixtures_mode_is_an_explicit_opt_in():
+    app = create_app()
+    app.state.settings = Settings(agent_mode="fixtures", llm_api_key=None)
 
     response = await post(app, run_input("any-thread-id"))
     assert response.status_code == 200
@@ -124,148 +126,102 @@ async def test_fixtures_mode_remains_default():
     assert events[-1]["type"] == "RUN_FINISHED"
 
 
-async def test_engine_mode_approval_resume_uses_native_events_and_persists_safe_state(
-    db_sessions,
-):
+async def test_run_approval_travels_with_the_request(db_sessions):
+    """Approval is decided per request, before the model ever sees a tool.
+
+    The endpoint must forward the request's approval decision to the engine
+    builder, so a gated tool is withheld unless this run authorized it.
+    """
     app = create_app()
     app.state.settings = Settings(agent_mode="engine", llm_api_key=None)
     app.state.db_sessions = db_sessions
-    registry = ApprovalRegistry()
-    calls: list[tuple[str, str]] = []
-
-    def write(path: str, content: str) -> str:
-        """Write a test file."""
-        calls.append((path, content))
-        return "write completed"
-
-    tool = create_dspy_tool(write, name="write")
-    policy = {
-        "write": ToolMetadata(
-            name="write",
-            capability="workspace_write",
-            read_only=False,
-            idempotent=False,
-            parallelizable=False,
-            requires_approval=True,
-        )
-    }
-    builder_calls = 0
+    seen: list[frozenset[str] | None] = []
 
     def builder(
         bus: RunEventBus,
         *,
         thread_id: str,
         provider_override=None,
+        approved: frozenset[str] | None = None,
     ) -> DspyAgentEngine:
-        nonlocal builder_calls
-        del thread_id
-        steps = (
-            [[{"name": "write", "args": {"path": "notes.txt", "content": "secret"}}]]
-            if builder_calls == 0
-            else [evidence_end(), synthesis_call(answer="saved")]
-        )
-        builder_calls += 1
-        lifecycle = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
+        del thread_id, provider_override
+        seen.append(approved)
 
         def program_factory() -> FleetAgent:
-            return FleetAgent(
-                tool_profiles={"workspace_write": [tool]},
-                max_iters=4,
-                approval_policy=policy,
-                lifecycle=lifecycle,
-                router=FixedRouter("workspace_write"),
+            return fixed_route_agent(
+                "direct", tool_profiles={"direct": []}, max_iters=2
             )
 
         return DspyAgentEngine(
             program_factory=program_factory,
-            lm=ScriptedLM(steps),  # type: ignore[arg-type]
+            lm=ScriptedLM([evidence_end(), synthesis_call(answer="ok")]),  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(),
-            approval_registry=registry,
-            provider_override=provider_override,
-            lifecycle=lifecycle,
         )
 
     app.state.engine_builder = builder
     thread_id = await seed_thread(app)
-    user = {"id": "user-approval-http", "role": "user", "content": "save"}
+
+    unapproved = run_input(thread_id)
+    unapproved["runId"] = "run-unapproved"
+    approved = run_input(thread_id)
+    approved["runId"] = "run-approved"
+    approved["forwardedProps"] = {"approvedTools": ["write"]}
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        first_response = await client.post(
-            "/api/agent",
-            json={
-                "threadId": thread_id,
-                "runId": "run-approval-http",
-                "state": None,
-                "messages": [user],
-                "tools": [],
-                "context": [],
-                "forwardedProps": None,
-            },
+        first = await client.post(
+            "/api/agent", json=unapproved, headers={"Accept": "text/event-stream"}
         )
-        first_events = [
-            json.loads(line.removeprefix("data: "))
-            for line in first_response.text.splitlines()
-            if line.startswith("data: ")
-        ]
-        interrupt = next(
-            event["outcome"]["interrupts"][0]
-            for event in first_events
-            if event["type"] == "RUN_FINISHED"
-        )
-        assistant = {
-            "id": "msg-run-approval-http",
-            "role": "assistant",
-            "content": "Approval is pending.",
-        }
-        second_response = await client.post(
-            "/api/agent",
-            json={
-                "threadId": thread_id,
-                "runId": "run-approval-http-resume",
-                "state": None,
-                "messages": [user, assistant],
-                "tools": [],
-                "context": [],
-                "forwardedProps": None,
-                "resume": [
-                    {
-                        "interruptId": interrupt["id"],
-                        "status": "resolved",
-                        "payload": {"approved": True},
-                    }
-                ],
-            },
+        second = await client.post(
+            "/api/agent", json=approved, headers={"Accept": "text/event-stream"}
         )
 
-    second_events = [
-        json.loads(line.removeprefix("data: "))
-        for line in second_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    assert first_response.status_code == 200
-    assert second_response.status_code == 200
-    assert first_events[-1]["outcome"]["type"] == "interrupt"
-    assert not any(event["type"] == "RUN_ERROR" for event in first_events)
-    result_events = [
-        event for event in second_events if event["type"] == "TOOL_CALL_RESULT"
-    ]
-    assert len(result_events) == 1
-    assert result_events[0]["toolCallId"] == interrupt["toolCallId"]
-    assert any(event["type"] == "RUN_FINISHED" for event in second_events)
-    assert calls == [("notes.txt", "secret")]
-    public = first_response.text + second_response.text
-    # The approval interrupt carries a bounded preview naming the gated
-    # action's target; the argument values (the file content) never reach
-    # the browser.
-    assert "write notes.txt (6 chars)" in public
-    assert "secret" not in public
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert seen[0] is None, "no approval in the request must mean no approval"
+    assert seen[1] == frozenset({"write"})
 
-    from app.persistence.repositories import DspyHistoriesRepository, RunsRepository
 
-    first_run = await RunsRepository(db_sessions).get("run-approval-http")
-    second_run = await RunsRepository(db_sessions).get("run-approval-http-resume")
-    assert first_run is not None and first_run.status == "interrupted"
-    assert second_run is not None and second_run.status == "completed"
-    assert await DspyHistoriesRepository(db_sessions).get(thread_id) is not None
+async def test_wildcard_approval_is_accepted(db_sessions):
+    app = create_app()
+    app.state.settings = Settings(agent_mode="engine", llm_api_key=None)
+    app.state.db_sessions = db_sessions
+    seen: list[frozenset[str] | None] = []
+
+    def builder(
+        bus: RunEventBus,
+        *,
+        thread_id: str,
+        provider_override=None,
+        approved: frozenset[str] | None = None,
+    ) -> DspyAgentEngine:
+        del thread_id, provider_override
+        seen.append(approved)
+
+        def program_factory() -> FleetAgent:
+            return fixed_route_agent(
+                "direct", tool_profiles={"direct": []}, max_iters=2
+            )
+
+        return DspyAgentEngine(
+            program_factory=program_factory,
+            lm=ScriptedLM([evidence_end(), synthesis_call(answer="ok")]),  # type: ignore[arg-type]
+            adapter=dspy.JSONAdapter(),
+        )
+
+    app.state.engine_builder = builder
+    thread_id = await seed_thread(app)
+    body = run_input(thread_id)
+    body["runId"] = "run-wildcard"
+    body["forwardedProps"] = {"approvedTools": "*"}
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/agent", json=body, headers={"Accept": "text/event-stream"}
+        )
+
+    assert response.status_code == 200
+    assert seen == [frozenset({"*"})]

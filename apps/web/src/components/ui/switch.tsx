@@ -20,6 +20,7 @@ interface SwitchProps extends HTMLAttributes<HTMLDivElement> {
   checked: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  hideLabel?: boolean;
   thumbTransition?: Transition;
   /** Pins the switch to one step of the size ladder (see /docs/sizes).
    *  Omitted, it follows the surrounding SizeProvider. */
@@ -51,7 +52,7 @@ const THUMB_OFFSET = 2;
 const DRAG_DEAD_ZONE = 2;
 
 const Switch = forwardRef<HTMLDivElement, SwitchProps>(
-  ({ label, checked, onToggle, disabled = false, thumbTransition, size, className, ...props }, ref) => {
+  ({ label, checked, onToggle, disabled = false, hideLabel = false, thumbTransition, size, className, ...props }, ref) => {
     const labelId = useId();
     const hasMounted = useRef(false);
     const [hovered, setHovered] = useState(false);
@@ -198,8 +199,8 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
         ref={ref}
         className={cn(
           "relative z-10 flex items-center cursor-pointer select-none touch-none",
-          sizeClasses.gap,
-          sizeClasses.px,
+          !hideLabel && sizeClasses.gap,
+          !hideLabel && sizeClasses.px,
           sizeClasses.variant === "compact" ? "py-1" : "py-2",
           disabled && "opacity-50 pointer-events-none",
           className
@@ -269,11 +270,15 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
         <span
           id={labelId}
           className={cn(
-            // text-box trim recenters the letterforms against the track; the
-            // track is taller than the label, so layout doesn't change.
-            "[text-box:trim-both_cap_alphabetic] transition-[color] duration-80",
-            sizeClasses.text,
-            checked ? "text-foreground" : "text-muted-foreground"
+            hideLabel
+              ? "sr-only"
+              : cn(
+                  // text-box trim recenters the letterforms against the track; the
+                  // track is taller than the label, so layout doesn't change.
+                  "[text-box:trim-both_cap_alphabetic] transition-[color] duration-80",
+                  sizeClasses.text,
+                  checked ? "text-foreground" : "text-muted-foreground"
+                )
           )}
         >
           {label}

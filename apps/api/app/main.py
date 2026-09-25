@@ -6,24 +6,20 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError
 
-from app.agent.approval import APPROVAL_REGISTRY
 from app.agent.factory import make_engine_builder
 from app.api.agent import router as agent_router
 from app.api.artifacts import router as artifacts_router
 from app.api.health import router as health_router
 from app.api.metrics import router as metrics_router
-from app.api.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
+from app.api.middleware import RequestGuardMiddleware, RequestIdMiddleware
 from app.api.projects import router as projects_router
 from app.api.threads import router as threads_router
 from app.api.tools import router as tools_router
 from app.persistence.db import build_engine, build_sessionmaker
 from app.persistence.repositories import RunsRepository
 from app.services.artifact_storage import LocalArtifactStorage
-from app.services.durable_approvals import (
-    resumable_run_ids,
-    sweep_expired_checkpoints,
-)
 from app.services.metrics import MetricsRegistry
 from app.services.mlflow_observability import configure_mlflow
 from app.settings import get_settings
@@ -36,25 +32,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Opt-in dspy tracing into MLflow: enabled once, before any predictor
     # call. Off by default; see app/services/mlflow_observability.py.
     configure_mlflow(app.state.settings)
-    # Server-restart reconciliation: in-memory run state is gone, but runs
-    # that parked a durable approval checkpoint stay interrupted and
-    # resumable; everything else settles as failed.
-    sessions = app.state.db_sessions
-    APPROVAL_REGISTRY.clear()
-    resumable = await resumable_run_ids(sessions)
-    orphaned = await RunsRepository(sessions).mark_orphaned_interrupted(
-        keep_run_ids=resumable
-    )
-    if orphaned:
-        logger.warning("marked %d orphaned runs as failed", orphaned)
-    if resumable:
-        logger.info(
-            "preserved %d interrupted runs with resumable approval checkpoints",
-            len(resumable),
+    # Server-restart reconciliation: no in-memory run state survives a restart,
+    # so any run still marked live is stale. One statement settles them.
+    #
+    # A database outage must not stop the service from booting: the operator
+    # still needs /health, and run traffic fails with its own clear error. The
+    # previous lifespan made the database a hard prerequisite for startup.
+    #
+    # Only connection failures degrade here. An unreachable host raises OSError
+    # (or SQLAlchemy's OperationalError once the driver wraps it); a schema
+    # mismatch raises ProgrammingError and still fails startup loudly instead of
+    # being misreported as "the database is down".
+    try:
+        orphaned = await RunsRepository(
+            app.state.db_sessions
+        ).mark_orphaned_interrupted()
+    except (OSError, OperationalError) as exc:
+        logger.warning(
+            "skipped restart reconciliation: database unavailable (exception_type=%s)",
+            type(exc).__name__,
         )
-    swept = await sweep_expired_checkpoints(sessions)
-    if swept:
-        logger.info("swept %d expired approval checkpoints", swept)
+    else:
+        if orphaned:
+            logger.warning("marked %d orphaned runs as failed", orphaned)
     if app.state.settings.api_key is None:
         logger.warning(
             "FLEET_AGENT_API_KEY is unset — the API runs in open local mode. "
@@ -87,13 +87,12 @@ def create_app() -> FastAPI:
     app.state.engine_builder = make_engine_builder(
         settings,
         storage=app.state.artifact_storage,
-        sessions=app.state.db_sessions,
     )
     app.state.run_semaphore = asyncio.Semaphore(settings.max_concurrent_runs)
     app.state.metrics = MetricsRegistry()
 
+    app.add_middleware(RequestGuardMiddleware, settings=settings)
     app.add_middleware(RequestIdMiddleware)
-    app.add_middleware(SecurityHeadersMiddleware, settings=settings)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

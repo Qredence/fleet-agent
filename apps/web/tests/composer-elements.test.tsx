@@ -151,11 +151,12 @@ describe('composer preferences', () => {
         name: /GPT-4o mini \(OpenAI\).*openai\/gpt-4o-mini.*via OpenRouter/i,
       }),
     ).toBeInTheDocument()
+    // OpenCode Zen has no API key configured, so its models must not appear
     expect(
-      screen.getByRole('menuitemradio', {
-        name: /Muse Spark 1\.3.*muse-spark-1\.3-contributor-free.*via OpenCode Zen/i,
+      screen.queryByRole('menuitemradio', {
+        name: /via OpenCode Zen/i,
       }),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('menuitemradio', {
         name: /zai-org\/GLM-5\.3-Flash.*via modal gateway/i,
@@ -196,40 +197,16 @@ describe('composer preferences', () => {
     ) as { activeProviderId?: string }
     expect(stored.activeProviderId).toBe('modal-gw')
 
-    // Effort and speed are local preferences: they change the menu state
-    // without changing the selected model route.
-    await user.click(await screen.findByRole('menuitemradio', { name: /^Low/ }))
+    // Reasoning effort is controlled via the assistant-ui element
+    await user.click(await screen.findByRole('radio', { name: /^Low/ }))
     expect(
-      screen.getByRole('menuitemradio', { name: /^Low/ }),
+      screen.getByRole('radio', { name: /^Low/ }),
     ).toHaveAttribute('aria-checked', 'true')
     expect(getModelTrigger()).toHaveTextContent('zai-org/GLM-5.3-Flash')
 
-    // Speed is a plain menu item, so selecting it closes the menu.
-    const fastMode = await screen.findByRole('menuitem', { name: /fast mode/i })
-    expect(fastMode.querySelectorAll('svg')).toHaveLength(2)
-    await user.click(fastMode)
-    await waitFor(() => {
-      expect(getModelTrigger()).toHaveAttribute('aria-expanded', 'false')
-    })
-
-    await user.click(getModelTrigger())
-    expect(
-      (await screen.findByRole('menuitem', { name: /fast mode/i })).querySelectorAll(
-        'svg',
-      ),
-    ).toHaveLength(1)
-    expect(getModelTrigger()).toHaveTextContent('zai-org/GLM-5.3-Flash')
-
-    // Access lives in the model menu with the other local controls, and the
-    // compact action bar no longer carries its own trigger.
-    const readOnly = await screen.findByRole('menuitemradio', {
-      name: /read-only/i,
-    })
-    await user.click(readOnly)
-    expect(readOnly).toHaveAttribute('aria-checked', 'true')
-    expect(
-      screen.queryByRole('button', { name: 'Access mode' }),
-    ).not.toBeInTheDocument()
+    // Fast mode and Access are removed from the menu
+    expect(screen.queryByText(/fast mode/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Access$/i)).not.toBeInTheDocument()
 
     await user.keyboard('{Escape}')
     await waitFor(() => {
@@ -277,12 +254,17 @@ describe('composer preferences', () => {
     expect(
       await screen.findByText(/OpenRouter has no API key yet/i),
     ).toBeInTheDocument()
-    const openRouterModel = await screen.findByRole('menuitemradio', {
-      name: /GPT-4o mini \(OpenAI\).*via OpenRouter/i,
-    })
-    expect(openRouterModel).toHaveAttribute('aria-disabled', 'true')
-    await user.click(openRouterModel)
-    expect(trigger).toHaveTextContent('Server default model')
+    // Unconfigured OpenRouter models do not appear; only functional models appear
+    expect(
+      screen.queryByRole('menuitemradio', {
+        name: /via OpenRouter/i,
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitemradio', {
+        name: /Server default model/i,
+      }),
+    ).toBeInTheDocument()
 
     // The composer names the fallback and keeps the stored choice, so a key
     // added later resumes the provider the user picked.
@@ -313,13 +295,12 @@ describe('composer preferences', () => {
 
     await user.click(getModelTrigger())
     await user.click(
-      await screen.findByRole('menuitemradio', { name: /read-only/i }),
+      await screen.findByRole('radio', { name: /^Low/ }),
     )
-    const fastModeBefore = await screen.findByRole('menuitem', {
-      name: /fast mode/i,
-    })
-    expect(fastModeBefore.querySelectorAll('svg')).toHaveLength(2)
-    await user.click(fastModeBefore)
+    expect(
+      screen.getByRole('radio', { name: /^Low/ }),
+    ).toHaveAttribute('aria-checked', 'true')
+    await user.keyboard('{Escape}')
     await waitFor(() => {
       expect(getModelTrigger()).toHaveAttribute('aria-expanded', 'false')
     })
@@ -332,13 +313,8 @@ describe('composer preferences', () => {
 
     await user.click(getModelTrigger())
     expect(
-      await screen.findByRole('menuitemradio', { name: /read-only/i }),
+      await screen.findByRole('radio', { name: /^Low/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    expect(
-      (await screen.findByRole('menuitem', { name: /fast mode/i })).querySelectorAll(
-        'svg',
-      ),
-    ).toHaveLength(1)
     expect(getModelTrigger()).toHaveTextContent('Server default model')
   })
 })
@@ -367,12 +343,9 @@ describe('composer context and trigger popovers', () => {
     await user.click(
       screen.getByRole('button', { name: 'Model and reasoning preferences' }),
     )
-    expect(await screen.findByText('Access')).toBeInTheDocument()
-    expect(
-      await screen.findByRole('menuitemradio', {
-        name: /full access.*session preference only/i,
-      }),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Reasoning effort')).toBeInTheDocument()
+    expect(screen.queryByText(/^Access$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/fast mode/i)).not.toBeInTheDocument()
   })
 
   it('filters and inserts slash commands with keyboard navigation and restores focus', async () => {

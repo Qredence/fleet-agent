@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ComponentProps } from 'react'
 import userEvent from '@testing-library/user-event'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
 import * as openrouterAuth from '@/lib/openrouter-auth'
@@ -12,11 +14,47 @@ import {
   SERVER_DEFAULT_ID,
 } from '@/lib/providers'
 
+function renderDialog(props: ComponentProps<typeof SettingsDialog>) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SettingsDialog {...props} />
+    </QueryClientProvider>,
+  )
+}
+
 describe('SettingsDialog', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
     vi.restoreAllMocks()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (String(url).includes('/models')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [
+                {
+                  id: 'anthropic/claude-3.5-sonnet',
+                  name: 'Claude 3.5 Sonnet',
+                },
+                { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini' },
+              ],
+            }),
+          })
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+        })
+      }),
+    )
   })
 
   afterEach(() => {
@@ -24,7 +62,7 @@ describe('SettingsDialog', () => {
   })
 
   it('renders disconnected state when no API key is present', () => {
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     expect(screen.getByText(/workspace settings/i)).toBeInTheDocument()
     // Both OpenRouter and OpenCode Zen start in the disconnected state.
@@ -40,9 +78,31 @@ describe('SettingsDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('switches settings sections from the sidebar and compact selector', async () => {
+    const user = userEvent.setup()
+    renderDialog({ open: true, onOpenChange: vi.fn() })
+
+    await user.click(screen.getByRole('button', { name: 'Models' }))
+    expect(
+      screen.getByRole('region', { name: 'models settings' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /claude 3\.5 sonnet/i }),
+    ).toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Settings section' }),
+      'appearance',
+    )
+    expect(
+      screen.getByRole('region', { name: 'appearance settings' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument()
+  })
+
   it('allows manual API key entry', async () => {
     const user = userEvent.setup()
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     const toggleButton = screen.getByRole('button', {
       name: /or paste api key manually/i,
@@ -62,7 +122,7 @@ describe('SettingsDialog', () => {
     const user = userEvent.setup()
     openrouterAuth.setApiKey('sk-or-v1-9876543210abcdef')
 
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     // OpenRouter is now connected; OpenCode Zen stays disconnected.
     expect(screen.getAllByText('Connected').length).toBe(1)
@@ -78,11 +138,12 @@ describe('SettingsDialog', () => {
     expect(openrouterAuth.getApiKey()).toBeNull()
   })
 
-  it('toggles custom model selection and selects popular models', async () => {
+  it('toggles custom model selection and selects from fetched models', async () => {
     const user = userEvent.setup()
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
-    const claudeButton = screen.getByRole('button', {
+    await user.click(screen.getByRole('button', { name: 'Models' }))
+    const claudeButton = await screen.findByRole('button', {
       name: /claude 3.5 sonnet/i,
     })
     await user.click(claudeButton)
@@ -92,7 +153,7 @@ describe('SettingsDialog', () => {
 
   it('adds a custom provider through the settings form and activates it', async () => {
     const user = userEvent.setup()
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     await user.click(screen.getByRole('button', { name: /add provider/i }))
 
@@ -156,7 +217,7 @@ describe('SettingsDialog', () => {
     )
     loadProviderStore()
 
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     expect(getActiveProviderId()).toBe('profile-modal')
 
@@ -172,7 +233,7 @@ describe('SettingsDialog', () => {
   it('activates the server default provider from the settings dialog', async () => {
     const user = userEvent.setup()
     openrouterAuth.setApiKey('sk-or-v1-9876543210abcdef')
-    render(<SettingsDialog open={true} onOpenChange={vi.fn()} />)
+    renderDialog({ open: true, onOpenChange: vi.fn() })
 
     // The migrated OpenRouter key makes OpenRouter the active provider.
     expect(getActiveProviderId()).toBe('openrouter')

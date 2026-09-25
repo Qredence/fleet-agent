@@ -7,11 +7,11 @@
 # hosts are not supported, because CORS preflight requests carry no portal
 # authentication. The API therefore gets no portal of its own.
 #
-# The API runs the default fixtures mode, which replays canonical NDJSON mock
-# streams and needs no provider credentials. To exercise the live DSPy program
-# through the portal instead, set FLEET_AGENT_AGENT_MODE=engine together with
-# FLEET_AGENT_LLM_API_KEY in apps/api/.env (or in the `env` block below) and
-# run `amp orb service restart api`.
+# The API defaults to `engine` mode, which runs the live DSPy program, so this
+# orb needs provider credentials: set FLEET_AGENT_LLM_API_KEY (or the MODAL_*
+# trio) in apps/api/.env, or set FLEET_AGENT_AGENT_MODE=fixtures there to replay
+# canonical NDJSON mock streams without a provider. Then run
+# `amp orb service restart api`.
 services:
   api:
     command: uv run uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
@@ -27,4 +27,4 @@ services:
     health: /
     portal:
       title: Fleet Agent
-      description: Fixtures mode. No provider credentials required.
+      description: DSPy agent workbench. The API needs provider credentials.

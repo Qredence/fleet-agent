@@ -11,7 +11,6 @@ agent endpoint only. Two header families are accepted:
 
 from __future__ import annotations
 
-import hashlib
 import ipaddress
 import re
 import socket
@@ -41,9 +40,8 @@ class ProviderOverrideError(ValueError):
 class ProviderOverride:
     """Ephemeral provider settings for one agent request.
 
-    The key is intentionally never serialized, logged, or included in a
-    public result. ``fingerprint`` is only used to bind an approval resume to
-    the provider context that created its hidden continuation.
+    The key is intentionally never serialized, logged, or included in a public
+    result.
     """
 
     api_key: str
@@ -54,19 +52,6 @@ class ProviderOverride:
     # exists precisely for gateways that reject native tool calls.
     response_format: ResponseFormat | None = None
     messages_format: MessagesFormat = "system_role"
-
-    @property
-    def fingerprint(self) -> str:
-        material = "\0".join(
-            (
-                self.api_key,
-                self.model or "",
-                self.api_base or "",
-                self.response_format or "",
-                self.messages_format,
-            )
-        )
-        return hashlib.sha256(material.encode()).hexdigest()
 
     def __repr__(self) -> str:
         return (

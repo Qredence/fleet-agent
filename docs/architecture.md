@@ -9,7 +9,8 @@ Obsidian, mermaid.live). An interactive, themed version is also available in
 [`docs/architecture.html`](architecture.html) (open in a browser).
 
 - **Frontend**: React 19 + Vite, assistant-ui 0.15 + AG-UI process panel.
-- **Backend**: FastAPI, DSPy ReActV2 / staged strategy, Pinia-free AG-UI SSE.
+- **Backend**: FastAPI, one DSPy program (routed ReActV2 evidence loops + a
+  streamed synthesizer), AG-UI over SSE.
 - **Data**: PostgreSQL 17 (`compose.yaml`), Alembic migrations, local artifacts.
 
 ---
@@ -62,10 +63,10 @@ flowchart TB
     end
 
     subgraph AGENTSVC["app.agent"]
-        E["AgentEngine (Protocol)\nDspyAgentEngine | StagedDspyEngine"]
+        E["AgentEngine (Protocol)\nDspyAgentEngine"]
         SIG["AgentSignature fields:\nanswer · process_summary · key_decisions · caveats"]
         F["factory & EngineBuilder\nruns create run-scoped engines"]
-        TC["ToolRegistry + catalog\n(search_docs · write_report · get_current_time · web_*)"]
+        TC["TOOL_SPECS + ToolRegistry\n(search_docs · write_report · get_current_time · web_*)"]
         CB["AgUiRunCallback\n(DSPy → domain events)"]
     end
 

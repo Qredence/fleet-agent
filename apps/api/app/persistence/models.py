@@ -196,28 +196,6 @@ class Source(Base):
     )
 
 
-class SourceOccurrence(Base):
-    """Every discovery of a canonical source, including repeated runs."""
-
-    __tablename__ = "source_occurrences"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    source_row_id: Mapped[str] = mapped_column(
-        ForeignKey("sources.row_id", ondelete="CASCADE")
-    )
-    run_id: Mapped[str] = mapped_column(String)
-    tool_call_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    title: Mapped[str | None] = mapped_column(String, nullable=True)
-    source_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    uri: Mapped[str | None] = mapped_column(String, nullable=True)
-    excerpt: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    __table_args__ = (Index("ix_source_occurrences_source", "source_row_id"),)
-
-
 class Artifact(Base):
     __tablename__ = "artifacts"
 
@@ -235,50 +213,4 @@ class Artifact(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
-    )
-
-
-class ApprovalCheckpointRow(Base):
-    """Durable pause/resume state for one policy-gated tool batch.
-
-    Server-side only: ``checkpoint_json`` carries the hidden continuation
-    (DSPy history, tool-call batch, arguments) and is never exposed through
-    any API. Rows expire by wall clock so an approval can survive a server
-    restart, and terminal run settlement deletes pending rows.
-    """
-
-    __tablename__ = "approval_checkpoints"
-
-    interrupt_id: Mapped[str] = mapped_column(String, primary_key=True)
-    thread_id: Mapped[str] = mapped_column(
-        ForeignKey("threads.id", ondelete="CASCADE"), index=True
-    )
-    run_id: Mapped[str] = mapped_column(
-        ForeignKey("runs.id", ondelete="CASCADE"), index=True
-    )
-    provider_binding: Mapped[str] = mapped_column(String)
-    profile_name: Mapped[str] = mapped_column(String)
-    tool_name: Mapped[str] = mapped_column(String)
-    tool_call_id: Mapped[str] = mapped_column(String)
-    assistant_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String, default="pending", server_default="pending"
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    checkpoint_json: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    schema_version: Mapped[int] = mapped_column(default=1, server_default=text("1"))
-    dspy_version: Mapped[str] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    __table_args__ = (
-        Index(
-            "ix_approval_checkpoints_run_status",
-            "run_id",
-            "status",
-        ),
     )

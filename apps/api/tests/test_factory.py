@@ -1,9 +1,13 @@
+import asyncio
+
 import pytest
 from pydantic import SecretStr
 
 from app.agent.engine import DspyAgentEngine
-from app.agent.factory import build_dspy_engine
+from app.agent.event_bus import RunEventBus
+from app.agent.factory import build_dspy_engine, make_engine_builder
 from app.agent.openai_compatible import OpenAICompatibleLM
+from app.services.artifact_storage import LocalArtifactStorage
 from app.settings import Settings
 
 
@@ -20,6 +24,32 @@ def make_settings(**overrides) -> Settings:
 def test_factory_builds_engine():
     engine = build_dspy_engine(make_settings())
     assert isinstance(engine, DspyAgentEngine)
+
+
+def test_factory_omits_workspace_tools_without_production_root(tmp_path):
+    settings = make_settings(environment="production", workspace_root=None)
+    loop = asyncio.new_event_loop()
+    bus = RunEventBus(loop)
+    try:
+        builder = make_engine_builder(
+            settings,
+            storage=LocalArtifactStorage(tmp_path),
+        )
+        engine = builder(bus, thread_id="thread-test")
+        program = engine._program_factory()
+    finally:
+        loop.close()
+
+    for route in ("workspace_read", "workspace_write", "workspace_shell"):
+        assert not set(program.tool_names[route]) & {
+            "ls",
+            "find",
+            "grep",
+            "read",
+            "write",
+            "edit",
+            "bash",
+        }
 
 
 def test_api_key_never_appears_in_reprs():
@@ -78,29 +108,6 @@ def test_web_tool_bundle_is_optional_and_owns_cleanup():
 def test_base_url_defaults_to_none():
     engine = build_dspy_engine(make_settings())
     assert engine._lm.kwargs.get("api_base") is None
-
-
-def test_factory_selects_opt_in_staged_program(tmp_path):
-    import asyncio
-
-    from app.agent.factory import make_engine_builder
-    from app.agent.staged import StagedDspyEngine
-    from app.agui.event_bus import RunEventBus
-    from app.services.artifact_storage import LocalArtifactStorage
-
-    settings = make_settings(reasoning_program="staged")
-    builder = make_engine_builder(
-        settings, storage=LocalArtifactStorage(tmp_path / "artifacts")
-    )
-    loop = asyncio.new_event_loop()
-    try:
-        engine = builder(RunEventBus(loop), thread_id="thread-1")
-    finally:
-        loop.close()
-
-    assert isinstance(engine, StagedDspyEngine)
-    assert engine._registry.get("write_report").metadata.read_only is False
-    assert engine._registry.get("write_report").metadata.parallelizable is False
 
 
 @pytest.mark.parametrize(

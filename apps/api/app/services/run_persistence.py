@@ -24,9 +24,9 @@ from app.contracts.domain import (
     ArtifactStarted,
     SourceDiscovered,
 )
+from app.persistence.branch import nearest_anchor
 from app.persistence.models import DspyHistory, Message, Run, Thread
 from app.persistence.repositories import (
-    ApprovalCheckpointsRepository,
     ArtifactsRepository,
     DspyHistoriesRepository,
     MessagesRepository,
@@ -35,6 +35,7 @@ from app.persistence.repositories import (
     RunStatesRepository,
     SourcesRepository,
 )
+from app.services.run_input import extract_message_text
 
 AnyDomainEvent = ArtifactStarted | ArtifactReady | ArtifactFailed | SourceDiscovered
 
@@ -85,14 +86,6 @@ class RunPersistence:
         ]
         selected = user_message or _last_user_message_json(input_data)
         input_message_id, continuation_message_id = _branch_anchor(messages)
-        if input_data.resume:
-            # Native AG-UI resumes submit a fresh run id while carrying the
-            # assistant message that owns the live in-memory checkpoint. Use
-            # that message as the branch anchor so the interrupted public
-            # state is restored during the continuation.
-            resume_message_id = _resume_assistant_message_id(messages)
-            if resume_message_id is not None:
-                continuation_message_id = resume_message_id
         if selected is not None:
             input_message_id = str(
                 input_message_id or selected.get("id") or f"message-{input_data.run_id}"
@@ -210,33 +203,6 @@ class RunPersistence:
                 )
                 return run
 
-    async def reopen_interrupted_run(self, *, thread_id: str, run_id: str) -> bool:
-        """Requeue a same-id native resume without restoring hidden state."""
-
-        async with self._sessions() as session:
-            async with session.begin():
-                run = await session.get(Run, run_id, with_for_update=True)
-                if run is None or run.thread_id != thread_id:
-                    return False
-                if run.status != "interrupted":
-                    return False
-                run.status = "queued"
-                run.started_at = None
-                run.finished_at = None
-                run.termination_reason = None
-                run.error_code = None
-                run.output_message_id = None
-                await session.execute(
-                    update(Thread)
-                    .where(Thread.id == thread_id)
-                    .values(
-                        last_run_id=run_id,
-                        active_head_message_id=run.input_message_id,
-                        updated_at=datetime.now(UTC),
-                    )
-                )
-                return True
-
     async def mark_running(
         self, *, run_id: str, state_json: dict[str, Any] | None = None
     ) -> None:
@@ -258,56 +224,6 @@ class RunPersistence:
     async def get_run(self, run_id: str) -> Run | None:
         async with self._sessions() as session:
             return await session.get(Run, run_id)
-
-    async def run_started(
-        self, *, thread_id: str, run_id: str, user_message: dict[str, Any]
-    ) -> None:
-        """Compatibility entry point for direct coordinator tests."""
-
-        message_id = str(user_message.get("id") or f"message-{run_id}")
-        async with self._sessions() as session:
-            async with session.begin():
-                thread = await session.get(Thread, thread_id, with_for_update=True)
-                if thread is None:
-                    raise RunReservationError(ReservationErrorCode.THREAD_NOT_FOUND)
-                existing = await session.get(Run, run_id, with_for_update=True)
-                existing_message = await session.scalar(
-                    select(Message).where(
-                        Message.thread_id == thread_id,
-                        Message.message_id == message_id,
-                    )
-                )
-                if existing is None:
-                    await RunsRepository.reserve_in_session(
-                        session,
-                        run_id=run_id,
-                        thread_id=thread_id,
-                        input_message_id=message_id,
-                        continuation_message_id=thread.active_head_message_id,
-                    )
-                await MessagesRepository.upsert_in_session(
-                    session,
-                    thread_id=thread_id,
-                    role="user",
-                    message_json=user_message,
-                    message_id=message_id,
-                    parent_message_id=(
-                        existing_message.parent_message_id
-                        if existing_message is not None
-                        else thread.active_head_message_id
-                    ),
-                    format="ag-ui/v1",
-                )
-                await session.execute(
-                    update(Thread)
-                    .where(Thread.id == thread_id)
-                    .values(
-                        last_run_id=run_id,
-                        active_head_message_id=message_id,
-                        updated_at=datetime.now(UTC),
-                    )
-                )
-                await RunsRepository.mark_running_in_session(session, run_id=run_id)
 
     async def get_latest_state(
         self,
@@ -332,19 +248,81 @@ class RunPersistence:
         head_message_id: str | None | object = _UNSET,
     ) -> dspy.History | None:
         repository = DspyHistoriesRepository(self._sessions)
-        if (
-            head_message_id is _UNSET
-            or head_message_id is None
-            or not isinstance(head_message_id, str)
-        ):
-            return _history_from_record(await repository.get(thread_id))
-        async with self._sessions() as session:
-            record = await _nearest_history(session, thread_id, head_message_id)
-            if record is None:
-                record = await repository.get(thread_id)
-            return _history_from_record(record)
+        record = None
+        if head_message_id is None:
+            return None
+        if head_message_id is _UNSET or not isinstance(head_message_id, str):
+            record = await repository.get(thread_id)
+        else:
+            async with self._sessions() as session:
+                record = await _nearest_history(session, thread_id, head_message_id)
+        history = _history_from_record(record)
+        if history is not None and getattr(history, "messages", None):
+            return history
 
-    async def settle_completed(
+        async with self._sessions() as session:
+            head_id = head_message_id if isinstance(head_message_id, str) else None
+            return await self._history_from_messages_in_session(
+                session,
+                thread_id=thread_id,
+                head_message_id=head_id,
+            )
+
+    @staticmethod
+    async def _history_from_messages_in_session(
+        session: AsyncSession,
+        *,
+        thread_id: str,
+        head_message_id: str | None = None,
+    ) -> dspy.History | None:
+        """Reconstruct prior conversation turns from Message branch nodes."""
+        rows = list(
+            (
+                await session.execute(
+                    select(Message)
+                    .where(Message.thread_id == thread_id)
+                    .order_by(Message.created_at.asc(), Message.id.asc())
+                )
+            ).scalars()
+        )
+        if not rows:
+            return None
+
+        branch_rows: list[Message]
+        if head_message_id is not None:
+            by_id = {m.message_id: m for m in rows}
+            curr: str | None = head_message_id
+            seen: set[str] = set()
+            reversed_branch: list[Message] = []
+            while curr is not None and curr in by_id and curr not in seen:
+                seen.add(curr)
+                node = by_id[curr]
+                reversed_branch.append(node)
+                curr = node.parent_message_id
+            if not reversed_branch:
+                return None
+            branch_rows = list(reversed(reversed_branch))
+        else:
+            branch_rows = rows
+
+        turns: list[dict[str, Any]] = []
+        pending_user: str | None = None
+        for m in branch_rows:
+            if not isinstance(m.message_json, dict):
+                continue
+            text = extract_message_text(m.message_json.get("content"))
+            if m.role == "user":
+                pending_user = text
+            elif m.role == "assistant" and pending_user:
+                if text:
+                    turns.append({"user_request": pending_user, "answer": text})
+                pending_user = None
+
+        if not turns:
+            return None
+        return dspy.History(messages=turns)
+
+    async def run_completed(
         self,
         *,
         thread_id: str,
@@ -384,12 +362,9 @@ class RunPersistence:
                 )
                 if not changed:
                     return False
-                # Terminal settlement kills any dead continuation: a
-                # pending approval checkpoint for this run can no longer
-                # be resumed once the run has completed.
-                await ApprovalCheckpointsRepository.delete_pending_for_run_in_session(
-                    session, run_id=run_id
-                )
+                # Terminal settlement records the final snapshot so a follow-up
+                # turn continues from what actually settled, not from a stale
+                # intermediate state.
                 await RunStatesRepository.upsert_in_session(
                     session,
                     thread_id=thread_id,
@@ -416,7 +391,7 @@ class RunPersistence:
                 )
                 return True
 
-    async def settle_failed(
+    async def run_failed(
         self,
         *,
         thread_id: str,
@@ -433,121 +408,6 @@ class RunPersistence:
             error_code=result.error_code or "agent_no_output",
             state_json=state_json,
             result=result,
-        )
-
-    async def settle_interrupted(
-        self,
-        *,
-        thread_id: str,
-        run_id: str,
-        result: AgentRunResult,
-        state_json: dict[str, Any],
-        assistant_message_id: str,
-    ) -> bool:
-        """Persist a public approval pause without hidden history.
-
-        The assistant fallback makes the branch anchor durable if the browser
-        submits its approval before its own history write reaches the API. It
-        contains only tool identity and empty/safe arguments; the real call
-        arguments and DSPy history remain in the live approval registry.
-        """
-
-        async with self._sessions() as session:
-            async with session.begin():
-                run = await session.get(Run, run_id, with_for_update=True)
-                if run is None or run.thread_id != thread_id:
-                    return False
-                if run.status not in {"queued", "running"}:
-                    return False
-                await MessagesRepository.upsert_in_session(
-                    session,
-                    thread_id=thread_id,
-                    role="assistant",
-                    message_json=_interrupted_assistant_message(
-                        assistant_message_id, result
-                    ),
-                    message_id=assistant_message_id,
-                    parent_message_id=run.input_message_id,
-                    format="ag-ui/v1",
-                )
-                changed = await RunsRepository.settle_in_session(
-                    session,
-                    run_id=run_id,
-                    status="interrupted",
-                    termination_reason=result.termination_reason or "approval_required",
-                    token_usage=result.usage or None,
-                    error_code=None,
-                    output_message_id=assistant_message_id,
-                )
-                if not changed:
-                    return False
-                await RunStatesRepository.upsert_in_session(
-                    session,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    head_message_id=assistant_message_id,
-                    state_json=state_json,
-                )
-                await session.execute(
-                    update(Thread)
-                    .where(
-                        Thread.id == thread_id,
-                        Thread.active_head_message_id == run.input_message_id,
-                    )
-                    .values(
-                        active_head_message_id=assistant_message_id,
-                        updated_at=datetime.now(UTC),
-                    )
-                )
-                return True
-
-    async def run_completed(
-        self,
-        *,
-        thread_id: str,
-        run_id: str,
-        result: AgentRunResult,
-        state_json: dict[str, Any],
-        assistant_message_id: str,
-    ) -> bool:
-        return await self.settle_completed(
-            thread_id=thread_id,
-            run_id=run_id,
-            result=result,
-            state_json=state_json,
-            assistant_message_id=assistant_message_id,
-        )
-
-    async def run_failed(
-        self,
-        *,
-        thread_id: str,
-        run_id: str,
-        result: AgentRunResult,
-        state_json: dict[str, Any],
-    ) -> bool:
-        return await self.settle_failed(
-            thread_id=thread_id,
-            run_id=run_id,
-            result=result,
-            state_json=state_json,
-        )
-
-    async def run_interrupted(
-        self,
-        *,
-        thread_id: str,
-        run_id: str,
-        result: AgentRunResult,
-        state_json: dict[str, Any],
-        assistant_message_id: str,
-    ) -> bool:
-        return await self.settle_interrupted(
-            thread_id=thread_id,
-            run_id=run_id,
-            result=result,
-            state_json=state_json,
-            assistant_message_id=assistant_message_id,
         )
 
     async def run_cancelled(
@@ -591,12 +451,9 @@ class RunPersistence:
                 )
                 if not changed:
                     return False
-                # Terminal settlement kills any dead continuation: a
-                # pending approval checkpoint for this run can no longer
-                # be resumed once the run has settled.
-                await ApprovalCheckpointsRepository.delete_pending_for_run_in_session(
-                    session, run_id=run_id
-                )
+                # Terminal settlement records the final snapshot so a follow-up
+                # turn continues from what actually settled, not from a stale
+                # intermediate state.
                 await RunStatesRepository.upsert_in_session(
                     session,
                     thread_id=thread_id,
@@ -692,48 +549,6 @@ def _last_user_message_json(input_data: RunAgentInput) -> dict[str, Any] | None:
     return None
 
 
-def _resume_assistant_message_id(
-    messages: Sequence[dict[str, Any]],
-) -> str | None:
-    for message in reversed(messages):
-        if message.get("role") != "assistant":
-            continue
-        message_id = message.get("id")
-        if isinstance(message_id, str) and message_id:
-            return message_id
-    return None
-
-
-def _interrupted_assistant_message(
-    assistant_message_id: str, result: AgentRunResult
-) -> dict[str, Any]:
-    """Build a minimal, non-sensitive fallback assistant branch node."""
-
-    content: list[dict[str, Any]] = []
-    for interrupt in result.interrupts:
-        if not interrupt.tool_call_id:
-            continue
-        tool_name = "tool"
-        metadata = interrupt.metadata
-        if isinstance(metadata, dict) and isinstance(metadata.get("toolName"), str):
-            tool_name = metadata["toolName"]
-        content.append(
-            {
-                "type": "tool-call",
-                "toolCallId": interrupt.tool_call_id,
-                "toolName": tool_name,
-                "args": {},
-                "argsText": "{}",
-            }
-        )
-    return {
-        "id": assistant_message_id,
-        "role": "assistant",
-        "content": content,
-        "status": {"type": "complete", "reason": "approval_required"},
-    }
-
-
 def _branch_anchor(
     messages: Sequence[dict[str, Any]],
 ) -> tuple[str | None, str | None]:
@@ -767,7 +582,7 @@ async def _validate_message_reference(
     *,
     thread_id: str,
     message_id: str | None,
-    label: str,
+    label: str = "",
     allow_missing: bool,
 ) -> Message | None:
     if message_id is None:
@@ -797,40 +612,13 @@ async def _validate_message_reference(
 async def _nearest_history(
     session: AsyncSession, thread_id: str, head_message_id: str
 ) -> DspyHistory | None:
-    rows = await session.execute(
-        select(DspyHistory).where(DspyHistory.thread_id == thread_id)
+    """Return the nearest DSPy history on the branch ending at ``head_message_id``."""
+    return await nearest_anchor(
+        session,
+        thread_id=thread_id,
+        head_message_id=head_message_id,
+        model=DspyHistory,
     )
-    histories = {row.head_message_id: row for row in rows.scalars()}
-    messages = await session.execute(
-        select(Message.message_id, Message.parent_message_id).where(
-            Message.thread_id == thread_id
-        )
-    )
-    parents = {message_id: parent for message_id, parent in messages}
-    runs = await session.execute(
-        select(Run.id, Run.input_message_id, Run.output_message_id).where(
-            Run.thread_id == thread_id
-        )
-    )
-    for r_id, r_in, r_out in runs.all():
-        hist = histories.get(r_out) or histories.get(f"msg-{r_id}")
-        if hist is not None:
-            histories[f"msg-tools-{r_id}"] = hist
-            if r_in and r_in not in histories:
-                histories[r_in] = hist
-
-    current: str | None = head_message_id
-    seen: set[str] = set()
-    while current is not None and current not in seen:
-        if current in histories:
-            return histories[current]
-        if current.startswith("msg-tools-"):
-            alt = current.replace("msg-tools-", "msg-", 1)
-            if alt in histories:
-                return histories[alt]
-        seen.add(current)
-        current = parents.get(current)
-    return histories.get(None)
 
 
 def _normalize_history_tool_call_ids(history: dspy.History) -> dspy.History:

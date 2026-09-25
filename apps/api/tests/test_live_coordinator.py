@@ -8,28 +8,34 @@ import dspy
 
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import DspyAgentEngine
-from app.agent.instrumented import instrument_tool
-from app.agent.signature import AgentSignature
+from app.agent.event_bus import RunEventBus
 from app.agent.tools import search_docs
-from app.agui.event_bus import RunEventBus
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.contracts.domain import SourceResult
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature
 
 
 def scripted_builder(steps, tools=None, max_iters=4):
     base_tools = tools if tools is not None else [search_docs]
 
-    def build(bus: RunEventBus, *, thread_id: str = "t-test"):
-        wrapped = [instrument_tool(tool, bus) for tool in base_tools]
+    def build(
+        bus: RunEventBus,
+        *,
+        thread_id: str = "t-test",
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
 
         def program_factory() -> dspy.ReActV2:
-            return dspy.ReActV2(AgentSignature, tools=wrapped, max_iters=max_iters)
+            return dspy.ReActV2(AgentSignature, tools=base_tools, max_iters=max_iters)
 
         return DspyAgentEngine(
             program_factory=program_factory,
             lm=ScriptedLM(steps),  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(),
+            callbacks=[AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)],
         )
 
     return build
@@ -231,7 +237,14 @@ async def test_web_search_and_sources_are_transcript_custom_events():
 
     web_search.last_sources = []
 
-    def builder(bus: RunEventBus, *, thread_id: str = "thread-live"):
+    def builder(
+        bus,
+        *,
+        thread_id,
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
         del thread_id
         callback = AgUiRunCallback(bus=bus)
 
@@ -476,7 +489,14 @@ async def test_run_only_engine_falls_back_to_completion_time_answer():
     coordinator = LiveDSPyCoordinator()
     from ag_ui.core import RunAgentInput
 
-    def builder(bus, *, thread_id="t-test"):  # noqa: ANN001, ANN202
+    def builder(
+        bus,
+        *,
+        thread_id,
+        provider_override=None,
+        approved=None,
+    ):
+        del provider_override, approved
         """
         Create a run-only test engine.
 

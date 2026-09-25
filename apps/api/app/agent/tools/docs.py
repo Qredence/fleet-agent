@@ -7,7 +7,6 @@ controlled failures (raise -> ReActV2 converts to an error observation).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from app.agent.tools.corpus import CORPUS
 from app.contracts.domain import SourceResult
@@ -30,10 +29,6 @@ class SearchDocsTool:
         self.__name__ = "search_docs"
         self.__doc__ = SearchDocsTool.__call__.__doc__
         self.last_sources: list[SourceResult] = []
-
-    def clone_for_worker(self, clones: dict[int, Any]) -> SearchDocsTool:
-        del clones
-        return SearchDocsTool()
 
     def __call__(self, query: str) -> str:
         """Search the bundled documentation corpus for a short query.

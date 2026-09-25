@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
-from pathlib import Path
 from urllib.parse import urlsplit
 
 import dspy
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agent.approval import offered_tool_names
 from app.agent.callbacks import AgUiRunCallback
-from app.agent.engine import AgentEngine, DspyAgentEngine
-from app.agent.flex_program import FlexFleetAgent, ensure_deno_runtime
-from app.agent.flex_router import load_flex_router
+from app.agent.engine import AgentEngine, DspyAgentEngine, EngineBuilder
+from app.agent.event_bus import RunEventBus
 from app.agent.openai_compatible import OpenAICompatibleLM
 from app.agent.program import FleetAgent
 from app.agent.provider import (
@@ -22,13 +19,14 @@ from app.agent.provider import (
     OPENROUTER_APP_TITLE,
     ProviderOverride,
 )
-from app.agent.routing import ToolRoute
-from app.agent.staged import StagedDspyEngine
+from app.agent.routing import ToolRoute, read_router_state
 from app.agent.tool_registry import (
+    TOOL_SPECS,
     ToolCapability,
     ToolMetadata,
     ToolRegistry,
-    wrap_tool_with_guard,
+    workspace_root,
+    workspace_root_available,
 )
 from app.agent.tooling import ToolSource
 from app.agent.tools import get_current_time, search_docs
@@ -36,31 +34,10 @@ from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agent.tools.web import WebToolBundle, build_web_tool_bundle
 from app.agent.tools.workspace import WorkspacePolicy, WorkspaceTools
-from app.agent.tools_catalog import tool_catalog_by_name
-from app.agui.event_bus import RunEventBus
-from app.agui.live_coordinator import EngineBuilder
 from app.services.artifact_storage import ArtifactStorage
-from app.services.durable_approvals import DurableApprovalRegistry
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
-
-
-def _promoted_router_src(settings: Settings) -> str | None:
-    """Validate the operator-pinned router state once, at startup.
-
-    Returns the promoted ``module_src`` (the only state a Flex router
-    carries), or ``None`` when no artifact is pinned. A malformed artifact or
-    a missing Deno runtime fails here, at engine-builder construction, rather
-    than on the first routed request.
-    """
-    if not settings.router_state_path:
-        return None
-    from app.agent.flex_router import load_flex_router_from_file
-
-    router = load_flex_router_from_file(settings.router_state_path)
-    logger.info("loaded promoted Flex router state from %s", settings.router_state_path)
-    return router.module_src()
 
 
 def _resolve_gateway_api_key(api_key: str | None, api_base: str) -> str | None:
@@ -195,56 +172,37 @@ def _source_name(source: ToolSource) -> str:
     return str(getattr(source, "__name__", type(source).__name__))
 
 
-def _workspace_root(settings: Settings) -> Path:
-    """Resolve the one server-configured workspace root, fail-closed in prod."""
-    if settings.workspace_root:
-        return Path(settings.workspace_root)
-    if settings.environment == "development":
-        # factory.py -> agent -> app -> api -> apps -> repository root
-        return Path(__file__).resolve().parents[4]
-    raise RuntimeError(
-        "workspace_root must be explicitly configured outside development"
-    )
+def _build_tool_registry(sources: list[ToolSource]) -> ToolRegistry:
+    """Create the single run-scoped source of truth for DSPy tools.
 
-
-def _build_tool_registry(
-    settings: Settings,
-    sources: list[ToolSource],
-) -> ToolRegistry:
-    """Create the single run-scoped source of truth for DSPy tools."""
-    catalog = tool_catalog_by_name(settings)
+    Metadata comes from ``TOOL_SPECS``, the one table that also renders the
+    public Tools page. A tool that is executable but undeclared fails here, at
+    engine-build time, instead of reaching the model without policy.
+    """
     registrations: list[tuple[ToolSource, ToolMetadata]] = []
-
     for source in sources:
         name = _source_name(source)
         try:
-            item = catalog[name]
+            metadata = TOOL_SPECS[name]
         except KeyError as exc:
             raise RuntimeError(
-                f"tool {name!r} is executable but missing from tools_catalog.py"
+                f"tool {name!r} is executable but missing from TOOL_SPECS"
             ) from exc
-        registrations.append(
-            (
-                source,
-                ToolMetadata(
-                    name=item.name,
-                    capability=item.capability,
-                    read_only=item.read_only,
-                    idempotent=item.idempotent,
-                    parallelizable=item.parallelizable,
-                    timeout_seconds=item.timeout_seconds,
-                    requires_approval=item.requires_approval,
-                ),
-            )
-        )
-
+        registrations.append((source, metadata))
     return ToolRegistry(registrations)
 
 
 def build_tool_profiles(
     registry: ToolRegistry,
+    approved: frozenset[str] | None = None,
 ) -> dict[ToolRoute, list[dspy.Tool]]:
-    """Build the least-privileged capability lattice for routed ReActV2."""
+    """Build the least-privileged capability lattice for routed ReActV2.
+
+    Tools whose policy requires approval are dropped unless this run authorized
+    them, so a gated tool is never merely declined - it is never offered, and the
+    model cannot be talked into calling it.
+    """
+    offered = offered_tool_names(registry.approval_policy(), approved)
     research: set[ToolCapability] = {"retrieval", "utility"}
     workspace_read = set(research)
     workspace_read.add("workspace_read")
@@ -252,13 +210,21 @@ def build_tool_profiles(
     workspace_write.add("workspace_write")
     workspace_shell = set(workspace_write)
     workspace_shell.add("shell")
+
+    def for_capabilities(capabilities: set[ToolCapability]) -> list[dspy.Tool]:
+        return [
+            tool
+            for tool in registry.dspy_tools_for_capabilities(capabilities)
+            if tool.name in offered
+        ]
+
     return {
         "direct": [],
-        "research": registry.dspy_tools_for_capabilities(research),
-        "artifact": registry.dspy_tools_for_capabilities(research | {"artifact"}),
-        "workspace_read": registry.dspy_tools_for_capabilities(workspace_read),
-        "workspace_write": registry.dspy_tools_for_capabilities(workspace_write),
-        "workspace_shell": registry.dspy_tools_for_capabilities(workspace_shell),
+        "research": for_capabilities(research),
+        "artifact": for_capabilities(research | {"artifact"}),
+        "workspace_read": for_capabilities(workspace_read),
+        "workspace_write": for_capabilities(workspace_write),
+        "workspace_shell": for_capabilities(workspace_shell),
     }
 
 
@@ -266,7 +232,7 @@ def build_dspy_engine(settings: Settings) -> AgentEngine:
     """Build the default engine used by focused backend tests."""
     lm = _build_lm(settings)
     adapter = _build_adapter(settings)
-    registry = _build_tool_registry(settings, [search_docs, get_current_time])
+    registry = _build_tool_registry([search_docs, get_current_time])
     profiles = build_tool_profiles(registry)
 
     def program_factory() -> FleetAgent:
@@ -296,65 +262,60 @@ def make_engine_builder(
     settings: Settings,
     *,
     storage: ArtifactStorage,
-    sessions: async_sessionmaker[AsyncSession] | None = None,
 ) -> EngineBuilder:
     """Create run-scoped programs sharing immutable tool configuration.
 
     The LM and adapter are built per run inside ``build`` because a browser
     provider override (key, base URL, response format, messages format) can
-    change them for a single request.  When ``sessions`` is provided, engine
-    runs persist approval checkpoints durably so a paused run survives a
-    server restart.
+    change them for a single request. ``approved`` carries the run's approval
+    decision, which decides whether gated tools are offered to the model at all.
+
+    Nothing here takes a database session: the agent layer has no storage
+    dependency, so it can be built, tested, and optimized on its own.
     """
-    sessions_final = sessions
-    router_src = _promoted_router_src(settings)
 
-    def _build_router() -> dspy.Module | None:
-        """Fresh Flex router per run-scoped program, or None for baseline.
-
-        The promoted source is validated once above; rebuilding the module
-        per program keeps run-scoped programs from sharing bridge state.
-        """
-        if router_src is None:
-            return None
-        return load_flex_router({"module_src": router_src})
+    # Read and validate a promoted router artifact once, here, rather than on
+    # every request: the operator pinned a file, so a bad one fails at build time.
+    router_instructions = (
+        read_router_state(settings.router_state_path)
+        if settings.router_state_path
+        else None
+    )
+    if router_instructions is not None:
+        # Operator-facing startup fact, not per-run chatter: warn so it survives
+        # a default logging setup. The app's own INFO records are dropped unless
+        # the operator configures a root handler, and a pinned artifact that
+        # cannot be confirmed is indistinguishable from one that was ignored.
+        logger.warning(
+            "using promoted router instructions from %s", settings.router_state_path
+        )
 
     def build(
         bus: RunEventBus,
         *,
         thread_id: str,
         provider_override: ProviderOverride | None = None,
+        approved: frozenset[str] | None = None,
     ) -> AgentEngine:
         lm = _build_lm(settings, provider_override)
         adapter = _build_adapter(settings, provider_override)
-        approval_registry = (
-            DurableApprovalRegistry(
-                sessions=sessions_final, loop=asyncio.get_running_loop()
-            )
-            if sessions_final is not None
-            else None
-        )
-        docs_tool = SearchDocsTool()
         report_tool = WriteReportTool(
             storage=storage,
             bus=bus,
             thread_id=thread_id,
             max_bytes=settings.artifact_max_bytes,
-            step_id=(
-                "step-synthesis" if settings.reasoning_program == "staged" else None
-            ),
         )
         web_bundle = _build_web_tools(settings)
         sources: list[ToolSource] = [
             *(web_bundle.tools if web_bundle else []),
-            docs_tool,
+            SearchDocsTool(),
             report_tool,
             get_current_time,
         ]
-        if settings.workspace_read_tools_enabled:
+        if workspace_root_available(settings):
             workspace_tools = WorkspaceTools(
                 WorkspacePolicy(
-                    root=_workspace_root(settings),
+                    root=workspace_root(settings),
                     max_read_bytes=settings.workspace_max_read_bytes,
                     max_write_bytes=settings.workspace_max_write_bytes,
                     max_output_chars=settings.workspace_max_output_chars,
@@ -367,101 +328,24 @@ def make_engine_builder(
                 )
             )
             sources.extend(workspace_tools.dspy_tools())
-        registry = _build_tool_registry(settings, sources)
+
+        registry = _build_tool_registry(sources)
+        profiles = build_tool_profiles(registry, approved)
         callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
-        if settings.reasoning_program == "staged":
-            return StagedDspyEngine(
-                lm=lm,
-                adapter=adapter,
-                registry=registry,
-                bus=bus,
-                max_parallel_tasks=settings.reasoning_max_parallel_tasks,
-                max_model_calls=settings.reasoning_max_model_calls,
-                max_tool_calls=settings.reasoning_max_tool_calls,
-                task_timeout_seconds=settings.reasoning_task_timeout_seconds,
-                researcher_max_iters=settings.llm_max_iters,
-                cleanup=web_bundle.close if web_bundle else None,
-            )
-
-        profiles = build_tool_profiles(registry)
-        approval_policy = registry.approval_policy()
-
-        def react_program(router: dspy.Module | None) -> FleetAgent:
-            """The routed ReActV2 program, with or without a promoted router."""
+        def program_factory() -> FleetAgent:
+            """The routed ReActV2 program over the least-privileged profiles."""
             return FleetAgent(
                 tool_profiles=profiles,
                 max_iters=settings.llm_max_iters,
-                approval_policy=approval_policy,
-                lifecycle=callback,
-                router=router,
+                router_instructions=router_instructions,
             )
-
-        # Each track supplies a program factory and, where it applies, the
-        # approval seam; everything else about the engine is identical, so the
-        # engine is constructed once below.
-        if settings.reasoning_program == "flex":
-            if not settings.flex_enabled:
-                raise RuntimeError("reasoning_program=flex requires flex_enabled=true")
-
-            if settings.flex_allow_mutating_tools:
-                # Flex executes tool calls inside its RLM interpreter, which
-                # catches host-tool exceptions before the application can turn
-                # them into an AG-UI interrupt. Mutating Flex is therefore
-                # routed through the same application-owned approval loop as
-                # the default program; the read-only path keeps native Flex
-                # semantics.
-                def flex_safe_program_factory() -> FleetAgent:
-                    return react_program(None)
-
-                program_factory = flex_safe_program_factory
-                lifecycle = callback
-                approval_registry_for_run = approval_registry
-            else:
-                flex_capabilities: set[ToolCapability] = {
-                    "retrieval",
-                    "utility",
-                    "workspace_read",
-                }
-                # DSPy 3.3.1 swallows exceptions raised inside start callbacks,
-                # so the read-only Flex path enforces cancellation on the tool
-                # callable itself rather than through AgUiRunCallback hooks.
-                flex_tools = [
-                    wrap_tool_with_guard(tool, bus.cancel_token.check)
-                    for tool in registry.dspy_tools_for_capabilities(flex_capabilities)
-                ]
-                # The read-only Flex track runs dspy.Flex's Deno/Pyodide
-                # sandbox; fail fast at engine-build time instead of on every
-                # request.
-                ensure_deno_runtime()
-
-                def flex_program_factory() -> FlexFleetAgent:
-                    return FlexFleetAgent(
-                        tools=flex_tools,
-                        max_predictor_calls=settings.flex_max_predictor_calls,
-                    )
-
-                program_factory = flex_program_factory
-                lifecycle = None
-                approval_registry_for_run = None
-        else:
-
-            def default_program_factory() -> FleetAgent:
-                return react_program(_build_router())
-
-            program_factory = default_program_factory
-            lifecycle = callback
-            approval_registry_for_run = approval_registry
 
         return DspyAgentEngine(
             program_factory=program_factory,
             lm=lm,
             adapter=adapter,
             callbacks=[callback],
-            provider_override=provider_override,
-            lifecycle=lifecycle,
-            cancel_token=bus.cancel_token,
-            approval_registry=approval_registry_for_run,
             cleanup=web_bundle.close if web_bundle else None,
         )
 

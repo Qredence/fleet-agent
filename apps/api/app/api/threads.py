@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.artifacts import artifact_to_out
 from app.api.projects import LOCAL_OWNER, get_sessions, require_project
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.error_codes import ERROR_MESSAGES
@@ -27,6 +28,10 @@ from app.services.history_safety import MessageWrite, sanitize_message_content
 router = APIRouter(prefix="/api", tags=["threads"])
 logger = logging.getLogger(__name__)
 _MAX_SOURCE_EXCERPT_CHARS = 300
+# `interrupted` is accepted defensively, not because anything produces it: the
+# startup sweep rewrites any surviving interrupted run and its persisted snapshot
+# to `failed`/`server_restart`. The value only matters in the window before that
+# sweep runs, which is a boot whose database was unreachable.
 _SAFE_RUN_STATUSES = frozenset(
     {"queued", "running", "completed", "failed", "cancelled", "interrupted"}
 )
@@ -455,8 +460,6 @@ async def list_sources(thread_id: str, request: Request) -> list[dict[str, Any]]
 
 @router.get("/threads/{thread_id}/artifacts")
 async def list_artifacts(thread_id: str, request: Request) -> list[dict[str, Any]]:
-    from app.api.artifacts import artifact_to_out
-
     sessions = request.app.state.db_sessions
     await require_thread(thread_id, sessions)
     artifacts = await ArtifactsRepository(sessions).list_for_thread(thread_id)

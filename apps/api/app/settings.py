@@ -62,6 +62,16 @@ class Settings(BaseSettings):
             "support DSPy JSON tool calls but not native tool calls."
         ),
     )
+    router_state_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to a promoted router artifact written by "
+            "`python -m evals.optimize --promote`. When set, every program builds "
+            "its router with those instructions instead of the baseline ones. A "
+            "malformed artifact fails at engine-build time rather than being "
+            "silently ignored: an operator who pinned a file expects it in effect."
+        ),
+    )
     llm_allow_private_base_urls: bool = Field(
         default=False,
         description=(
@@ -105,41 +115,13 @@ class Settings(BaseSettings):
     )
 
     agent_mode: Literal["fixtures", "engine"] = Field(
-        default="fixtures",
+        default="engine",
         description=(
-            "'fixtures' replays the canonical NDJSON mock streams (dev/CI "
-            "default); 'engine' runs the live DSPy ReActV2 bridge (production)."
+            "'engine' (default) runs the live DSPy bridge and is the product. "
+            "'fixtures' replays the canonical NDJSON mock streams for "
+            "provider-free dev/CI runs; it is an explicit opt-in."
         ),
     )
-    reasoning_program: Literal["react", "staged", "flex"] = Field(
-        default="react",
-        description="Reasoning strategy. Staged is opt-in while it is validated.",
-    )
-    reasoning_max_parallel_tasks: int = Field(
-        default=4,
-        ge=1,
-        le=4,
-        description="Maximum concurrent read-only staged research tasks.",
-    )
-    reasoning_max_model_calls: int = Field(
-        default=8,
-        ge=1,
-        le=32,
-        description="Server-capped staged DSPy model-call budget.",
-    )
-    reasoning_max_tool_calls: int = Field(
-        default=12,
-        ge=1,
-        le=64,
-        description="Server-capped staged tool-call budget.",
-    )
-    reasoning_task_timeout_seconds: float = Field(
-        default=30.0,
-        gt=0,
-        le=120.0,
-        description="Server-capped timeout for one staged research task.",
-    )
-
     workspace_root: str | None = Field(
         default=None,
         description=(
@@ -155,27 +137,6 @@ class Settings(BaseSettings):
     workspace_max_output_chars: int = Field(default=12_000, gt=0)
     workspace_bash_default_timeout_seconds: int = Field(default=30, ge=1, le=120)
     workspace_bash_max_timeout_seconds: int = Field(default=120, ge=1, le=300)
-
-    flex_enabled: bool = Field(
-        default=False,
-        description=(
-            "Enable the experimental Flex runtime path explicitly. The "
-            "read-only Flex track requires a local Deno runtime "
-            "(>= 2.0.0, < 3.0.0) on PATH for the sandboxed interpreter."
-        ),
-    )
-    flex_allow_mutating_tools: bool = Field(default=False)
-    flex_max_predictor_calls: int = Field(default=12, ge=1, le=100)
-
-    router_state_path: str | None = Field(
-        default=None,
-        description=(
-            "Path to a promoted Flex router state JSON produced by "
-            "`python -m evals.optimize`. When set, the routed program loads "
-            "the GEPA-evolved router (Deno-sandboxed, fail-fast) instead of "
-            "the baseline Predict. Unset keeps the baseline router."
-        ),
-    )
 
     mlflow_tracing_enabled: bool = Field(
         default=False,
@@ -227,8 +188,9 @@ class Settings(BaseSettings):
     api_key: SecretStr | None = Field(
         default=None,
         description=(
-            "When set, /api/* requires the X-API-Key header to match. "
-            "Unset = open local/dev mode (log an advisory at startup)."
+            "When set, every path outside {/health, /ready} requires the X-API-Key "
+            "header to match. Unset = open local/dev mode (log an advisory at "
+            "startup)."
         ),
     )
 

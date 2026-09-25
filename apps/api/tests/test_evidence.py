@@ -193,25 +193,6 @@ class TestRoutedEvidenceJson:
         assert _evidence_json(None) == "[]"
 
 
-class TestStagedEvidenceJson:
-    def test_oversized_outcomes_still_reach_the_synthesizer_as_json(self) -> None:
-        from app.agent.staged import ResearchTask, _evidence_json, _WorkerOutcome
-
-        outcomes = [
-            _WorkerOutcome(
-                task=ResearchTask(title=f"task {index}", task="gather"),
-                status="completed",
-                answer="a" * 5000,
-            )
-            for index in range(4)
-        ]
-
-        text = _evidence_json(outcomes)
-
-        assert len(text) <= 8000
-        assert json.loads(text)
-
-
 def _evidence_section(prompt: str) -> str:
     """Pull the rendered ``evidence_json`` field out of a synthesis prompt.
 
@@ -234,7 +215,12 @@ class TestSynthesizerPrompt:
         from app.agent.factory import build_tool_profiles
         from app.agent.program import FleetAgent
         from app.agent.tool_registry import ToolMetadata, ToolRegistry
-        from tests.helpers.scripted_lm import ScriptedLM, router_call, synthesis_call
+        from tests.helpers.scripted_lm import (
+            ScriptedLM,
+            evidence_end,
+            router_call,
+            synthesis_call,
+        )
 
         prompts: list[str] = []
 
@@ -261,7 +247,7 @@ class TestSynthesizerPrompt:
                 [
                     router_call("research"),
                     [{"name": "big", "args": {"query": "x"}}],
-                    {"calls": [], "content": '{"next_thought": "done"}'},
+                    evidence_end(),
                     synthesis_call(answer="ok", summary="Gathered."),
                 ]
             ),  # type: ignore[arg-type]

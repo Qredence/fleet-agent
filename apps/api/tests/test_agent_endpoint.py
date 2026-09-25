@@ -4,8 +4,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.api.agent import _reservation_http_error
-from app.main import create_app
 from app.services.run_persistence import ReservationErrorCode, RunReservationError
+from tests.conftest import make_test_app
 
 THREAD_ID = "thread-abc"
 RUN_ID = "run-xyz"
@@ -25,7 +25,10 @@ def run_input(text: str = "Hello") -> dict:
 
 @pytest.fixture
 def app():
-    return create_app()
+    # These tests pin the fixtures-replay wire contract. Live engine behaviour has
+    # its own suite (test_agent_endpoint_engine_mode.py); fixtures replay is an
+    # explicit opt-in, so name it here instead of relying on a default.
+    return make_test_app(agent_mode="fixtures")
 
 
 async def post_agent(app, text: str = "Hello") -> tuple[int, dict, str]:

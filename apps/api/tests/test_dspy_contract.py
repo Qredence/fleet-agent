@@ -8,7 +8,7 @@ no DB, no .env.
 
 import asyncio
 import json
-from typing import get_args
+from typing import get_args, get_type_hints
 
 import dspy
 import pytest
@@ -16,12 +16,12 @@ from dspy.adapters.types.tool import Tool
 
 from app.agent.engine import AgentRunContext, DspyAgentEngine
 from app.agent.factory import build_dspy_engine
-from app.agent.instrumented import instrument_tool
-from app.agent.signature import AgentSignature
+from app.agent.tooling import create_dspy_tool
 from app.agent.tools import get_current_time, search_docs
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.signatures import AgentSignature
 
 CTX = AgentRunContext(thread_id="t-1", run_id="r-1")
 
@@ -46,7 +46,8 @@ def test_react_v2_alias_still_exists():
 
 # ---------------------------------------------------------------------------
 # 2. Tool schema fidelity — what the model sees must stay typed.
-#    Regression test for instrument_tool annotation propagation.
+#    The engine builds every tool through create_dspy_tool, so these pin the
+#    schemas the model actually receives.
 # ---------------------------------------------------------------------------
 
 
@@ -69,11 +70,10 @@ def _production_tools() -> list[Tool]:
         max_bytes=1024,
     )
     return [
-        Tool(search_docs),
-        Tool(get_current_time),
-        Tool(instrument_tool(SearchDocsTool(), _FakeBus())),
-        Tool(instrument_tool(report, _FakeBus())),
-        Tool(instrument_tool(get_current_time, _FakeBus())),
+        create_dspy_tool(search_docs, name="search_docs"),
+        create_dspy_tool(get_current_time, name="get_current_time"),
+        create_dspy_tool(SearchDocsTool(), name="search_docs"),
+        create_dspy_tool(report, name="write_report"),
     ]
 
 
@@ -94,10 +94,11 @@ def test_production_tools_have_typed_schemas(tool: Tool):
         assert tool.args == {}
 
 
-def test_instrumented_wrapper_keeps_return_annotation():
-    """The wrapper must expose the real signature, not (**kwargs) -> Any."""
-    wrapped = instrument_tool(get_current_time, _FakeBus())
-    hints = wrapped.__annotations__
+def test_constructed_tool_keeps_return_annotation():
+    """A callable-object tool must expose its real signature, not (**kwargs)."""
+    constructed = create_dspy_tool(SearchDocsTool(), name="search_docs")
+    # A callable-object's annotations live on its __call__, not the instance.
+    hints = get_type_hints(type(constructed.func).__call__)
     assert hints.get("return") is str
 
 
@@ -119,7 +120,7 @@ def test_native_function_call_descriptor_is_wellformed():
 
 
 def test_tool_rejects_args_violating_schema():
-    wrapped_search = Tool(instrument_tool(SearchDocsTool(), _FakeBus()))
+    wrapped_search = create_dspy_tool(SearchDocsTool(), name="search_docs")
     with pytest.raises(ValueError, match="Arg query is invalid"):
         wrapped_search(query=12345)  # type: ignore[arg-type]
 

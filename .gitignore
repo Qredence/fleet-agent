@@ -51,6 +51,7 @@ qa-results/
 skills-lock.json
 # MLflow local run store (evals/mlflow_tracking.py)
 apps/api/mlruns/
+*.db
 .factory/
 # Lab generated artifacts
 /AGENTS.md

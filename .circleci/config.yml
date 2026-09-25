@@ -131,6 +131,35 @@ jobs:
             cd apps/api &&
             FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test
             uv run pytest
+      - run:
+          name: Boot smoke (the server must actually start and answer)
+          command: |
+            # In-process TestClient runs never prove the app BOOTS. A bad tracking
+            # URI or an unreachable database used to make startup fail outright,
+            # while every test stayed green. This boots a real uvicorn and asserts
+            # the surfaces an operator depends on.
+            cd apps/api
+            export FLEET_AGENT_DATABASE_URL=postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test
+            export FLEET_AGENT_AGENT_MODE=engine
+            export FLEET_AGENT_API_KEY=ci-smoke-key
+            export FLEET_AGENT_MLFLOW_TRACING_ENABLED=true
+            export FLEET_AGENT_MLFLOW_TRACKING_URI=sqlite:////tmp/ci-mlflow.db
+            uv run uvicorn app.main:app --host 127.0.0.1 --port 8123 --log-level warning &
+            server_pid=$!
+            trap 'kill $server_pid 2>/dev/null || true' EXIT
+            for _ in $(seq 1 40); do
+              curl -fsS http://127.0.0.1:8123/health > /dev/null 2>&1 && break
+              sleep 0.5
+            done
+            curl -fsS http://127.0.0.1:8123/health
+            # /ready answers 200 or 503, never hangs or 500s.
+            ready=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8123/ready)
+            test "$ready" = "200" || test "$ready" = "503"
+            # Un-prefixed routes are protected when a key is configured.
+            test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8123/metrics)" = "401"
+            test "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-api-key: ci-smoke-key' http://127.0.0.1:8123/metrics)" = "200"
+            # The public liveness probe must stay open.
+            test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8123/health)" = "200"
 
   contracts:
     executor: python
