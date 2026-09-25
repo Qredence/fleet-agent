@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   server: {
@@ -22,12 +22,15 @@ export default defineConfig({
     // dev server forwards those requests to the local API. Requests that
     // already target an absolute VITE_API_BASE_URL bypass this proxy.
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8000' },
+      '/api': {
+        target: `http://127.0.0.1:${process.env.VITE_API_PORT || '8000'}`,
+      },
     },
   },
   test: {
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
+    testTimeout: 15000,
   },
 })

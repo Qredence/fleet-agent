@@ -7,7 +7,6 @@ import {
   forwardRef,
   isValidElement,
   useContext,
-  useEffect,
   useId,
   useMemo,
   useRef,
@@ -15,27 +14,25 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { spring } from "@/lib/springs";
 import { fontWeights } from "@/lib/font-weight";
 import { useShape } from "@/lib/shape-context";
 import { SizeProvider, useSize, type SizeVariant } from "@/lib/size-context";
 import { useIcon, type IconComponent } from "@/lib/icon-context";
-import { useProximityHover } from "@/hooks/use-proximity-hover";
+import { useFluidHover, useRegisterFluidHoverItem } from "@/hooks/use-fluid-hover";
+import { FluidHoverHighlight } from "@/components/fluid-hover-highlight";
 
 // ---------------------------------------------------------------------------
 // Card is shadcn/ui's compositional card — the same parts and `data-slot`
 // contract (Card, CardHeader, CardTitle, CardDescription, CardAction,
 // CardContent, CardFooter) — with the Fluid Functionalism layer on top:
 // design tokens, a weight-animated title, and a sibling CardGroup that owns
-// layout (stacked list, inline rows, or grid) plus the magnetic proximity
+// layout (stacked list, inline rows, or grid) plus the magnetic fluid hover
 // highlight that previews where a click will land.
 //
 // Unlike stock shadcn, the surface is transparent and borderless by default:
 // cards inherit whatever substrate their parent provides (see the Surfaces
-// system) and lean on hairline dividers / the proximity highlight rather than
+// system) and lean on hairline dividers / the fluid hover highlight rather than
 // a drawn frame. A Card renders fine on its own; inside a CardGroup it
 // registers itself so the group's highlight can find it.
 // ---------------------------------------------------------------------------
@@ -126,7 +123,7 @@ interface CardGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "onDrag"> 
    *  horizontal row (leading media, trailing footer), like a Table row.
    *  @default "card" */
   orientation?: CardOrientation;
-  /** Number of grid columns. >1 enables 2-D proximity across rows and columns.
+  /** Number of grid columns. >1 enables 2-D fluid hover across rows and columns.
    *  @default 1 */
   columns?: number;
   /** "none" — borderless (default), separated only by subtle dividers.
@@ -136,8 +133,8 @@ interface CardGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "onDrag"> 
   /** Split the group into individually-shaped cards with a gap between them
    *  (a grid of tiles) instead of one continuous divided block. @default false */
   separated?: boolean;
-  /** Enable the magnetic proximity-hover highlight. @default true */
-  proximityHover?: boolean;
+  /** Enable the magnetic fluid-hover highlight. @default true */
+  fluidHover?: boolean;
 }
 
 const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
@@ -147,7 +144,7 @@ const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
       columns = 1,
       border = "none",
       separated = false,
-      proximityHover = true,
+      fluidHover = true,
       className,
       children,
       ...props
@@ -160,16 +157,16 @@ const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
     // >1 column wraps into a grid, where nearest-item must be resolved in two
     // dimensions; a single column is a plain vertical list.
     const axis = columns > 1 ? "xy" : "y";
+    // A card grid has generous whitespace, so a gap click only routes when it
+    // lands within a hand's width of the highlighted card.
+    const hover = useFluidHover(containerRef, { axis, gapClick: { maxDistance: 16 } });
     const {
       activeIndex,
-      itemRects,
-      sessionRef,
       handlers,
       registerItem,
-      measureItems,
-    } = useProximityHover(containerRef, { axis });
+    } = hover;
 
-    // Assign each valid child a stable proximity index so callers never thread
+    // Assign each valid child a stable fluid hover index so callers never thread
     // one through by hand (Table asks for it; here the group owns it).
     const childArray = Children.toArray(children).filter(isValidElement);
     const count = childArray.length;
@@ -181,10 +178,6 @@ const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
     const selectedIndex = childArray.findIndex(
       (child) => (child.props as { selected?: boolean }).selected
     );
-
-    useEffect(() => {
-      measureItems();
-    }, [measureItems, count, columns, orientation, separated, border]);
 
     const outlined = border === "outlined";
     const divided = !separated;
@@ -214,9 +207,6 @@ const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
       ]
     );
 
-    const activeRect =
-      proximityHover && activeIndex !== null ? itemRects[activeIndex] : null;
-
     return (
       <CardGroupContext.Provider value={contextValue}>
         <div
@@ -241,37 +231,18 @@ const CardGroup = forwardRef<HTMLDivElement, CardGroupProps>(
           style={{
             gridTemplateColumns: `repeat(${Math.max(1, columns)}, minmax(0, 1fr))`,
           }}
-          onMouseEnter={proximityHover ? handlers.onMouseEnter : undefined}
-          onMouseMove={proximityHover ? handlers.onMouseMove : undefined}
-          onMouseLeave={proximityHover ? handlers.onMouseLeave : undefined}
+          onMouseEnter={fluidHover ? handlers.onMouseEnter : undefined}
+          onMouseMove={fluidHover ? handlers.onMouseMove : undefined}
+          onMouseLeave={fluidHover ? handlers.onMouseLeave : undefined}
+          onClick={fluidHover ? handlers.onClick : undefined}
         >
-          {/* Proximity highlight — a single magnetic layer that springs to the
+          {/* Fluid hover highlight — a single magnetic layer that springs to the
               card nearest the cursor, previewing where a click will land. */}
-          <AnimatePresence>
-            {activeRect && (
-              <motion.div
-                key={sessionRef.current}
-                aria-hidden
-                className={cn("absolute bg-hover pointer-events-none z-0", shape.container)}
-                initial={{
-                  opacity: 0,
-                  top: activeRect.top,
-                  left: activeRect.left,
-                  width: activeRect.width,
-                  height: activeRect.height,
-                }}
-                animate={{
-                  opacity: 1,
-                  top: activeRect.top,
-                  left: activeRect.left,
-                  width: activeRect.width,
-                  height: activeRect.height,
-                }}
-                exit={{ opacity: 0, transition: spring.fast.exit }}
-                transition={{ ...spring.fast, opacity: { duration: 0.08 } }}
-              />
-            )}
-          </AnimatePresence>
+          <FluidHoverHighlight
+            hover={hover}
+              hidden={!fluidHover}
+            className={cn("z-0", shape.container)}
+          />
 
           {indexed}
         </div>
@@ -285,16 +256,19 @@ CardGroup.displayName = "CardGroup";
 // ── Card ─────────────────────────────────────────────────
 
 interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, "onClick"> {
-  /** Makes the whole card an interactive target; proximity hover previews it.
+  /** Makes the whole card an interactive target; fluid hover previews it.
    *  Renders a stretched link when `href` is set, else a stretched button. */
   onClick?: () => void;
   href?: string;
   external?: boolean;
   /** Accessible name for the stretched link/button when the whole card is
-   *  clickable. If omitted, an accessible name is automatically derived from
-   *  the card's CardTitle or text content. */
+   *  clickable (the card's visible title isn't wired up automatically). */
   label?: string;
-  /** Persistent selected state, on top of the transient proximity hover. */
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  /** Persistent selected state, on top of the transient fluid hover. */
   selected?: boolean;
   disabled?: boolean;
   /** Shows a dismiss (✕) button in the corner. */
@@ -319,8 +293,10 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
       href,
       external,
       label,
-      "aria-label": ariaLabel,
-      "aria-labelledby": ariaLabelledBy,
+      ariaLabel,
+      ariaLabelledBy,
+      "aria-label": ariaLabelAttr,
+      "aria-labelledby": ariaLabelledByAttr,
       selected = false,
       disabled = false,
       dismissible = false,
@@ -353,14 +329,13 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     const selectedIndex = group?.selectedIndex ?? -1;
 
     // Depend on the stable registerItem callback, not the whole group context —
-    // the context object's identity changes on every proximity/selection frame,
+    // the context object's identity changes on every hover/selection frame,
     // which would otherwise re-register every card each frame.
-    const registerItem = group?.registerItem;
-    useEffect(() => {
-      if (index === undefined || !registerItem) return;
-      registerItem(index, internalRef.current);
-      return () => registerItem(index, null);
-    }, [index, registerItem]);
+    // Only an enabled card that can be clicked joins the highlight: a highlight on an
+    // informational or disabled card would promise a click that has nowhere to land.
+    const registerItem =
+      !disabled && (href || onClick) ? group?.registerItem : undefined;
+    useRegisterFluidHoverItem(registerItem, index, internalRef);
 
     // Divider geometry: draw a hairline toward the neighbour below / to the
     // right, but drop it next to the active OR selected card so the highlight
@@ -393,7 +368,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     const hasImage = Children.toArray(children).some(isCardImage);
     const inlineImage = isInline && hasImage;
     const clickable = !!href || !!onClick;
-    // Title weight follows the persistent selected state only — proximity hover
+    // Title weight follows the persistent selected state only — fluid hover
     // previews via the highlight fill, not by bolding the label.
     const emphasized = selected;
 
@@ -408,26 +383,28 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
         ? cn(shape.container, "overflow-hidden border border-border/60")
         : "";
 
-    const titleId = useId();
-    const hasTitle = useMemo(() => hasCardTitleElement(children), [children]);
-    const derivedText = useMemo(() => {
-      if (label || ariaLabel || ariaLabelledBy) return undefined;
-      return extractTextContent(children).trim();
-    }, [label, ariaLabel, ariaLabelledBy, children]);
-
-    const overlayAriaLabel =
-      label ??
-      ariaLabel ??
-      (!ariaLabelledBy && !hasTitle ? derivedText || "Card" : undefined);
-    const overlayAriaLabelledBy =
-      ariaLabelledBy ??
-      (!label && !ariaLabel && hasTitle ? titleId : undefined);
-
     // Stretched overlay makes the whole card the click target while keeping
     // action buttons (higher z) independently clickable — the accessible
     // alternative to nesting interactive elements inside a button/anchor. A
     // disabled card drops the overlay entirely so it can't be tabbed to or
     // activated by keyboard (pointer-events-none only blocks the mouse).
+    const effectiveAriaLabel = ariaLabelAttr ?? ariaLabel;
+    const effectiveAriaLabelledBy = ariaLabelledByAttr ?? ariaLabelledBy;
+    const titleId = useId();
+    const hasTitle = useMemo(() => hasCardTitleElement(children), [children]);
+    const derivedText = useMemo(() => {
+      if (label || effectiveAriaLabel || effectiveAriaLabelledBy) return undefined;
+      return extractTextContent(children).trim();
+    }, [label, effectiveAriaLabel, effectiveAriaLabelledBy, children]);
+
+    const overlayAriaLabel =
+      label ??
+      effectiveAriaLabel ??
+      (!effectiveAriaLabelledBy && !hasTitle ? derivedText || "Card" : undefined);
+    const overlayAriaLabelledBy =
+      effectiveAriaLabelledBy ??
+      (!label && !effectiveAriaLabel && hasTitle ? titleId : undefined);
+
     const overlay = clickable && !disabled ? (
       href ? (
         <a
@@ -490,12 +467,12 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
               (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
           }}
           data-slot="card"
-          data-proximity-index={index}
+          data-fluid-hover-index={index}
           data-selected={selected || undefined}
           data-orientation={orientation}
           aria-disabled={disabled || undefined}
-          aria-label={!clickable ? ariaLabel : undefined}
-          aria-labelledby={!clickable ? ariaLabelledBy : undefined}
+          aria-label={!clickable ? effectiveAriaLabel : undefined}
+          aria-labelledby={!clickable ? effectiveAriaLabelledBy : undefined}
           className={cn(
             "group/card relative z-10 min-w-0 min-h-[60px]",
             inlineImage
@@ -640,7 +617,7 @@ CardHeader.displayName = "CardHeader";
 // ── CardTitle ────────────────────────────────────────────
 
 const CardTitle = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(
-  ({ className, children, id, ...props }, ref) => {
+  ({ id, className, children, ...props }, ref) => {
     const { emphasized, orientation, titleId } = useContext(CardContext);
     const sizeClasses = useSize();
     const compact = sizeClasses.variant === "compact";
@@ -995,7 +972,7 @@ const CARD_BUTTON_VARIANTS: Record<CardButtonVariant, string> = {
 
 interface CardButtonProps {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   href?: string;
   variant?: CardButtonVariant;
   icon?: IconComponent;

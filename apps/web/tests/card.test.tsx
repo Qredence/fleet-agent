@@ -79,6 +79,51 @@ describe('Card accessibility and interactive overlay', () => {
     expect(button).toHaveAttribute('aria-labelledby', 'external-title')
   })
 
+  it('uses the typed ariaLabel prop without forwarding it to the card container', () => {
+    render(
+      <Card onClick={() => {}} ariaLabel="Typed action label" data-testid="typed-label-card">
+        <CardContent>Content</CardContent>
+      </Card>
+    )
+
+    expect(screen.getByRole('button', { name: 'Typed action label' })).toBeInTheDocument()
+    expect(screen.getByTestId('typed-label-card')).not.toHaveAttribute('ariaLabel')
+  })
+
+  it('uses the typed ariaLabelledBy prop without forwarding it to the card container', () => {
+    render(
+      <div>
+        <h3 id="typed-external-title">Typed external title</h3>
+        <Card
+          onClick={() => {}}
+          ariaLabelledBy="typed-external-title"
+          data-testid="typed-labelledby-card"
+        >
+          <CardContent>Content</CardContent>
+        </Card>
+      </div>
+    )
+
+    expect(screen.getByRole('button', { name: 'Typed external title' })).toHaveAttribute(
+      'aria-labelledby',
+      'typed-external-title'
+    )
+    expect(screen.getByTestId('typed-labelledby-card')).not.toHaveAttribute('ariaLabelledBy')
+  })
+
+  it('preserves accessible names on a non-interactive card', () => {
+    render(
+      <Card ariaLabel="Informational card" data-testid="informational-card">
+        <CardContent>Content</CardContent>
+      </Card>
+    )
+
+    expect(screen.getByTestId('informational-card')).toHaveAttribute(
+      'aria-label',
+      'Informational card'
+    )
+  })
+
   it('derives accessible name fallback from text content when no CardTitle is present', () => {
     const handleClick = () => {}
     render(
@@ -115,6 +160,18 @@ describe('Card accessibility and interactive overlay', () => {
     const link = screen.getByRole('link', { name: 'Tools Overview' })
     expect(link).toBeInTheDocument()
     expect(link).toHaveAttribute('href', '/settings/tools')
+  })
+
+  it('does not render overlay when disabled even if onClick or href is passed', () => {
+    const handleClick = () => {}
+    render(
+      <Card onClick={handleClick} href="/test" disabled>
+        <CardTitle>Disabled Card</CardTitle>
+      </Card>
+    )
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('does not render overlay when disabled', () => {

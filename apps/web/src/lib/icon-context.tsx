@@ -151,9 +151,8 @@ export const defaultIcons: Record<IconName, IconComponent> = {
 const IconContext = createContext<Record<IconName, IconComponent> | null>(null);
 
 /**
- * Retrieves the icon component identified by `name`.
- *
- * @returns The configured icon component, or the corresponding default icon when no provider is present.
+ * Returns a single icon component for the given name.
+ * Falls back to the default (Lucide) set if no provider is present.
  */
 function useIcon(name: IconName): IconComponent {
   const icons = useContext(IconContext);
@@ -161,9 +160,8 @@ function useIcon(name: IconName): IconComponent {
 }
 
 /**
- * Provides access to the configured icon set.
- *
- * @returns The configured icon map, or the default Lucide icon map when no provider is present.
+ * Returns the full icon map.
+ * Falls back to the default (Lucide) set if no provider is present.
  */
 function useIcons(): Record<IconName, IconComponent> {
   const icons = useContext(IconContext);
@@ -171,9 +169,8 @@ function useIcons(): Record<IconName, IconComponent> {
 }
 
 /**
- * Provides configurable icon components to descendant components.
- *
- * @param icons - Optional icon overrides merged with the default icon set.
+ * Swap some or all icons for components from another library.
+ * Names left out of `icons` keep their default (Lucide) component.
  */
 function IconProvider({
   children,

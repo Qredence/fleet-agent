@@ -21,6 +21,7 @@ export const POPULAR_OPENROUTER_MODELS = [
   { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1' },
   { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
   { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B (Meta)' },
+  { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Google)' },
   { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash (Google)' },
   { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen 2.5 72B (Alibaba)' },
 ] as const

@@ -24,6 +24,15 @@ import { OpenRouterButton } from '@/components/auth/openrouter-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardGroup,
+  CardHeader,
+  CardMedia,
+  CardTitle,
+} from '@/components/ui/card'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -32,21 +41,19 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useOpenRouterAuth } from '@/hooks/use-openrouter-auth'
 import { useOpenCodeZenAuth } from '@/hooks/use-opencode-zen-auth'
 import { useProviders } from '@/hooks/use-providers'
 import {
   maskApiKey,
-  POPULAR_OPENROUTER_MODELS,
   DEFAULT_OPENROUTER_MODEL,
 } from '@/lib/openrouter-auth'
 import {
-  POPULAR_OPENCODE_ZEN_MODELS,
   DEFAULT_OPENCODE_ZEN_MODEL,
 } from '@/lib/opencode-zen-auth'
 import {
   OPENROUTER_PROFILE_ID,
+  OPENROUTER_BASE_URL,
   OPENCODE_ZEN_PROFILE_ID,
   OPENCODE_ZEN_BASE_URL,
   SERVER_DEFAULT_ID,
@@ -54,8 +61,8 @@ import {
   type ProviderProfile,
   type ResponseFormat,
 } from '@/lib/providers'
+import { ModelCardsRow } from './model-cards-row'
 import { useWorkspaceStore } from '@/state/workspace-store'
-import { useShape } from '@/lib/shape-context'
 import { cn } from '@/lib/utils'
 
 /** Profile id that also works on insecure origins (randomUUID is secure-only). */
@@ -125,6 +132,29 @@ const MESSAGES_FORMAT_OPTIONS: SegmentedOption<MessagesFormat>[] = [
   { value: 'developer_role', label: 'Developer role' },
 ]
 
+const SETTINGS_CATEGORIES = [
+  {
+    id: 'providers',
+    label: 'Providers',
+    description: 'Connect accounts and manage provider endpoints.',
+    icon: Server,
+  },
+  {
+    id: 'models',
+    label: 'Models',
+    description: 'Choose the model used for agent runs.',
+    icon: Cpu,
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Set your preferred color theme.',
+    icon: Palette,
+  },
+] as const
+
+type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number]['id']
+
 const EMPTY_FORM = {
   name: '',
   apiKey: '',
@@ -135,9 +165,9 @@ const EMPTY_FORM = {
 }
 
 /**
- * One settings section: a token-tinted icon chip, a title with its helper
- * description, an optional trailing control, and the section body. Shared by
- * every tab section so spacing, heading level, and surface stay identical.
+ * SettingsSection: a clean semantic section matching Fluid Functionalism's
+ * dialog-sidebar layout. Features a subtle icon + title heading, helper description,
+ * trailing action (e.g. Switch or Badge), and borderless hairline divider.
  */
 function SettingsSection({
   icon: Icon,
@@ -145,39 +175,30 @@ function SettingsSection({
   description,
   action,
   children,
+  className,
 }: {
-  icon: LucideIcon
+  icon?: LucideIcon
   title: string
-  description: string
+  description?: string
   action?: ReactNode
   children: ReactNode
+  className?: string
 }) {
-  // The section is a Card-level surface: it takes the shape ladder's
-  // `container` step (24px in pill mode), and its icon chip the `bg`/element
-  // step — the same treatment Card gives its media tile.
-  const shape = useShape()
   return (
-    <section className={cn('space-y-3 border bg-card/60 p-4', shape.container)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={cn(
-              'flex size-7 shrink-0 items-center justify-center bg-primary/10 text-primary',
-              shape.bg,
-            )}
-          >
-            <Icon className="size-4" />
+    <section className={cn('space-y-3.5', className)}>
+      <div className="flex items-start justify-between gap-4 pb-2.5 border-b border-border/40">
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {Icon && <Icon className="size-4 text-muted-foreground shrink-0" />}
+            <h3 className="text-sm font-semibold text-foreground tracking-tight">{title}</h3>
           </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{title}</h3>
-            <p className="text-[11px] leading-4 text-muted-foreground">
-              {description}
-            </p>
-          </div>
+          {description && (
+            <p className="text-xs text-muted-foreground leading-normal">{description}</p>
+          )}
         </div>
-        {action}
+        {action && <div className="shrink-0 pt-0.5">{action}</div>}
       </div>
-      {children}
+      <div>{children}</div>
     </section>
   )
 }
@@ -245,6 +266,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [providerForm, setProviderForm] = useState(EMPTY_FORM)
   const [providerFormError, setProviderFormError] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] =
+    useState<SettingsCategory>('providers')
 
   const handleManualKeySubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -359,65 +382,152 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col gap-4 overflow-hidden p-6 sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-            Workspace Settings
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Manage your LLM providers, API keys, models, and appearance preferences.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        size="xl"
+        className="font-inter flex h-[min(48rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:flex-row"
+      >
+        <aside className="hidden w-56 shrink-0 flex-col border-r bg-muted/30 p-4 sm:flex">
+          <DialogHeader className="mb-6 px-2">
+            <h2 className="text-lg font-semibold">
+              Workspace Settings
+            </h2>
+            <DialogDescription>
+              Manage providers, models, and preferences.
+            </DialogDescription>
+          </DialogHeader>
+          <nav aria-label="Settings sections" className="space-y-1">
+            {SETTINGS_CATEGORIES.map(({ id, label, icon: Icon }) => (
+              <Button
+                key={id}
+                type="button"
+                variant="ghost"
+                active={activeCategory === id}
+                aria-current={activeCategory === id ? 'page' : undefined}
+                onClick={() => setActiveCategory(id)}
+                leadingIcon={Icon}
+                className="w-full justify-start gap-2.5 px-3 text-left"
+              >
+                {label}
+              </Button>
+            ))}
+          </nav>
+        </aside>
 
-        <Tabs
-          defaultValue="providers"
-          className="mt-2 flex w-full min-h-0 flex-1 flex-col gap-0"
-        >
-          <TabsList className="grid w-full shrink-0 grid-cols-2">
-            <TabsTrigger value="providers" className="gap-2 text-xs">
-              <Server className="size-3.5" />
-              Providers & Models
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="gap-2 text-xs">
-              <Palette className="size-3.5" />
-              Appearance
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="flex shrink-0 flex-col gap-3 border-b px-5 py-4 pr-14 sm:px-6 sm:pr-14">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <DialogHeader className="min-w-0">
+                <DialogTitle className="text-base font-semibold">
+                  {SETTINGS_CATEGORIES.find(({ id }) => id === activeCategory)?.label}
+                </DialogTitle>
+                <DialogDescription>
+                  {SETTINGS_CATEGORIES.find(({ id }) => id === activeCategory)?.description}
+                </DialogDescription>
+              </DialogHeader>
+              <label className="flex w-full flex-col gap-1 text-[11px] text-muted-foreground sm:hidden">
+                Section
+                <select
+                  aria-label="Settings section"
+                  value={activeCategory}
+                  onChange={(event) =>
+                    setActiveCategory(event.target.value as SettingsCategory)
+                  }
+                  className="h-9 w-full rounded-md border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {SETTINGS_CATEGORIES.map(({ id, label }) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </header>
 
-          {/* PROVIDER & MODEL CONFIGURATION */}
-          <TabsContent
-            value="providers"
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto pt-3"
+          <div
+            key={activeCategory}
+            role="region"
+            aria-label={`${activeCategory} settings`}
+            tabIndex={0}
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:p-6"
           >
+            {activeCategory === 'providers' && (
+              <div className="space-y-4">
             {/* Active Provider Section */}
             <SettingsSection
               icon={Server}
               title="Active Provider"
               description="Choose which LLM provider serves engine runs. Server default uses the operator-configured environment (MODAL_* or FLEET_AGENT_LLM_*)."
             >
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Active provider">
-                <Button
-                  variant={activeProviderId === SERVER_DEFAULT_ID ? 'default' : 'outline'}
-                  size="sm"
+              <CardGroup
+                columns={Math.min(3, profiles.length + 1)}
+                separated
+                border="outlined"
+                className="w-full"
+              >
+                <Card
                   onClick={() => setActiveProviderId(SERVER_DEFAULT_ID)}
-                  className="h-7 text-xs gap-1.5"
+                  selected={activeProviderId === SERVER_DEFAULT_ID}
+                  label="Server default"
+                  className="cursor-pointer"
                 >
-                  {activeProviderId === SERVER_DEFAULT_ID && <Check className="size-3" />}
-                  Server default
-                </Button>
-                {profiles.map((profile) => (
-                  <Button
-                    key={profile.id}
-                    variant={activeProviderId === profile.id ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setActiveProviderId(profile.id)}
-                    className="h-7 text-xs gap-1.5"
-                  >
-                    {activeProviderId === profile.id && <Check className="size-3" />}
-                    {profile.name}
-                  </Button>
-                ))}
-              </div>
+                  <CardHeader className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CardMedia icon={Server} className="mb-0" />
+                        <div className="min-w-0">
+                          <CardTitle className="text-xs font-semibold truncate">
+                            Server default
+                          </CardTitle>
+                          <CardDescription className="text-[10px] text-muted-foreground truncate">
+                            Environment default
+                          </CardDescription>
+                        </div>
+                      </div>
+                      {activeProviderId === SERVER_DEFAULT_ID && (
+                        <Check className="size-3.5 shrink-0 text-primary" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </Card>
+                {profiles.map((profile) => {
+                  const isSelected = activeProviderId === profile.id
+                  const ProviderIcon =
+                    profile.id === OPENROUTER_PROFILE_ID
+                      ? Globe
+                      : profile.id === OPENCODE_ZEN_PROFILE_ID
+                        ? Cpu
+                        : Server
+                  return (
+                    <Card
+                      key={profile.id}
+                      onClick={() => setActiveProviderId(profile.id)}
+                      selected={isSelected}
+                      label={profile.name}
+                      className="cursor-pointer"
+                    >
+                      <CardHeader className="p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CardMedia icon={ProviderIcon} className="mb-0" />
+                            <div className="min-w-0">
+                              <CardTitle className="text-xs font-semibold truncate">
+                                {profile.name}
+                              </CardTitle>
+                              <CardDescription className="text-[10px] text-muted-foreground truncate font-mono">
+                                {profile.modelId || 'default model'}
+                              </CardDescription>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <Check className="size-3.5 shrink-0 text-primary" />
+                          )}
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  )
+                })}
+              </CardGroup>
             </SettingsSection>
 
             {/* Auth Section */}
@@ -474,15 +584,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
 
                   {/* App Attribution Notice */}
-                  <div className="flex items-start gap-2 rounded-lg border border-success/20 bg-success/5 p-3 text-xs">
-                    <ShieldCheck className="size-4 shrink-0 text-success mt-0.5" />
-                    <div className="space-y-0.5">
-                      <div className="font-medium text-foreground">App Attribution Configured</div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Your requests include official app attribution (<code className="font-mono text-success">Fleet Agent</code>) and HTTP referer verification for OpenRouter stats and rankings.
-                      </p>
-                    </div>
-                  </div>
+                  <Card className="border border-success/20 bg-success/5">
+                    <CardHeader className="p-3">
+                      <div className="flex items-start gap-2">
+                        <ShieldCheck className="size-4 shrink-0 text-success mt-0.5" />
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-foreground text-xs">
+                            App Attribution Configured
+                          </div>
+                          <CardDescription className="text-[11px] text-muted-foreground">
+                            Your requests include official app attribution (<code className="font-mono text-success">Fleet Agent</code>) and HTTP referer verification for OpenRouter stats and rankings.
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
                 </div>
               ) : (
                 <div className="space-y-3 pt-1">
@@ -611,183 +727,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               )}
             </SettingsSection>
 
-            {/* Model Selection Section */}
-            {activeProviderId === OPENCODE_ZEN_PROFILE_ID ? (
-              <SettingsSection
-                icon={Cpu}
-                title="Active LLM Model"
-                description={`Select which model to route through your OpenCode Zen connection (${OPENCODE_ZEN_BASE_URL}).`}
-                action={
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {openCodeZenCustomModelEnabled ? 'Active' : 'Disabled'}
-                    </span>
-                    <Switch
-                      label="Toggle Custom OpenCode Zen Model"
-                      checked={openCodeZenCustomModelEnabled}
-                      onToggle={() =>
-                        setOpenCodeZenCustomModelEnabled(!openCodeZenCustomModelEnabled)
-                      }
-                    />
-                  </div>
-                }
-              >
-                <div
-                  className={
-                    openCodeZenCustomModelEnabled
-                      ? 'space-y-3 opacity-100'
-                      : 'space-y-3 opacity-60 pointer-events-none'
-                  }
-                >
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Popular OpenCode Zen Models:
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {POPULAR_OPENCODE_ZEN_MODELS.map((model) => {
-                        const isSelected = openCodeZenSelectedModel === model.id
-                        return (
-                          <Button
-                            key={model.id}
-                            variant={isSelected ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => {
-                              setOpenCodeZenSelectedModel(model.id)
-                              setOpenCodeZenCustomModelInput(model.id)
-                            }}
-                            className="h-7 text-xs gap-1.5"
-                          >
-                            {isSelected && <Check className="size-3" />}
-                            {model.label}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <form
-                    onSubmit={handleOpenCodeZenCustomModelSubmit}
-                    className="space-y-1.5 pt-1"
-                  >
-                    <label
-                      htmlFor="custom-opencode-zen-model-id"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      Custom Model Identifier:
-                    </label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="custom-opencode-zen-model-id"
-                        placeholder={DEFAULT_OPENCODE_ZEN_MODEL}
-                        value={openCodeZenCustomModelInput}
-                        onChange={(e) => setOpenCodeZenCustomModelInput(e.target.value)}
-                        className="text-xs font-mono"
-                      />
-                      <Button
-                        type="submit"
-                        variant="secondary"
-                        size="sm"
-                        disabled={
-                          !openCodeZenCustomModelInput.trim() ||
-                          openCodeZenCustomModelInput === openCodeZenSelectedModel
-                        }
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                  </form>
-
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <Globe className="size-3" />
-                    <span>Currently routed:</span>
-                    <code className="font-mono text-foreground font-semibold">
-                      {openCodeZenCustomModelEnabled
-                        ? openCodeZenSelectedModel
-                        : 'Default OpenCode Zen Model'}
-                    </code>
-                  </div>
-                </div>
-              </SettingsSection>
-            ) : (
-              <SettingsSection
-                icon={Cpu}
-                title="Active LLM Model"
-                description="Select which model to route through your OpenRouter connection."
-                action={
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {customModelEnabled ? 'Active' : 'Disabled'}
-                    </span>
-                    <Switch
-                      label="Toggle Custom OpenRouter Model"
-                      checked={customModelEnabled}
-                      onToggle={() => setCustomModelEnabled(!customModelEnabled)}
-                    />
-                  </div>
-                }
-              >
-
-                <div className={customModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60 pointer-events-none'}>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Popular Models:
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {POPULAR_OPENROUTER_MODELS.map((model) => {
-                        const isSelected = selectedModel === model.id
-                        return (
-                          <Button
-                            key={model.id}
-                            variant={isSelected ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => {
-                              setSelectedModel(model.id)
-                              setCustomModelInput(model.id)
-                            }}
-                            className="h-7 text-xs gap-1.5"
-                          >
-                            {isSelected && <Check className="size-3" />}
-                            {model.label}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleCustomModelSubmit} className="space-y-1.5 pt-1">
-                    <label htmlFor="custom-model-id" className="text-xs font-medium text-muted-foreground">
-                      Custom Model Identifier:
-                    </label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="custom-model-id"
-                        placeholder={DEFAULT_OPENROUTER_MODEL}
-                        value={customModelInput}
-                        onChange={(e) => setCustomModelInput(e.target.value)}
-                        className="text-xs font-mono"
-                      />
-                      <Button
-                        type="submit"
-                        variant="secondary"
-                        size="sm"
-                        disabled={!customModelInput.trim() || customModelInput === selectedModel}
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                  </form>
-
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <Globe className="size-3" />
-                    <span>Currently routed:</span>
-                    <code className="font-mono text-foreground font-semibold">
-                      {customModelEnabled ? selectedModel : 'Default Server Model'}
-                    </code>
-                  </div>
-                </div>
-              </SettingsSection>
-            )}
-
             {/* Custom Providers Section */}
             <SettingsSection
               icon={Plus}
@@ -816,55 +755,64 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </p>
               )}
 
-              {customProfiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="rounded-lg border bg-muted/30 p-3 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-foreground">
-                          {profile.name}
-                        </span>
-                        {activeProviderId === profile.id && (
-                          <Badge variant="outline" className="px-2 py-0 text-[10px] border-success/30 bg-success/10 text-success">
-                            Active
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="font-mono text-[11px] text-muted-foreground truncate">
-                        {profile.modelId || 'server default model'}
-                      </div>
-                      <div className="font-mono text-[11px] text-muted-foreground truncate">
-                        {profile.baseUrl}
-                      </div>
-                      <div className="font-mono text-[11px] text-muted-foreground">
-                        Key: {maskApiKey(profile.apiKey)}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => startEditProvider(profile)}
-                        aria-label={`Edit ${profile.name}`}
-                      >
-                        <Pencil className="size-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => removeProfile(profile.id)}
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={`Delete ${profile.name}`}
-                      >
-                        <Trash2 className="size-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {customProfiles.length > 0 && (
+                <CardGroup separated border="outlined" className="w-full">
+                  {customProfiles.map((profile) => (
+                    <Card
+                      key={profile.id}
+                      className="border border-border/60 bg-muted/30"
+                    >
+                      <CardHeader className="p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <CardTitle className="text-xs font-semibold">
+                                {profile.name}
+                              </CardTitle>
+                              {activeProviderId === profile.id && (
+                                <Badge
+                                  variant="outline"
+                                  className="px-2 py-0 text-[10px] border-success/30 bg-success/10 text-success"
+                                >
+                                  Active
+                                </Badge>
+                              )}
+                            </div>
+                            <CardDescription className="font-mono text-[11px] truncate">
+                              {profile.modelId || 'server default model'}
+                            </CardDescription>
+                            <div className="font-mono text-[11px] text-muted-foreground truncate">
+                              {profile.baseUrl}
+                            </div>
+                            <div className="font-mono text-[11px] text-muted-foreground">
+                              Key: {maskApiKey(profile.apiKey)}
+                            </div>
+                          </div>
+                          <CardAction className="flex shrink-0 gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => startEditProvider(profile)}
+                              aria-label={`Edit ${profile.name}`}
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => removeProfile(profile.id)}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label={`Delete ${profile.name}`}
+                            >
+                              <Trash2 className="size-3" />
+                            </Button>
+                          </CardAction>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </CardGroup>
+              )}
 
               {showProviderForm && (
                 <form onSubmit={handleProviderSubmit} className="space-y-3 border-t pt-3">
@@ -1009,50 +957,208 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </form>
               )}
             </SettingsSection>
-          </TabsContent>
 
-          {/* APPEARANCE CONFIGURATION */}
-          <TabsContent
-            value="appearance"
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto pt-3"
-          >
-            <SettingsSection
-              icon={Palette}
-              title="Interface Theme"
-              description="Select your preferred color theme for Fleet Agent."
-            >
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <Button
-                  variant={theme === 'light' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTheme('light')}
-                  className="flex items-center justify-center gap-2 h-10"
-                >
-                  <Sun className="size-4" />
-                  <span>Light</span>
-                </Button>
-                <Button
-                  variant={theme === 'dark' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTheme('dark')}
-                  className="flex items-center justify-center gap-2 h-10"
-                >
-                  <Moon className="size-4" />
-                  <span>Dark</span>
-                </Button>
-                <Button
-                  variant={theme === 'system' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTheme('system')}
-                  className="flex items-center justify-center gap-2 h-10"
-                >
-                  <Laptop className="size-4" />
-                  <span>System</span>
-                </Button>
               </div>
-            </SettingsSection>
-          </TabsContent>
-        </Tabs>
+            )}
+
+            {activeCategory === 'models' && (
+              activeProviderId === OPENCODE_ZEN_PROFILE_ID ? (
+              <SettingsSection
+                icon={Cpu}
+                title="Active LLM Model"
+                description={`Select which model to route through your OpenCode Zen connection (${OPENCODE_ZEN_BASE_URL}).`}
+                action={
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {openCodeZenCustomModelEnabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <Switch
+                      label="Toggle Custom OpenCode Zen Model"
+                      checked={openCodeZenCustomModelEnabled}
+                      onToggle={() =>
+                        setOpenCodeZenCustomModelEnabled(!openCodeZenCustomModelEnabled)
+                      }
+                      hideLabel
+                    />
+                  </div>
+                }
+              >
+                <div
+                  className={
+                    openCodeZenCustomModelEnabled
+                      ? 'space-y-3 opacity-100'
+                      : 'space-y-3 opacity-60'
+                  }
+                >
+                  <ModelCardsRow
+                    providerId={OPENCODE_ZEN_PROFILE_ID}
+                    baseUrl={OPENCODE_ZEN_BASE_URL}
+                    apiKey={openCodeZenApiKey}
+                    selectedModel={openCodeZenSelectedModel}
+                    onSelectModel={(modelId) => {
+                      setOpenCodeZenCustomModelEnabled(true)
+                      setOpenCodeZenSelectedModel(modelId)
+                      setOpenCodeZenCustomModelInput(modelId)
+                    }}
+                  />
+
+                  <form
+                    onSubmit={handleOpenCodeZenCustomModelSubmit}
+                    className="space-y-1.5 pt-1"
+                  >
+                    <label
+                      htmlFor="custom-opencode-zen-model-id"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Custom Model Identifier:
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="custom-opencode-zen-model-id"
+                        placeholder={DEFAULT_OPENCODE_ZEN_MODEL}
+                        value={openCodeZenCustomModelInput}
+                        onChange={(e) => setOpenCodeZenCustomModelInput(e.target.value)}
+                        className="text-xs font-mono"
+                      />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        size="sm"
+                        disabled={
+                          !openCodeZenCustomModelInput.trim() ||
+                          openCodeZenCustomModelInput === openCodeZenSelectedModel
+                        }
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </form>
+
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Globe className="size-3" />
+                    <span>Currently routed:</span>
+                    <code className="font-mono text-foreground font-semibold">
+                      {openCodeZenCustomModelEnabled
+                        ? openCodeZenSelectedModel
+                        : 'Default OpenCode Zen Model'}
+                    </code>
+                  </div>
+                </div>
+              </SettingsSection>
+            ) : (
+              <SettingsSection
+                icon={Cpu}
+                title="Active LLM Model"
+                description="Select which model to route through your OpenRouter connection."
+                action={
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {customModelEnabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <Switch
+                      label="Toggle Custom OpenRouter Model"
+                      checked={customModelEnabled}
+                      onToggle={() => setCustomModelEnabled(!customModelEnabled)}
+                      hideLabel
+                    />
+                  </div>
+                }
+              >
+                <div className={customModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60'}>
+                  <ModelCardsRow
+                    providerId={OPENROUTER_PROFILE_ID}
+                    baseUrl={OPENROUTER_BASE_URL}
+                    apiKey={apiKey}
+                    selectedModel={selectedModel}
+                    onSelectModel={(modelId) => {
+                      setCustomModelEnabled(true)
+                      setSelectedModel(modelId)
+                      setCustomModelInput(modelId)
+                    }}
+                  />
+
+                  <form onSubmit={handleCustomModelSubmit} className="space-y-1.5 pt-1">
+                    <label htmlFor="custom-model-id" className="text-xs font-medium text-muted-foreground">
+                      Custom Model Identifier:
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="custom-model-id"
+                        placeholder={DEFAULT_OPENROUTER_MODEL}
+                        value={customModelInput}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        className="text-xs font-mono"
+                      />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        size="sm"
+                        disabled={!customModelInput.trim() || customModelInput === selectedModel}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </form>
+
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Globe className="size-3" />
+                    <span>Currently routed:</span>
+                    <code className="font-mono text-foreground font-semibold">
+                      {customModelEnabled ? selectedModel : 'Default Server Model'}
+                    </code>
+                  </div>
+                </div>
+              </SettingsSection>
+              )
+            )}
+
+            {activeCategory === 'appearance' && (
+              <div className="space-y-4">
+                <SettingsSection
+                  icon={Palette}
+                  title="Interface Theme"
+                  description="Select your preferred color theme for Fleet Agent."
+                >
+                  <CardGroup columns={3} separated border="outlined" className="pt-1">
+                    <Card
+                      onClick={() => setTheme('light')}
+                      selected={theme === 'light'}
+                      label="Light"
+                      className="cursor-pointer"
+                    >
+                      <CardHeader className="p-3 flex flex-col items-center justify-center text-center gap-1.5">
+                        <CardMedia icon={Sun} className="mb-0" />
+                        <CardTitle className="text-xs font-medium">Light</CardTitle>
+                      </CardHeader>
+                    </Card>
+                    <Card
+                      onClick={() => setTheme('dark')}
+                      selected={theme === 'dark'}
+                      label="Dark"
+                      className="cursor-pointer"
+                    >
+                      <CardHeader className="p-3 flex flex-col items-center justify-center text-center gap-1.5">
+                        <CardMedia icon={Moon} className="mb-0" />
+                        <CardTitle className="text-xs font-medium">Dark</CardTitle>
+                      </CardHeader>
+                    </Card>
+                    <Card
+                      onClick={() => setTheme('system')}
+                      selected={theme === 'system'}
+                      label="System"
+                      className="cursor-pointer"
+                    >
+                      <CardHeader className="p-3 flex flex-col items-center justify-center text-center gap-1.5">
+                        <CardMedia icon={Laptop} className="mb-0" />
+                        <CardTitle className="text-xs font-medium">System</CardTitle>
+                      </CardHeader>
+                    </Card>
+                  </CardGroup>
+                </SettingsSection>
+              </div>
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )

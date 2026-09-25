@@ -2,8 +2,10 @@
 
 import {
   createContext,
+  forwardRef,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ComponentProps,
   type FC,
@@ -11,13 +13,10 @@ import {
 } from "react";
 import {
   AtSignIcon,
-  BrainIcon,
-  CheckIcon,
   ChevronDownIcon,
   CircleAlertIcon,
   FileTextIcon,
   GlobeIcon,
-  LockKeyholeIcon,
   SparklesIcon,
   WrenchIcon,
   ZapIcon,
@@ -27,13 +26,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ReasoningEffort,
+  type ReasoningEffortLevel,
+} from "@/components/assistant-ui/reasoning-effort";
 import { useProviders } from "@/hooks/use-providers";
 import { useOpenCodeZenAuth } from "@/hooks/use-opencode-zen-auth";
 import { useOpenRouterAuth } from "@/hooks/use-openrouter-auth";
@@ -179,19 +181,20 @@ interface ComposerUsage {
 }
 
 /** Visual model trigger kept next to the runtime picker that owns it. */
-export function ComposerModelTrigger({
-  model,
-  open,
-  unconfigured = false,
-  className,
-  ...props
-}: Omit<ComponentProps<"button">, "children"> & {
-  model: string;
-  open: boolean;
-  unconfigured?: boolean;
-}) {
+export const ComposerModelTrigger = forwardRef<
+  HTMLButtonElement,
+  Omit<ComponentProps<"button">, "children"> & {
+    model: string;
+    open: boolean;
+    unconfigured?: boolean;
+  }
+>(function ComposerModelTrigger(
+  { model, open, unconfigured = false, className, ...props },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type="button"
       aria-expanded={open}
       data-slot="composer-model-trigger"
@@ -212,7 +215,7 @@ export function ComposerModelTrigger({
       <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
     </button>
   );
-}
+});
 
 /** Displays the estimated context breakdown used by the Composer toolbar. */
 export function ComposerContext({
@@ -367,8 +370,7 @@ function modelOptionKey(providerId: string, modelId: string): string {
 const DEFAULT_MODEL_KEY = "__default__";
 
 export const ComposerModelPicker: FC = () => {
-  const { preferences, setEffort, setSpeed, setAccess } =
-    useComposerPreferences();
+  const { preferences, setEffort } = useComposerPreferences();
   const [open, setOpen] = useState(false);
   const { profiles, activeProviderId, setActiveProviderId } = useProviders();
   const {
@@ -398,62 +400,78 @@ export const ComposerModelPicker: FC = () => {
         providerId: SERVER_DEFAULT_ID,
         ready: true,
       },
-      {
-        key: modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY),
-        label: "OpenRouter default model",
-        description: "Provider default · via OpenRouter",
-        providerId: OPENROUTER_PROFILE_ID,
-        ready: openRouterReady,
-      },
-      {
-        key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY),
-        label: "OpenCode Zen default model",
-        description: "Provider default · via OpenCode Zen",
-        providerId: OPENCODE_ZEN_PROFILE_ID,
-        ready: openCodeZenReady,
-      },
-      ...POPULAR_OPENROUTER_MODELS.map((model) => ({
-        key: modelOptionKey(OPENROUTER_PROFILE_ID, model.id),
-        modelId: model.id,
-        label: model.label,
-        description: `${model.id} · via OpenRouter`,
-        providerId: OPENROUTER_PROFILE_ID,
-        ready: openRouterReady,
-      })),
-      ...POPULAR_OPENCODE_ZEN_MODELS.map((model) => ({
-        key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, model.id),
-        modelId: model.id,
-        label: model.label,
-        description: `${model.id} · via OpenCode Zen`,
-        providerId: OPENCODE_ZEN_PROFILE_ID,
-        ready: openCodeZenReady,
-      })),
     ];
 
-    const knownModelKeys = new Set(
-      options
-        .filter((option) => option.modelId)
-        .map((option) => option.key),
-    );
-    if (!knownModelKeys.has(modelOptionKey(OPENROUTER_PROFILE_ID, openRouterModel))) {
-      options.push({
-        key: modelOptionKey(OPENROUTER_PROFILE_ID, openRouterModel),
-        modelId: openRouterModel,
-        label: openRouterModel,
-        description: "Custom model · via OpenRouter",
-        providerId: OPENROUTER_PROFILE_ID,
-        ready: openRouterReady,
-      });
+    if (openRouterReady) {
+      if (!openRouterCustomModelEnabled) {
+        options.push({
+          key: modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY),
+          label: "OpenRouter default model",
+          description: "Provider default · via OpenRouter",
+          providerId: OPENROUTER_PROFILE_ID,
+          ready: true,
+        });
+      }
+      for (const model of POPULAR_OPENROUTER_MODELS) {
+        options.push({
+          key: modelOptionKey(OPENROUTER_PROFILE_ID, model.id),
+          modelId: model.id,
+          label: model.label,
+          description: `${model.id} · via OpenRouter`,
+          providerId: OPENROUTER_PROFILE_ID,
+          ready: true,
+        });
+      }
+      if (
+        openRouterCustomModelEnabled &&
+        openRouterModel &&
+        !POPULAR_OPENROUTER_MODELS.some((m) => m.id === openRouterModel)
+      ) {
+        options.push({
+          key: modelOptionKey(OPENROUTER_PROFILE_ID, openRouterModel),
+          modelId: openRouterModel,
+          label: openRouterModel,
+          description: "Custom model · via OpenRouter",
+          providerId: OPENROUTER_PROFILE_ID,
+          ready: true,
+        });
+      }
     }
-    if (!knownModelKeys.has(modelOptionKey(OPENCODE_ZEN_PROFILE_ID, openCodeZenModel))) {
-      options.push({
-        key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, openCodeZenModel),
-        modelId: openCodeZenModel,
-        label: openCodeZenModel,
-        description: "Custom model · via OpenCode Zen",
-        providerId: OPENCODE_ZEN_PROFILE_ID,
-        ready: openCodeZenReady,
-      });
+
+    if (openCodeZenReady) {
+      if (!openCodeZenCustomModelEnabled) {
+        options.push({
+          key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY),
+          label: "OpenCode Zen default model",
+          description: "Provider default · via OpenCode Zen",
+          providerId: OPENCODE_ZEN_PROFILE_ID,
+          ready: true,
+        });
+      }
+      for (const model of POPULAR_OPENCODE_ZEN_MODELS) {
+        options.push({
+          key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, model.id),
+          modelId: model.id,
+          label: model.label,
+          description: `${model.id} · via OpenCode Zen`,
+          providerId: OPENCODE_ZEN_PROFILE_ID,
+          ready: true,
+        });
+      }
+      if (
+        openCodeZenCustomModelEnabled &&
+        openCodeZenModel &&
+        !POPULAR_OPENCODE_ZEN_MODELS.some((m) => m.id === openCodeZenModel)
+      ) {
+        options.push({
+          key: modelOptionKey(OPENCODE_ZEN_PROFILE_ID, openCodeZenModel),
+          modelId: openCodeZenModel,
+          label: openCodeZenModel,
+          description: "Custom model · via OpenCode Zen",
+          providerId: OPENCODE_ZEN_PROFILE_ID,
+          ready: true,
+        });
+      }
     }
 
     for (const profile of profiles) {
@@ -464,29 +482,26 @@ export const ComposerModelPicker: FC = () => {
         continue;
       }
       const routeReady = Boolean(profile.apiKey?.trim() && profile.baseUrl?.trim());
+      if (!routeReady) continue;
+
       const modelId = profile.modelId?.trim();
       if (!modelId) {
-        // Without a configured model id the profile routes its provider
-        // default, so one option describes the whole route.
         options.push({
           key: modelOptionKey(profile.id, DEFAULT_MODEL_KEY),
           label: `${profile.name} default model`,
           description: `Provider default · via ${profile.name}`,
           providerId: profile.id,
-          ready: routeReady,
+          ready: true,
         });
         continue;
       }
-      // A profile with a model id always sends that id, so a second
-      // "provider default" row would duplicate this route and mislabel the
-      // model that actually runs.
       options.push({
         key: modelOptionKey(profile.id, modelId),
         modelId,
         label: modelId,
         description: `via ${profile.name}`,
         providerId: profile.id,
-        ready: routeReady,
+        ready: true,
       });
     }
 
@@ -497,8 +512,10 @@ export const ComposerModelPicker: FC = () => {
       return true;
     });
   }, [
+    openCodeZenCustomModelEnabled,
     openCodeZenModel,
     openCodeZenReady,
+    openRouterCustomModelEnabled,
     openRouterModel,
     openRouterReady,
     profiles,
@@ -508,15 +525,29 @@ export const ComposerModelPicker: FC = () => {
     if (activeProviderId === SERVER_DEFAULT_ID) return SERVER_DEFAULT_ID;
     if (activeProviderId === OPENROUTER_PROFILE_ID) {
       if (!openRouterReady) return SERVER_DEFAULT_ID;
-      return openRouterCustomModelEnabled
-        ? modelOptionKey(activeProviderId, openRouterModel)
-        : modelOptionKey(activeProviderId, DEFAULT_MODEL_KEY);
+      if (!openRouterCustomModelEnabled) {
+        return modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY);
+      }
+      const targetModel = openRouterModel || "openai/gpt-4o-mini";
+      const option = modelOptions.find(
+        (entry) =>
+          entry.key === modelOptionKey(activeProviderId, targetModel) &&
+          entry.ready,
+      );
+      return option?.key ?? modelOptions.find((e) => e.providerId === OPENROUTER_PROFILE_ID)?.key ?? SERVER_DEFAULT_ID;
     }
     if (activeProviderId === OPENCODE_ZEN_PROFILE_ID) {
       if (!openCodeZenReady) return SERVER_DEFAULT_ID;
-      return openCodeZenCustomModelEnabled
-        ? modelOptionKey(activeProviderId, openCodeZenModel)
-        : modelOptionKey(activeProviderId, DEFAULT_MODEL_KEY);
+      if (!openCodeZenCustomModelEnabled) {
+        return modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY);
+      }
+      const targetModel = openCodeZenModel || "muse-spark-1.3-contributor-free";
+      const option = modelOptions.find(
+        (entry) =>
+          entry.key === modelOptionKey(activeProviderId, targetModel) &&
+          entry.ready,
+      );
+      return option?.key ?? modelOptions.find((e) => e.providerId === OPENCODE_ZEN_PROFILE_ID)?.key ?? SERVER_DEFAULT_ID;
     }
     const routeReady = Boolean(
       activeProfile?.apiKey?.trim() && activeProfile.baseUrl?.trim(),
@@ -575,15 +606,26 @@ export const ComposerModelPicker: FC = () => {
     }
   };
 
-  // Keep the compact trigger focused on the selected route. Effort, speed,
-  // and access remain available as local preferences from the menu.
+  // Keep the compact trigger focused on the selected route. Effort
+  // remains available as a local preference from the menu.
   const triggerLabel = activeModelLabel;
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const EFFORT_LEVELS = useMemo<readonly ReasoningEffortLevel<EffortLevel>[]>(
+    () => [
+      { key: "Low", label: "Low", description: "Brief reasoning" },
+      { key: "Medium", label: "Medium", description: "Balanced" },
+      { key: "High", label: "High", description: "Deep thinking" },
+    ],
+    [],
+  );
 
   return (
     <DropdownMenu onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <ComposerModelTrigger
+            ref={triggerRef}
             model={triggerLabel}
             open={open}
             unconfigured={unconfiguredRoute !== null}
@@ -599,7 +641,12 @@ export const ComposerModelPicker: FC = () => {
       />
       <DropdownMenuContent
         align="end"
-        className="max-h-[var(--available-height)] w-72 max-w-[calc(100vw-1rem)] space-y-1 overflow-y-auto p-1.5 text-xs"
+        className="max-h-[var(--available-height)] w-72 max-w-[calc(100vw-1rem)] space-y-2 overflow-y-auto p-2 text-xs"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            triggerRef.current?.focus();
+          }
+        }}
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -623,7 +670,6 @@ export const ComposerModelPicker: FC = () => {
               <DropdownMenuRadioItem
                 key={option.key}
                 value={option.key}
-                disabled={!option.ready}
                 className="flex cursor-pointer items-center justify-between py-1.5"
               >
                 <span className="flex min-w-0 flex-col">
@@ -635,7 +681,7 @@ export const ComposerModelPicker: FC = () => {
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
-          <p className="px-2 pb-1 pt-1.5 text-[10px] leading-4 text-muted-foreground">
+          <p className="px-2 pb-0.5 pt-1 text-[10px] leading-4 text-muted-foreground">
             Selecting a model chooses its configured route. Manage keys and
             model identifiers in Settings → Providers &amp; Models.
           </p>
@@ -643,85 +689,13 @@ export const ComposerModelPicker: FC = () => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <BrainIcon className="size-3" />
-            Reasoning effort
-          </DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={preferences.effort}
-            onValueChange={(value) => setEffort(value as EffortLevel)}
-          >
-            {([
-              ["Low", "Brief reasoning"],
-              ["Medium", "Balanced"],
-              ["High", "Deep thinking"],
-            ] as const).map(([value, description]) => (
-              <DropdownMenuRadioItem
-                key={value}
-                value={value}
-                className="flex cursor-pointer items-center justify-between py-1"
-              >
-                <span>{value}</span>
-                <span className="text-[10px] text-muted-foreground">{description}</span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <LockKeyholeIcon className="size-3" />
-            Access
-          </DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={preferences.access}
-            onValueChange={(value) => setAccess(value as ComposerAccess)}
-          >
-            <DropdownMenuRadioItem
-              value="Full access"
-              className="cursor-pointer py-1"
-            >
-              <span className="flex flex-col">
-                <span className="font-medium">Full access</span>
-                <span className="text-[10px] text-muted-foreground">
-                  Session preference only
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem
-              value="Read-only"
-              className="cursor-pointer py-1"
-            >
-              <span className="flex flex-col">
-                <span className="font-medium">Read-only</span>
-                <span className="text-[10px] text-muted-foreground">
-                  Session preference only
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem
-          onClick={() => setSpeed(preferences.speed === "Fast" ? "Standard" : "Fast")}
-          className="flex cursor-pointer items-center justify-between py-1.5"
-        >
-          <span className="flex items-center gap-2">
-            <ZapIcon className="size-3.5 text-muted-foreground" />
-            <span className="flex flex-col">
-              <span className="font-medium">Fast mode</span>
-              <span className="text-[10px] text-muted-foreground">
-                Session preference only
-              </span>
-            </span>
-          </span>
-          {preferences.speed === "Fast" && <CheckIcon className="size-3.5" />}
-        </DropdownMenuItem>
+        <div className="px-1.5 py-1">
+          <ReasoningEffort<EffortLevel>
+            levels={EFFORT_LEVELS}
+            selectedKey={preferences.effort}
+            onSelect={setEffort}
+          />
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
