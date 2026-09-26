@@ -131,7 +131,7 @@ def _warn_legacy_artifact_location(
 ) -> None:
     """Warn when an existing experiment keeps a CWD-derived artifact location.
 
-    mlflow 3.15.2 has no API to relocate an existing experiment (its client
+    mlflow 3.16.0 has no API to relocate an existing experiment (its client
     exposes no ``update_experiment``), so a store written before this module
     set explicit roots keeps those directories. Only new experiments are
     correct; the operator decides whether the old ones are worth migrating.
@@ -234,7 +234,7 @@ def redact_span_secrets(span: Any) -> None:
     outputs, and string attributes, so a key pasted into a prompt is masked in
     the store exactly as it is in the browser.
 
-    Takes exactly one positional argument and returns nothing — mlflow 3.15.2's
+    Takes exactly one positional argument and returns nothing — mlflow 3.16.0's
     ``mlflow.tracing.configure`` validates both.
     """
     if span.inputs is not None:

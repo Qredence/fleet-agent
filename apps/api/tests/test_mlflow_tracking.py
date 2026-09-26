@@ -44,7 +44,7 @@ def _restore_mlflow_env() -> Iterator[None]:
 
     ``mlflow.set_tracking_uri`` and ``mlflow.set_experiment`` write
     ``MLFLOW_TRACKING_URI`` and ``MLFLOW_EXPERIMENT_ID`` into the environment
-    "so that subprocess can inherit it" (verified in mlflow 3.15.2). The shared
+    "so that subprocess can inherit it" (verified in mlflow 3.16.0). The shared
     conftest purges ``FLEET_AGENT_*`` and ``MODAL_*`` but not ``MLFLOW_*``, and
     ``resolve_tracking_uri`` reads the environment first — so a test that
     resolves a store would otherwise repoint every later test, including
@@ -152,7 +152,7 @@ class TestLogOptimizationRun:
             "candidate_mean": 1.0,
             "baseline_latency_s": 3.0,
             "candidate_latency_s": 3.1,
-            "dspy_version": "3.3.1",
+            "dspy_version": "3.4.0",
             "artifact_dir": None,
         }
         kwargs.update(overrides)

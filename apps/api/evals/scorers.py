@@ -10,7 +10,7 @@ The one LLM judge is OPT-IN: it needs a model identifier and a provider, so it
 is never part of ``deterministic_scorers()`` and never runs in the default
 (eval-runner, optimizer, test) path.
 
-Verified against mlflow 3.15.2: ``mlflow.genai.evaluate(data=<dataset>,
+Verified against mlflow 3.16.0: ``mlflow.genai.evaluate(data=<dataset>,
 scorers=[...], predict_fn=...)`` accepts an ``EvaluationDataset`` plus custom
 scorers, logs a run, and skips a scorer that returns None.
 """

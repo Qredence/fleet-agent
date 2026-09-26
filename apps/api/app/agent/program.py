@@ -350,7 +350,7 @@ def _validate_tools(tools: Sequence[dspy.Tool]) -> list[dspy.Tool]:
             raise ValueError(f"tool {name!r} must have a description or docstring")
         if is_async_tool(tool):
             raise TypeError(
-                f"tool {name!r} is async, but DSPy 3.3.1 ReActV2 executes "
+                f"tool {name!r} is async, but DSPy 3.4.0 ReActV2 executes "
                 "tools synchronously. Use a synchronous adapter or a future "
                 "async agent program instead of enabling implicit sync conversion."
             )
