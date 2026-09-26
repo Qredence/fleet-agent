@@ -147,13 +147,14 @@ export function RunActivityInlineContent({
     [state?.toolCalls, linkedToolIds],
   )
 
-  const decisionsAreRoute = useMemo(
-    () =>
-      (state?.decisions ?? []).some(
-        (d) => d.alternatives.length > 0 || Boolean(d.selected),
-      ),
-    [state?.decisions],
-  )
+  const decisionsHeading = useMemo(() => {
+    const decisions = state?.decisions ?? []
+    const routeCount = decisions.filter(
+      (decision) => decision.alternatives.length > 0 || Boolean(decision.selected),
+    ).length
+    if (routeCount === 0) return 'Decisions'
+    return routeCount === decisions.length ? 'Route' : 'Route and decisions'
+  }, [state?.decisions])
 
   if (!state || !hasActivity) return null
 
@@ -217,11 +218,11 @@ export function RunActivityInlineContent({
           {/* 1. Route / decisions */}
           {state.decisions.length > 0 && (
             <section
-              aria-label={decisionsAreRoute ? 'Route' : 'Decisions'}
+              aria-label={decisionsHeading}
               className="flex flex-col"
             >
               <h3 className={cn(mono, 'text-foreground/35 font-normal')}>
-                {decisionsAreRoute ? 'Route' : 'Decisions'}
+                {decisionsHeading}
               </h3>
               <div className="mt-1 flex flex-col">
                 {state.decisions.map((decision) => (

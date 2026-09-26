@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
+import { ProcessStepCard } from '@/components/process-panel/process-step-card'
 import { ProcessPanel } from '@/components/process-panel/process-panel'
 import { RunMetricsLine } from '@/components/process-panel/run-metrics'
 import { RunActivityInlineContent } from '@/components/process-panel/run-activity-inline'
@@ -160,6 +161,44 @@ beforeEach(() => {
 })
 
 afterEach(cleanup)
+
+describe('ProcessStepCard', () => {
+  it.each(['active', 'failed', 'details'] as const)(
+    'opens when %s changes the preference and preserves manual toggles',
+    async (change) => {
+      const user = userEvent.setup()
+      const initial = {
+        step: baseSteps[1],
+        tools: [],
+        sourceTitles: change === 'details' ? [] : ['Evidence source'],
+        isActive: change === 'details',
+      }
+      const { rerender } = render(<ProcessStepCard {...initial} />)
+      expect(screen.getByRole('article')).not.toHaveAttribute('data-expanded')
+
+      const updated = {
+        ...initial,
+        isActive: change !== 'failed',
+        step: change === 'failed'
+          ? { ...initial.step, status: 'failed' as const }
+          : initial.step,
+        sourceTitles: ['Evidence source'],
+      }
+      rerender(<ProcessStepCard {...updated} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+
+      await user.click(screen.getByRole('button'))
+      rerender(<ProcessStepCard {...updated} sourceTitles={['Updated evidence']} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false')
+
+      // Turning the preference off must also preserve a manually opened card.
+      await user.click(screen.getByRole('button'))
+      rerender(<ProcessStepCard {...updated} isActive={false}
+        step={{ ...updated.step, status: 'completed' }} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+    },
+  )
+})
 
 describe('RunMetricsLine', () => {
   it('does not crash when an older snapshot contains null token usage', () => {
@@ -468,6 +507,31 @@ describe('RunActivityInlineContent', () => {
     expect(
       screen.getByText(/summarized from partial progress/),
     ).toBeInTheDocument()
+  })
+
+  it.each([
+    ['alternatives', false, 'Route'],
+    ['selection', false, 'Route'],
+    ['title', false, 'Decisions'],
+    ['alternatives', true, 'Route and decisions'],
+    ['selection', true, 'Route and decisions'],
+  ] as const)('labels %s decisions (mixed: %s)', (kind, mixed, heading) => {
+    const titleOnly = {
+      id: 'title-only', title: 'Use public sources',
+      alternatives: [], status: 'accepted' as const,
+    }
+    const decision = kind === 'title' ? titleOnly : {
+      ...runningState.decisions[0],
+      alternatives: kind === 'selection' ? [] : ['AG-UI', 'Custom SSE'],
+      selected: kind === 'selection' ? 'AG-UI' : undefined,
+    }
+    render(<RunActivityInlineContent
+      state={{ ...runningState, decisions: mixed ? [decision, titleOnly] : [decision] }}
+      isRunning variant="panel"
+    />)
+    const section = screen.getByRole('region', { name: heading })
+    expect(within(section).getByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(within(section).getAllByRole('article')).toHaveLength(mixed ? 2 : 1)
   })
 
   it('renders decisions with the selected alternative marked', async () => {

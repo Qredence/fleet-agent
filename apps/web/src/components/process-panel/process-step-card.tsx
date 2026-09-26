@@ -1,5 +1,5 @@
 import { ChevronRightIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { StatusIcon, formatDuration } from '@/components/process-panel/status-chip'
 import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
@@ -36,6 +36,9 @@ export function ProcessStepCard({
   const preferOpen =
     hasDetails && (isActive || step.status === 'failed')
   const [expanded, setExpanded] = useState(() => preferOpen)
+  useEffect(() => {
+    if (preferOpen) setExpanded(true)
+  }, [preferOpen])
   const showLiveCursor =
     isActive && step.status === 'running' && step.publicSummary
   const showDuration =
