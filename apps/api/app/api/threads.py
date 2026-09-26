@@ -10,7 +10,7 @@ from sqlalchemy import or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.artifacts import artifact_to_out
-from app.api.projects import LOCAL_OWNER, get_sessions, require_project
+from app.api.deps import LOCAL_OWNER, get_sessions, require_project
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.error_codes import ERROR_MESSAGES
 from app.persistence.models import Message, Project, Run, Thread

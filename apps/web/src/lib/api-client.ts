@@ -7,7 +7,7 @@
 export const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 ).replace(/\/+$/, '')
-const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
+export const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 
 export class ApiError extends Error {
   readonly status: number
@@ -55,4 +55,23 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
   }
 
   return response.text()
+}
+
+/**
+ * Convenience wrapper for JSON-body mutations (POST, PUT, PATCH, etc.).
+ * Automatically sets `Content-Type: application/json` and serializes the body.
+ */
+export function apiJsonFetch<T>(
+  path: string,
+  method: string,
+  body: unknown,
+  init?: RequestInit,
+): Promise<T> {
+  const { headers: extraHeaders, ...rest } = init ?? {}
+  return apiFetch<T>(path, {
+    ...rest,
+    method,
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(body),
+  })
 }

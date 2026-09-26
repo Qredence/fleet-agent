@@ -1,5 +1,5 @@
 import type { AgentWorkspaceState } from '@/contracts/generated'
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, apiJsonFetch } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 
 export const THREAD_BOOTSTRAP_SCHEMA_VERSION = 1 as const
@@ -96,11 +96,7 @@ export function listThreads(projectId: string): Promise<ThreadOut[]> {
 }
 
 export function createThread(projectId: string, title = 'New conversation'): Promise<ThreadOut> {
-  return apiFetch<ThreadOut>(`/api/projects/${projectId}/threads`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  })
+  return apiJsonFetch<ThreadOut>(`/api/projects/${projectId}/threads`, 'POST', { title })
 }
 
 export async function fetchBootstrap(threadId: string): Promise<ThreadBootstrap> {
@@ -117,13 +113,10 @@ export function persistThreadMessage(
   messageId: string,
   item: Omit<MessageStorageEntry, 'id'>,
 ): Promise<{ id: string }> {
-  return apiFetch<{ id: string }>(
+  return apiJsonFetch<{ id: string }>(
     `/api/threads/${threadId}/messages/${encodeURIComponent(messageId)}`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item),
-    },
+    'PUT',
+    item,
   )
 }
 
@@ -132,23 +125,16 @@ export function persistThreadHead(
   headId: string | null,
   init: Pick<RequestInit, 'signal'> = {},
 ): Promise<{ headId: string | null }> {
-  return apiFetch<{ headId: string | null }>(
+  return apiJsonFetch<{ headId: string | null }>(
     `/api/threads/${threadId}/history/head`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ headId }),
-      ...init,
-    },
+    'PUT',
+    { headId },
+    init,
   )
 }
 
 export function renameThread(threadId: string, title: string): Promise<ThreadOut> {
-  return apiFetch<ThreadOut>(`/api/threads/${threadId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  })
+  return apiJsonFetch<ThreadOut>(`/api/threads/${threadId}`, 'PATCH', { title })
 }
 
 export async function deleteThread(threadId: string): Promise<void> {

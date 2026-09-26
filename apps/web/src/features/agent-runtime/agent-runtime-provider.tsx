@@ -19,7 +19,7 @@ import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-pres
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
-import { API_BASE_URL } from '@/lib/api-client'
+import { API_BASE_URL, API_KEY } from '@/lib/api-client'
 import { getAgentProviderHeaders } from '@/lib/providers'
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`
@@ -59,8 +59,6 @@ export function createAgentFetch(
     return fetch(url, { ...requestInit, headers })
   }
 }
-
-const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
 
 // Attachments stay local to the assistant-ui runtime. The simple adapters
 // provide picker/drop previews and convert supported files into message parts

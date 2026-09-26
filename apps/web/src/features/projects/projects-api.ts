@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/api-client'
+import { apiFetch, apiJsonFetch } from '@/lib/api-client'
 
 export interface ProjectOut {
   id: string
@@ -12,19 +12,11 @@ export function listProjects(): Promise<ProjectOut[]> {
 }
 
 export function createProject(name: string): Promise<ProjectOut> {
-  return apiFetch<ProjectOut>('/api/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
+  return apiJsonFetch<ProjectOut>('/api/projects', 'POST', { name })
 }
 
 export function renameProject(projectId: string, name: string): Promise<ProjectOut> {
-  return apiFetch<ProjectOut>(`/api/projects/${projectId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
+  return apiJsonFetch<ProjectOut>(`/api/projects/${projectId}`, 'PATCH', { name })
 }
 
 export async function deleteProject(projectId: string): Promise<void> {

@@ -14,12 +14,12 @@ from typing import cast
 from ag_ui.core import RunAgentInput
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agent.engine import EngineBuilder
 from app.agent.provider import ProviderOverrideError, parse_provider_override
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.agui.run_coordinator import RunCoordinator
+from app.api.deps import get_sessions
 from app.contracts.error_codes import ERROR_MESSAGES
 from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.services.metrics import MetricsRegistry
@@ -74,10 +74,6 @@ _SSE_HEADERS = {
 
 def get_engine_builder(request: Request) -> EngineBuilder:
     return cast(EngineBuilder, request.app.state.engine_builder)
-
-
-def get_sessions(request: Request) -> async_sessionmaker[AsyncSession]:
-    return cast(async_sessionmaker[AsyncSession], request.app.state.db_sessions)
 
 
 @router.post("/agent")
