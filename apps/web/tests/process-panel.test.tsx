@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
+import { ProcessStepCard } from '@/components/process-panel/process-step-card'
 import { ProcessPanel } from '@/components/process-panel/process-panel'
 import { RunMetricsLine } from '@/components/process-panel/run-metrics'
 import { RunActivityInlineContent } from '@/components/process-panel/run-activity-inline'
@@ -161,6 +162,44 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
+describe('ProcessStepCard', () => {
+  it.each(['active', 'failed', 'details'] as const)(
+    'opens when %s changes the preference and preserves manual toggles',
+    async (change) => {
+      const user = userEvent.setup()
+      const initial = {
+        step: baseSteps[1],
+        tools: [],
+        sourceTitles: change === 'details' ? [] : ['Evidence source'],
+        isActive: change === 'details',
+      }
+      const { rerender } = render(<ProcessStepCard {...initial} />)
+      expect(screen.getByRole('article')).not.toHaveAttribute('data-expanded')
+
+      const updated = {
+        ...initial,
+        isActive: change !== 'failed',
+        step: change === 'failed'
+          ? { ...initial.step, status: 'failed' as const }
+          : initial.step,
+        sourceTitles: ['Evidence source'],
+      }
+      rerender(<ProcessStepCard {...updated} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+
+      await user.click(screen.getByRole('button'))
+      rerender(<ProcessStepCard {...updated} sourceTitles={['Updated evidence']} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false')
+
+      // Turning the preference off must also preserve a manually opened card.
+      await user.click(screen.getByRole('button'))
+      rerender(<ProcessStepCard {...updated} isActive={false}
+        step={{ ...updated.step, status: 'completed' }} />)
+      expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+    },
+  )
+})
+
 describe('RunMetricsLine', () => {
   it('does not crash when an older snapshot contains null token usage', () => {
     const malformedMetrics = {
@@ -240,21 +279,38 @@ describe('RunActivityInlineContent', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders compact tool summaries for the Process panel variant', () => {
+  it('nests detailed tool cards under steps in the Process panel timeline', () => {
     render(
       <RunActivityInlineContent
         state={runningState}
         isRunning
         variant="panel"
-        detailedTools={false}
+        detailedTools
       />,
     )
 
-    expect(screen.getByRole('article', { name: 'tool: search_docs' })).toHaveTextContent(
-      'search_docs',
-    )
-    expect(screen.queryByText('query="agent state"')).not.toBeInTheDocument()
-    expect(screen.queryByText('Found 3 relevant documents.')).not.toBeInTheDocument()
+    const activeStep = screen.getByRole('article', {
+      name: 'step: Searching the documentation',
+    })
+    expect(activeStep).toHaveAttribute('data-expanded', 'true')
+    // Linked tools live under the step — not a flat Tool calls dump.
+    expect(
+      within(activeStep).getByRole('article', { name: 'tool: search_docs' }),
+    ).toBeInTheDocument()
+    expect(within(activeStep).getByText('query="agent state"')).toBeInTheDocument()
+    expect(
+      within(activeStep).getByText('Found 3 relevant documents.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tool calls')).not.toBeInTheDocument()
+    // Route/decisions precede steps in the scannable timeline.
+    const timeline = screen.getByLabelText('Process timeline')
+    const route = within(timeline).getByLabelText('Route')
+    const steps = within(timeline).getByLabelText('Steps')
+    expect(
+      timeline.compareDocumentPosition(route) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(route.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps detail-less steps quiet and hides sub-100ms durations', async () => {
@@ -453,10 +509,113 @@ describe('RunActivityInlineContent', () => {
     ).toBeInTheDocument()
   })
 
+  it.each([
+    ['alternatives', false, 'Route'],
+    ['selection', false, 'Route'],
+    ['title', false, 'Decisions'],
+    ['alternatives', true, 'Route and decisions'],
+    ['selection', true, 'Route and decisions'],
+  ] as const)('labels %s decisions (mixed: %s)', (kind, mixed, heading) => {
+    const titleOnly = {
+      id: 'title-only', title: 'Use public sources',
+      alternatives: [], status: 'accepted' as const,
+    }
+    const decision = kind === 'title' ? titleOnly : {
+      ...runningState.decisions[0],
+      alternatives: kind === 'selection' ? [] : ['AG-UI', 'Custom SSE'],
+      selected: kind === 'selection' ? 'AG-UI' : undefined,
+    }
+    render(<RunActivityInlineContent
+      state={{ ...runningState, decisions: mixed ? [decision, titleOnly] : [decision] }}
+      isRunning variant="panel"
+    />)
+    const section = screen.getByRole('region', { name: heading })
+    expect(within(section).getByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(within(section).getAllByRole('article')).toHaveLength(mixed ? 2 : 1)
+  })
+
   it('renders decisions with the selected alternative marked', async () => {
     await renderActivity(runningState, true)
+    expect(screen.getByLabelText('Route')).toBeInTheDocument()
+    expect(
+      screen.getByRole('article', { name: 'route: Pick transport boundary' }),
+    ).toBeInTheDocument()
     expect(screen.getByText(/AG-UI · selected/)).toBeInTheDocument()
     expect(screen.getByText(/Custom SSE/)).toBeInTheDocument()
+  })
+
+  it('expands failed steps by default and nests their tool errors', async () => {
+    const failedStepState: AgentWorkspaceState = {
+      ...runningState,
+      run: { ...runningState.run, activeStepId: 'step-understand', toolCallCount: 1 },
+      steps: [
+        baseSteps[0],
+        {
+          id: 'step-research',
+          phase: 'research',
+          title: 'Searching the documentation',
+          status: 'failed',
+          publicSummary: 'Lookup failed safely.',
+          toolCallIds: ['tc-1'],
+          sourceIds: [],
+          artifactIds: [],
+        },
+      ],
+      toolCalls: [
+        {
+          id: 'tc-1',
+          name: 'search_docs',
+          status: 'failed',
+          errorMessage: 'The documentation lookup timed out.',
+        },
+      ],
+      decisions: [],
+    }
+    await renderActivity(failedStepState, true)
+
+    const failedStep = screen.getByRole('article', {
+      name: 'step: Searching the documentation',
+    })
+    expect(failedStep).toHaveAttribute('data-expanded', 'true')
+    expect(
+      within(failedStep).getByText('The documentation lookup timed out.'),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps unlinked tools in a residual Tool calls section', async () => {
+    const orphanState: AgentWorkspaceState = {
+      ...runningState,
+      steps: [baseSteps[0]],
+      toolCalls: [
+        {
+          id: 'tc-orphan',
+          name: 'workspace_shell',
+          status: 'completed',
+          inputPreview: 'ls',
+          outputPreview: 'ok',
+          durationMs: 12,
+        },
+      ],
+      decisions: [],
+    }
+    await renderActivity(orphanState, true)
+
+    expect(screen.getByLabelText('Tool calls')).toBeInTheDocument()
+    expect(
+      screen.getByRole('article', { name: 'tool: workspace_shell' }),
+    ).toHaveTextContent('ls')
+  })
+
+  it('places termination after steps in the timeline', async () => {
+    await renderActivity(completedState)
+
+    const timeline = screen.getByLabelText('Process timeline')
+    const steps = within(timeline).getByLabelText('Steps')
+    const notice = within(timeline).getByRole('status')
+    expect(
+      steps.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(notice).toHaveTextContent('Completed normally')
   })
 })
 
