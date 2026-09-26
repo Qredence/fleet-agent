@@ -22,7 +22,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import type { AgentWorkspaceState } from '@/contracts/generated'
+import type { AgentWorkspaceState, ToolExecution } from '@/contracts/generated'
 import { collapsePanel, mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +31,9 @@ import { cn } from '@/lib/utils'
  * Unlike the legacy inline projection, this is not tied to the last message:
  * process state belongs to the AG-UI runtime and is visible independently of
  * the transcript.
+ *
+ * Panel timeline (schemaVersion 1 only): route/decisions → steps with nested
+ * tool cards → termination. Chat stays conversation; this panel is the process.
  */
 export function RunActivityPanel() {
   const isRunning = useAuiState((state) => state.thread.isRunning)
@@ -46,12 +49,14 @@ export function RunActivityPanel() {
 
   return (
     <section aria-label="Activity" className="h-full overflow-y-auto p-4">
-      <h3 className={cn(mono, 'mb-2 text-foreground/45 font-normal')}>Activity</h3>
+      <h3 className={cn(mono, 'mb-2 text-foreground/45 font-normal')}>
+        Process timeline
+      </h3>
       <RunActivityInlineContent
         state={agentState}
         isRunning={isRunning}
         variant="panel"
-        detailedTools={false}
+        detailedTools
       />
     </section>
   )
@@ -101,8 +106,8 @@ export function RunActivityInlineContent({
   // stays mounted across runs, so it does not reset on the next run.
   const [panelOpen, setPanelOpen] = useState(true)
 
-  const toolNamesById = useMemo(
-    () => new Map(state?.toolCalls.map((tool) => [tool.id, tool.name]) ?? []),
+  const toolsById = useMemo(
+    () => new Map(state?.toolCalls.map((tool) => [tool.id, tool]) ?? []),
     [state?.toolCalls],
   )
   const sourceTitlesById = useMemo(
@@ -128,6 +133,28 @@ export function RunActivityInlineContent({
     return depths
   }, [state?.steps])
 
+  const linkedToolIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const step of state?.steps ?? []) {
+      for (const id of step.toolCallIds) ids.add(id)
+    }
+    return ids
+  }, [state?.steps])
+
+  const orphanTools = useMemo(
+    () =>
+      (state?.toolCalls ?? []).filter((tool) => !linkedToolIds.has(tool.id)),
+    [state?.toolCalls, linkedToolIds],
+  )
+
+  const decisionsAreRoute = useMemo(
+    () =>
+      (state?.decisions ?? []).some(
+        (d) => d.alternatives.length > 0 || Boolean(d.selected),
+      ),
+    [state?.decisions],
+  )
+
   if (!state || !hasActivity) return null
 
   const duration =
@@ -140,6 +167,8 @@ export function RunActivityInlineContent({
     state.run.status === 'failed' ||
     Boolean(state.run.errorCode) ||
     state.run.terminationReason === 'forced_submit'
+  const settled =
+    state.run.status !== 'running' && state.run.status !== 'queued'
 
   return (
     <Collapsible
@@ -176,44 +205,23 @@ export function RunActivityInlineContent({
 
       <CollapsibleContent
         data-slot="run-activity-content"
-        className={cn(collapsePanel, 'data-closed:pointer-events-none outline-none')}
+        className={cn(
+          collapsePanel,
+          'data-closed:pointer-events-none outline-none',
+        )}
       >
-        <div className="mt-1 flex flex-col gap-3 border-t border-foreground/[0.06] pt-2.5 fade-in slide-in-from-top-1 animate-in duration-200">
-          <TerminationNotice
-            terminationReason={state.run.terminationReason}
-            errorCode={state.run.errorCode}
-          />
-
-          {state.steps.length > 0 && (
-            <div className="flex flex-col">
-              {state.steps.map((step) => (
-                <div
-                  key={step.id}
-                  data-depth={stepDepthById.get(step.id) ?? 0}
-                  data-parent-id={step.parentId}
-                  style={{
-                    marginInlineStart: `${Math.min(stepDepthById.get(step.id) ?? 0, 3) * 16}px`,
-                  }}
-                >
-                  <ProcessStepCard
-                    step={step}
-                    toolNames={step.toolCallIds
-                      .map((id) => toolNamesById.get(id))
-                      .filter((name): name is string => Boolean(name))}
-                    sourceTitles={step.sourceIds
-                      .map((id) => sourceTitlesById.get(id))
-                      .filter((title): title is string => Boolean(title))}
-                    isActive={step.id === state.run.activeStepId}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
+        <div
+          aria-label="Process timeline"
+          className="mt-1 flex flex-col gap-3 border-t border-foreground/[0.06] pt-2.5 fade-in slide-in-from-top-1 animate-in duration-200"
+        >
+          {/* 1. Route / decisions */}
           {state.decisions.length > 0 && (
-            <section aria-label="Decisions" className="flex flex-col">
+            <section
+              aria-label={decisionsAreRoute ? 'Route' : 'Decisions'}
+              className="flex flex-col"
+            >
               <h3 className={cn(mono, 'text-foreground/35 font-normal')}>
-                Decisions
+                {decisionsAreRoute ? 'Route' : 'Decisions'}
               </h3>
               <div className="mt-1 flex flex-col">
                 {state.decisions.map((decision) => (
@@ -223,26 +231,60 @@ export function RunActivityInlineContent({
             </section>
           )}
 
-          {state.toolCalls.length > 0 && (
+          {/* 2. Steps with nested tool cards */}
+          {state.steps.length > 0 && (
+            <section aria-label="Steps" className="flex flex-col">
+              {state.steps.map((step) => {
+                const tools = step.toolCallIds
+                  .map((id) => toolsById.get(id))
+                  .filter((tool): tool is ToolExecution => Boolean(tool))
+                return (
+                  <div
+                    key={step.id}
+                    data-depth={stepDepthById.get(step.id) ?? 0}
+                    data-parent-id={step.parentId}
+                    style={{
+                      marginInlineStart: `${Math.min(stepDepthById.get(step.id) ?? 0, 3) * 16}px`,
+                    }}
+                  >
+                    <ProcessStepCard
+                      step={step}
+                      tools={tools}
+                      sourceTitles={step.sourceIds
+                        .map((id) => sourceTitlesById.get(id))
+                        .filter((title): title is string => Boolean(title))}
+                      isActive={step.id === state.run.activeStepId}
+                      detailedTools={detailedTools}
+                    />
+                  </div>
+                )
+              })}
+            </section>
+          )}
+
+          {/* Residual tools not linked to any step (emit hole or legacy) */}
+          {orphanTools.length > 0 && (
             <section aria-label="Tool calls" className="flex flex-col">
               <h3 className={cn(mono, 'text-foreground/35 font-normal')}>
                 Tool calls
               </h3>
               <div className="mt-1 flex flex-col">
                 {detailedTools
-                  ? state.toolCalls.map((tool) => (
+                  ? orphanTools.map((tool) => (
                       <ToolExecutionCard key={tool.id} tool={tool} />
                     ))
-                  : state.toolCalls.map((tool) => (
+                  : orphanTools.map((tool) => (
                       <ToolExecutionSummary key={tool.id} tool={tool} />
                     ))}
               </div>
             </section>
           )}
 
-          {state.run.status !== 'running' && state.run.status !== 'queued' && (
-            <RunMetricsLine metrics={state.metrics} />
-          )}
+          {/* 3. Termination → caveats → metrics */}
+          <TerminationNotice
+            terminationReason={state.run.terminationReason}
+            errorCode={state.run.errorCode}
+          />
 
           {state.caveats && state.caveats.length > 0 && (
             <section
@@ -270,6 +312,8 @@ export function RunActivityInlineContent({
               </ul>
             </section>
           )}
+
+          {settled && <RunMetricsLine metrics={state.metrics} />}
         </div>
       </CollapsibleContent>
     </Collapsible>
