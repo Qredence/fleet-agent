@@ -273,7 +273,7 @@ def score_seeded_router() -> tuple[float, list[tuple[str, str, str, float]], int
     from tests.helpers.scripted_lm import ScriptedLM
 
     steps = [
-        {"content": '{"route": "%s"}' % example.expected_route}
+        {"content": f'{{"route": "{example.expected_route}"}}'}
         for example in CANONICAL_ROUTING_EXAMPLES
     ]
     lm = ScriptedLM(steps)

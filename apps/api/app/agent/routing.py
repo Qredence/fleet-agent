@@ -76,7 +76,7 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     """
 
     user_request: str = dspy.InputField(desc="The user's current request.")
-    route: ToolRoute = dspy.OutputField(
+    route: str = dspy.OutputField(
         desc="The minimum capability profile required for the task."
     )
 
@@ -90,14 +90,14 @@ def coerce_route(value: object) -> ToolRoute:
     fail-closed to ``direct`` — coerce never elevates privilege via aliases.
     """
     if value in ROUTES:
-        return cast(ToolRoute, value)
+        return value
     if isinstance(value, str):
         normalized = value.strip().strip(_ROUTE_WRAP_CHARS).strip().lower()
         normalized = normalized.replace("-", "_").replace(" ", "_")
         while "__" in normalized:
             normalized = normalized.replace("__", "_")
         if normalized in ROUTES:
-            return cast(ToolRoute, normalized)
+            return normalized
     return "direct"
 
 

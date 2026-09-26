@@ -193,6 +193,14 @@ def test_json_router_literal_value_error_falls_back_to_direct():
         assert program._select_route("inspect the code") == "direct"
 
 
+def test_json_router_surface_noise_coerces_to_valid_route():
+    program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
+    lm = ScriptedLM([{"content": '{"route": "  \'WORKSPACE_WRITE\'  "}'}])
+
+    with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
+        assert program._select_route("write new tests") == "workspace_write"
+
+
 def test_direct_route_keeps_dict_history_evidence(monkeypatch):
     program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
     monkeypatch.setattr(

@@ -154,3 +154,21 @@ def test_score_seeded_router_is_exact_on_canonical_gold():
             "workspace_shell",
         }
     )
+
+
+def test_eval_runner_seeded_rejects_incompatible_flags():
+    with pytest.raises(SystemExit):
+        eval_run_main(["--suite", "routing", "--seeded", "--register-dataset"])
+
+    with pytest.raises(SystemExit):
+        eval_run_main(["--suite", "routing", "--seeded", "--mlflow-eval"])
+
+
+def test_tool_routing_signature_parses_surface_noise_without_adapter_error():
+    from app.agent.routing import ToolRoutingSignature, coerce_route
+
+    lm = ScriptedLM([{"content": '{"route": "  \'WORKSPACE_WRITE\'  "}'}])
+    router = dspy.Predict(ToolRoutingSignature)
+    with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
+        prediction = router(user_request="write tests")
+    assert coerce_route(prediction.route) == "workspace_write"
