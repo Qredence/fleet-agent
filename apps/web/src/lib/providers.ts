@@ -19,6 +19,7 @@ import {
   getSelectedModel as getOpenCodeZenSelectedModel,
   isCustomModelEnabled as isOpenCodeZenCustomModelEnabled,
 } from '@/lib/opencode-zen-auth'
+import { getSearchHeaders } from '@/lib/search-settings'
 
 export const PROVIDERS_STORAGE_KEY = 'fleet_providers_v1'
 export const OPENROUTER_PROFILE_ID = 'openrouter'
@@ -265,9 +266,9 @@ export function removeProfile(id: string): void {
   saveProviderStore({ ...store, profiles, activeProviderId })
 }
 
-/** Agent-POST-only provider headers for the active profile. */
-export function getAgentProviderHeaders(): Record<string, string> {
-  const profile = getActiveProfile()
+function getActiveLlmHeaders(
+  profile: ProviderProfile | null,
+): Record<string, string> {
   if (profile === null) return {}
 
   if (profile.id === OPENROUTER_PROFILE_ID) {
@@ -311,4 +312,11 @@ export function getAgentProviderHeaders(): Record<string, string> {
   }
   if (profile.modelId?.trim()) headers['X-LLM-Model'] = profile.modelId.trim()
   return headers
+}
+
+/** Agent-POST-only provider headers for the active profile and search settings. */
+export function getAgentProviderHeaders(): Record<string, string> {
+  const llmHeaders = getActiveLlmHeaders(getActiveProfile())
+  const searchHeaders = getSearchHeaders()
+  return { ...llmHeaders, ...searchHeaders }
 }

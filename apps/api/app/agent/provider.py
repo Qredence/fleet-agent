@@ -44,7 +44,7 @@ class ProviderOverride:
     result.
     """
 
-    api_key: str
+    api_key: str | None = None
     model: str | None = None
     api_base: str | None = None
     # ``None`` means "not pinned by the browser": the run then inherits the
@@ -52,21 +52,25 @@ class ProviderOverride:
     # exists precisely for gateways that reject native tool calls.
     response_format: ResponseFormat | None = None
     messages_format: MessagesFormat = "system_role"
+    search_api_key: str | None = None
+    search_provider: str | None = None
 
     def __repr__(self) -> str:
         return (
             f"ProviderOverride(model={self.model!r}, api_base={self.api_base!r}, "
             f"response_format={self.response_format!r}, "
-            f"messages_format={self.messages_format!r}, api_key=<redacted>)"
+            f"messages_format={self.messages_format!r}, "
+            f"search_provider={self.search_provider!r}, "
+            "api_key=<redacted>, search_api_key=<redacted>)"
         )
 
 
-def _validate_api_key(raw_key: str) -> str:
+def _validate_api_key(raw_key: str, *, name: str = "provider") -> str:
     if any(ord(char) < 32 or ord(char) == 127 for char in raw_key):
-        raise ProviderOverrideError("the provider key is invalid")
+        raise ProviderOverrideError(f"the {name} key is invalid")
     api_key = raw_key.strip()
     if not api_key or len(api_key) > _MAX_API_KEY_CHARS:
-        raise ProviderOverrideError("the provider key is invalid")
+        raise ProviderOverrideError(f"the {name} key is invalid")
     return api_key
 
 
@@ -186,8 +190,10 @@ def parse_provider_override(
     raw_messages_format = normalized_headers.get("x-llm-messages-format")
     legacy_key = normalized_headers.get("x-openrouter-key")
     legacy_model = normalized_headers.get("x-openrouter-model")
+    raw_search_key = normalized_headers.get("x-search-key")
+    raw_search_provider = normalized_headers.get("x-search-provider")
 
-    has_generic_headers = any(
+    has_generic_llm_headers = any(
         value is not None
         for value in (
             raw_key,
@@ -197,52 +203,87 @@ def parse_provider_override(
             raw_messages_format,
         )
     )
-    if not has_generic_headers and raw_key is None and legacy_key is None:
-        if legacy_model is None:
-            return None
-        raise ProviderOverrideError(
-            "an API key is required for a provider model override"
+    has_legacy_llm_headers = any(
+        value is not None
+        for value in (
+            legacy_key,
+            legacy_model,
         )
+    )
+    has_llm_headers = has_generic_llm_headers or has_legacy_llm_headers
+    has_search_headers = raw_search_key is not None or raw_search_provider is not None
 
-    if raw_key is not None and legacy_key is not None:
-        raise ProviderOverrideError("conflicting provider headers")
+    if not has_llm_headers and not has_search_headers:
+        return None
 
-    if raw_key is not None:
-        if raw_base_url is None:
-            raise ProviderOverrideError(
-                "a base URL is required for a provider key override"
-            )
-        api_key = _validate_api_key(raw_key)
-        api_base = _validate_base_url(
-            raw_base_url, allow_private=allow_private_base_urls
-        )
-    elif legacy_key is not None:
-        api_key = _validate_api_key(legacy_key)
-        # Legacy browser BYOK is deliberately restricted to the canonical
-        # OpenRouter endpoint; the browser cannot select an arbitrary proxy.
-        api_base = OPENROUTER_API_BASE_URL
-        if raw_model is None:
-            raw_model = legacy_model
-    else:
-        raise ProviderOverrideError("an API key is required for a provider override")
-
+    api_key: str | None = None
     model: str | None = None
-    if raw_model is not None:
-        model = _validate_model(raw_model)
-
+    api_base: str | None = None
     response_format: ResponseFormat | None = None
-    if raw_response_format is not None:
-        if raw_response_format == "json_tool_calls":
-            response_format = "json_tool_calls"
-        elif raw_response_format != "native_function_calling":
-            raise ProviderOverrideError("the provider response format is invalid")
-
     messages_format: MessagesFormat = "system_role"
-    if raw_messages_format is not None:
-        if raw_messages_format == "developer_role":
-            messages_format = "developer_role"
-        elif raw_messages_format != "system_role":
-            raise ProviderOverrideError("the provider messages format is invalid")
+
+    if has_llm_headers:
+        if not has_generic_llm_headers and raw_key is None and legacy_key is None:
+            if legacy_model is not None:
+                raise ProviderOverrideError(
+                    "an API key is required for a provider model override"
+                )
+
+        if raw_key is not None and legacy_key is not None:
+            raise ProviderOverrideError("conflicting provider headers")
+
+        if raw_key is not None:
+            if raw_base_url is None:
+                raise ProviderOverrideError(
+                    "a base URL is required for a provider key override"
+                )
+            api_key = _validate_api_key(raw_key)
+            api_base = _validate_base_url(
+                raw_base_url, allow_private=allow_private_base_urls
+            )
+        elif legacy_key is not None:
+            api_key = _validate_api_key(legacy_key)
+            # Legacy browser BYOK is deliberately restricted to the canonical
+            # OpenRouter endpoint; the browser cannot select an arbitrary proxy.
+            api_base = OPENROUTER_API_BASE_URL
+            if raw_model is None:
+                raw_model = legacy_model
+        else:
+            raise ProviderOverrideError(
+                "an API key is required for a provider override"
+            )
+
+        if raw_model is not None:
+            model = _validate_model(raw_model)
+
+        if raw_response_format is not None:
+            if raw_response_format == "json_tool_calls":
+                response_format = "json_tool_calls"
+            elif raw_response_format != "native_function_calling":
+                raise ProviderOverrideError("the provider response format is invalid")
+
+        if raw_messages_format is not None:
+            if raw_messages_format == "developer_role":
+                messages_format = "developer_role"
+            elif raw_messages_format != "system_role":
+                raise ProviderOverrideError("the provider messages format is invalid")
+
+    search_api_key: str | None = None
+    search_provider: str | None = None
+
+    if raw_search_key is not None:
+        search_api_key = _validate_api_key(raw_search_key, name="search")
+        if raw_search_provider is not None:
+            sp = raw_search_provider.strip().lower()
+            if sp not in ("tavily",):
+                raise ProviderOverrideError("the search provider is invalid")
+            search_provider = sp
+        else:
+            search_provider = "tavily"
+    elif raw_search_provider is not None:
+        raise ProviderOverrideError(
+            "an API key is required for a search provider override"
+        )
 
     return ProviderOverride(
         api_key=api_key,
@@ -250,4 +291,6 @@ def parse_provider_override(
         api_base=api_base,
         response_format=response_format,
         messages_format=messages_format,
+        search_api_key=search_api_key,
+        search_provider=search_provider,
     )

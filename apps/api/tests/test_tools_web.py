@@ -233,3 +233,14 @@ def test_build_web_tools_requires_api_key():
     ]
     configured.close()
     configured.close()
+
+    # Client-provided search key builds web tools even if server has no key
+    from app.agent.provider import ProviderOverride
+
+    byok = _build_web_tools(
+        Settings(tavily_api_key=None),
+        ProviderOverride(search_api_key="tvly-byok-key", search_provider="tavily"),
+    )
+    assert byok is not None
+    assert [tool.__name__ for tool in byok.tools] == ["web_search", "fetch_page"]
+    byok.close()

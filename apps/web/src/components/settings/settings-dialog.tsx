@@ -3,6 +3,9 @@ import {
   Check,
   CircleDot,
   Cpu,
+  ExternalLink,
+  Eye,
+  EyeOff,
   Globe,
   Key,
   Laptop,
@@ -12,6 +15,7 @@ import {
   Palette,
   Pencil,
   Plus,
+  Search,
   Server,
   ShieldCheck,
   Sun,
@@ -51,6 +55,11 @@ import {
 import {
   DEFAULT_OPENCODE_ZEN_MODEL,
 } from '@/lib/opencode-zen-auth'
+import { useSearchSettings } from '@/hooks/use-search-settings'
+import {
+  maskSearchApiKey,
+  SEARCH_PROVIDERS,
+} from '@/lib/search-settings'
 import {
   OPENROUTER_PROFILE_ID,
   OPENROUTER_BASE_URL,
@@ -144,6 +153,12 @@ const SETTINGS_CATEGORIES = [
     label: 'Models',
     description: 'Choose the model used for agent runs.',
     icon: Cpu,
+  },
+  {
+    id: 'search',
+    label: 'Web Search',
+    description: 'Configure web search provider and browser API keys for agent research tools.',
+    icon: Search,
   },
   {
     id: 'appearance',
@@ -269,6 +284,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategory>('providers')
 
+  const {
+    apiKey: searchApiKey,
+    provider: searchProvider,
+    isConnected: isSearchConnected,
+    setApiKey: setSearchApiKey,
+    clearApiKey: clearSearchApiKey,
+    setProvider: setSearchProvider,
+  } = useSearchSettings()
+
+  const [searchKeyInput, setSearchKeyInput] = useState('')
+  const [showSearchKeyForm, setShowSearchKeyForm] = useState(false)
+  const [searchKeyError, setSearchKeyError] = useState<string | null>(null)
+  const [showSearchSecret, setShowSearchSecret] = useState(false)
+
   const handleManualKeySubmit = (e: FormEvent) => {
     e.preventDefault()
     const trimmed = manualKeyInput.trim()
@@ -317,6 +346,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     if (trimmed) {
       setOpenCodeZenSelectedModel(trimmed)
     }
+  }
+
+  const handleSearchKeySubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const trimmed = searchKeyInput.trim()
+    if (!trimmed) {
+      setSearchKeyError('Please enter a valid search API key.')
+      return
+    }
+    if (!trimmed.startsWith('tvly-') && trimmed.length < 8) {
+      setSearchKeyError('Tavily API keys typically begin with "tvly-".')
+      return
+    }
+    setSearchApiKey(trimmed)
+    setSearchKeyInput('')
+    setShowSearchKeyForm(false)
+    setSearchKeyError(null)
   }
 
   const startCreateProvider = () => {
@@ -1110,6 +1156,276 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </div>
               </SettingsSection>
               )
+            )}
+
+            {activeCategory === 'search' && (
+              <div className="space-y-4">
+                <SettingsSection
+                  icon={Search}
+                  title="Search Provider"
+                  description="Choose which web search engine powers agent research, web extraction, and real-time query tools."
+                >
+                  <CardGroup
+                    columns={1}
+                    separated
+                    border="outlined"
+                    className="w-full"
+                  >
+                    {Object.values(SEARCH_PROVIDERS).map((p) => {
+                      const isSelected = searchProvider === p.id
+                      return (
+                        <Card
+                          key={p.id}
+                          onClick={() => setSearchProvider(p.id)}
+                          selected={isSelected}
+                          label={p.name}
+                          className="cursor-pointer"
+                        >
+                          <CardHeader className="p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <CardMedia icon={Search} className="mb-0 mt-0.5" />
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <CardTitle className="text-xs font-semibold">
+                                      {p.name}
+                                    </CardTitle>
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] px-1.5 py-0 uppercase tracking-wider"
+                                    >
+                                      Default
+                                    </Badge>
+                                  </div>
+                                  <CardDescription className="text-xs text-muted-foreground leading-relaxed">
+                                    {p.description}
+                                  </CardDescription>
+                                  <div className="pt-0.5">
+                                    <a
+                                      href={p.website}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                                    >
+                                      Visit {p.website.replace('https://', '')}
+                                      <ExternalLink className="size-3" />
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <Check className="size-4 shrink-0 text-primary mt-1" />
+                              )}
+                            </div>
+                          </CardHeader>
+                        </Card>
+                      )
+                    })}
+                  </CardGroup>
+                </SettingsSection>
+
+                <SettingsSection
+                  icon={Key}
+                  title="Tavily Search API Key"
+                  description="Provide a Tavily search API key for agent research and browser search tools."
+                  action={
+                    isSearchConnected ? (
+                      <Badge
+                        variant="outline"
+                        className="gap-1 px-2 py-0.5 text-[11px] border-success/30 bg-success/10 text-success"
+                      >
+                        <CircleDot className="size-2 fill-success text-success" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="gap-1 px-2 py-0.5 text-[11px] border-warning/30 bg-warning/10 text-warning"
+                      >
+                        Disconnected
+                      </Badge>
+                    )
+                  }
+                >
+                  {isSearchConnected && !showSearchKeyForm ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between rounded-lg bg-muted/60 p-3 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="text-muted-foreground text-[11px]">
+                            Configured API Key:
+                          </span>
+                          <div className="font-mono text-foreground font-medium flex items-center gap-2">
+                            <span>
+                              {showSearchSecret
+                                ? searchApiKey
+                                : maskSearchApiKey(searchApiKey)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => setShowSearchSecret((prev) => !prev)}
+                              aria-label={
+                                showSearchSecret ? 'Hide key' : 'Show key'
+                              }
+                            >
+                              {showSearchSecret ? (
+                                <EyeOff className="size-3" />
+                              ) : (
+                                <Eye className="size-3" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSearchKeyInput('')
+                              setShowSearchKeyForm(true)
+                            }}
+                            className="text-xs"
+                          >
+                            <Pencil className="size-3 mr-1" />
+                            Change Key
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={clearSearchApiKey}
+                            className="gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <LogOut className="size-3.5" />
+                            Disconnect
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-1">
+                      {!showSearchKeyForm && (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                          <Button
+                            variant="default"
+                            size="default"
+                            onClick={() => setShowSearchKeyForm(true)}
+                            className="w-full sm:w-auto"
+                          >
+                            <Plus className="size-3.5 mr-1.5" />
+                            Add Tavily API Key
+                          </Button>
+                          <span className="text-[11px] text-muted-foreground">
+                            Keys are stored in your browser and sent only when the agent performs search queries.
+                          </span>
+                        </div>
+                      )}
+
+                      {showSearchKeyForm && (
+                        <form
+                          onSubmit={handleSearchKeySubmit}
+                          className="space-y-3 rounded-lg border bg-muted/20 p-3.5"
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label
+                                htmlFor="search-api-key-input"
+                                className="text-xs font-medium text-foreground"
+                              >
+                                Enter Tavily API Key
+                              </label>
+                              <a
+                                href="https://app.tavily.com/home"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                              >
+                                Get API key
+                                <ExternalLink className="size-3" />
+                              </a>
+                            </div>
+                            <div className="relative">
+                              <Input
+                                id="search-api-key-input"
+                                type={showSearchSecret ? 'text' : 'password'}
+                                placeholder="tvly-..."
+                                value={searchKeyInput}
+                                onChange={(e) => {
+                                  setSearchKeyInput(e.target.value)
+                                  if (searchKeyError) setSearchKeyError(null)
+                                }}
+                                className="text-xs font-mono pr-8"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => setShowSearchSecret((prev) => !prev)}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                aria-label={
+                                  showSearchSecret ? 'Hide key' : 'Show key'
+                                }
+                              >
+                                {showSearchSecret ? (
+                                  <EyeOff className="size-3.5" />
+                                ) : (
+                                  <Eye className="size-3.5" />
+                                )}
+                              </Button>
+                            </div>
+                            {searchKeyError && (
+                              <p className="text-[11px] text-destructive">
+                                {searchKeyError}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setShowSearchKeyForm(false)
+                                setSearchKeyInput('')
+                                setSearchKeyError(null)
+                              }}
+                              className="text-xs"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={!searchKeyInput.trim()}
+                              className="text-xs"
+                            >
+                              Save Key
+                            </Button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
+
+                  <Card className="border border-border/60 bg-muted/20 mt-3">
+                    <CardHeader className="p-3">
+                      <div className="flex items-start gap-2.5">
+                        <ShieldCheck className="size-4 shrink-0 text-primary mt-0.5" />
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-foreground text-xs">
+                            Client-Side Storage (BYOK)
+                          </div>
+                          <CardDescription className="text-[11px] text-muted-foreground leading-relaxed">
+                            Your search API key is kept exclusively in this browser's local storage. It is forwarded to the backend via ephemeral <code className="font-mono text-foreground font-medium">X-Search-Key</code> request headers on agent execution calls and is never persisted in any database or telemetry log.
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                </SettingsSection>
+              </div>
             )}
 
             {activeCategory === 'appearance' && (

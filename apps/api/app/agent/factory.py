@@ -248,12 +248,25 @@ def build_dspy_engine(settings: Settings) -> AgentEngine:
     )
 
 
-def _build_web_tools(settings: Settings) -> WebToolBundle | None:
-    """Build Tavily-backed web tools when an API key is configured."""
-    if not settings.tavily_api_key:
+def _build_web_tools(
+    settings: Settings,
+    provider_override: ProviderOverride | None = None,
+) -> WebToolBundle | None:
+    """Build Tavily-backed web tools when an API key is configured.
+
+    Client-provided search keys take precedence over the server configuration,
+    enabling BYOK browser search without requiring server credentials.
+    """
+    api_key: str | None = None
+    if provider_override is not None and provider_override.search_api_key:
+        api_key = provider_override.search_api_key
+    elif settings.tavily_api_key:
+        api_key = settings.tavily_api_key.get_secret_value()
+
+    if not api_key:
         return None
     return build_web_tool_bundle(
-        api_key=settings.tavily_api_key.get_secret_value(),
+        api_key=api_key,
         dns_fallback=settings.tavily_dns_fallback,
     )
 
@@ -305,7 +318,7 @@ def make_engine_builder(
             thread_id=thread_id,
             max_bytes=settings.artifact_max_bytes,
         )
-        web_bundle = _build_web_tools(settings)
+        web_bundle = _build_web_tools(settings, provider_override)
         sources: list[ToolSource] = [
             *(web_bundle.tools if web_bundle else []),
             SearchDocsTool(),

@@ -13,6 +13,7 @@ import {
   PROVIDERS_STORAGE_KEY,
   SERVER_DEFAULT_ID,
 } from '@/lib/providers'
+import { getSearchApiKey } from '@/lib/search-settings'
 
 function renderDialog(props: ComponentProps<typeof SettingsDialog>) {
   const queryClient = new QueryClient({
@@ -244,5 +245,33 @@ describe('SettingsDialog', () => {
 
     expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
     expect(getAgentProviderHeaders()).toEqual({})
+  })
+
+  it('allows configuring and disconnecting a Tavily search API key in Web Search section', async () => {
+    const user = userEvent.setup()
+    renderDialog({ open: true, onOpenChange: vi.fn() })
+
+    await user.click(screen.getByRole('button', { name: 'Web Search' }))
+    expect(screen.getByRole('region', { name: 'search settings' })).toBeInTheDocument()
+
+    // Tavily Search provider card is shown
+    expect(screen.getAllByText('Tavily Search').length).toBeGreaterThan(0)
+
+    // Click "Add Tavily API Key"
+    await user.click(screen.getByRole('button', { name: /add tavily api key/i }))
+
+    const input = screen.getByPlaceholderText('tvly-...')
+    await user.type(input, 'tvly-testkey987654321')
+
+    await user.click(screen.getByRole('button', { name: /save key/i }))
+
+    expect(getSearchApiKey()).toBe('tvly-testkey987654321')
+    expect(screen.getByText('Connected')).toBeInTheDocument()
+    expect(screen.getByText(/tvly-.*4321/)).toBeInTheDocument()
+
+    // Disconnect
+    await user.click(screen.getByRole('button', { name: /disconnect/i }))
+    expect(getSearchApiKey()).toBeNull()
+    expect(screen.getByText('Disconnected')).toBeInTheDocument()
   })
 })

@@ -317,3 +317,61 @@ def test_settings_reads_unprefixed_modal_env(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.modal_base_url == "https://fleet-proxy.modal.run/v1"
     assert settings.modal_api_key is not None
     assert settings.modal_api_key.get_secret_value() == "modal-secret"
+
+
+def test_search_headers_parse_standalone_override() -> None:
+    override = parse_provider_override(
+        {
+            "X-Search-Key": "tvly-test-client-key",
+            "X-Search-Provider": "tavily",
+        }
+    )
+
+    assert override == ProviderOverride(
+        api_key=None,
+        search_api_key="tvly-test-client-key",
+        search_provider="tavily",
+    )
+    assert "tvly-test-client-key" not in repr(override)
+    assert "search_api_key=<redacted>" in repr(override)
+
+
+def test_search_headers_default_provider_to_tavily() -> None:
+    override = parse_provider_override({"X-Search-Key": "tvly-only-key"})
+    assert override is not None
+    assert override.search_api_key == "tvly-only-key"
+    assert override.search_provider == "tavily"
+
+
+def test_search_headers_combine_with_llm_override() -> None:
+    override = parse_provider_override(
+        {
+            "X-OpenRouter-Key": "sk-or-browser",
+            "X-OpenRouter-Model": "anthropic/claude-3.5-sonnet",
+            "X-Search-Key": "tvly-combined-key",
+            "X-Search-Provider": "tavily",
+        }
+    )
+
+    assert override == ProviderOverride(
+        api_key="sk-or-browser",
+        model="anthropic/claude-3.5-sonnet",
+        api_base=OPENROUTER_API_BASE_URL,
+        search_api_key="tvly-combined-key",
+        search_provider="tavily",
+    )
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-Search-Provider": "tavily"},
+        {"X-Search-Key": "tvly-test", "X-Search-Provider": "bing"},
+        {"X-Search-Key": "tvly-test", "X-Search-Provider": "google"},
+        {"X-Search-Key": "   "},
+        {"X-Search-Key": "tvly\nkey"},
+    ],
+)
+def test_invalid_search_headers_fail_closed(headers: dict[str, str]) -> None:
+    with pytest.raises(ProviderOverrideError):
+        parse_provider_override(headers)
