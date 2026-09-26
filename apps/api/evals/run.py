@@ -5,6 +5,9 @@ Two modes:
 * **Validate** (default without provider credentials): run the dataset's
   structural invariants and exit nonzero if the suite is unsound.  This is
   what CI runs.
+* **Seeded** (``--seeded``): provider-free thin eval — coerce edge fixtures
+  plus a ScriptedLM ``Predict`` pass over the canonical set. Runs fully on
+  local SSD; no live API.
 * **Score** (when a provider is configured via the same ``MODAL_*`` /
   ``FLEET_AGENT_LLM_*`` settings the server uses): route every example with
   the production ``ToolRoutingSignature`` predictor under the production LM
@@ -37,7 +40,11 @@ from typing import Any
 import dspy
 
 from evals.agent_tool_routing import (
+    CANONICAL_ROUTING_EXAMPLES,
+    COERCE_EDGE_CASES,
     ROUTING_EXAMPLES,
+    score_seeded_router,
+    validate_coerce_edge_cases,
     validate_routing_dataset,
 )
 from evals.mlflow_tracking import (
@@ -179,6 +186,43 @@ def _print_routing_report(scored: RoutingScore) -> None:
         print("all routes selected exactly (least privilege held)")
 
 
+def _run_seeded_routing(min_accuracy: float) -> int:
+    """Provider-free thin eval: coerce fixtures + ScriptedLM Predict path.
+
+    Runs entirely on the SSD with no live API. Exit 0 when coerce fixtures
+    match and the seeded router mean clears ``min_accuracy`` (default 1.0
+    for exact gold responses).
+    """
+    problems = validate_routing_dataset()
+    problems.extend(validate_coerce_edge_cases())
+    if problems:
+        print("seeded routing eval is unsound:")
+        for problem in problems:
+            print(f"  - {problem}")
+        return 1
+
+    print(
+        f"coerce fixtures: {len(COERCE_EDGE_CASES)} cases ok; "
+        f"routing dataset: {len(ROUTING_EXAMPLES)} examples validated"
+    )
+
+    mean, misses, failures = score_seeded_router()
+    total = len(CANONICAL_ROUTING_EXAMPLES)
+    print(f"seeded router: {total} canonical examples, mean score {mean:.3f}")
+    if failures:
+        print(
+            f"WARNING: {failures} of {total} seeded calls raised "
+            "(scored 0 by dspy.Evaluate)"
+        )
+    if misses:
+        print("seeded misses:")
+        for request, expected, actual, score in misses:
+            print(f"  [{score:.2f}] expected={expected} actual={actual}: {request}")
+    else:
+        print("all seeded routes exact (Predict + coerce held)")
+    return 0 if mean >= min_accuracy and not failures else 2
+
+
 def _run_routing(
     validate_only: bool,
     min_accuracy: float,
@@ -275,10 +319,18 @@ def main(argv: list[str] | None = None) -> int:
         help="only validate the dataset structure; do not call any provider",
     )
     parser.add_argument(
+        "--seeded",
+        action="store_true",
+        help=(
+            "provider-free thin eval: coerce edge fixtures + ScriptedLM "
+            "Predict over the canonical routing set"
+        ),
+    )
+    parser.add_argument(
         "--min-accuracy",
         type=float,
-        default=0.9,
-        help="minimum mean score for a scored run to exit 0 (default 0.9)",
+        default=None,
+        help="minimum mean score to exit 0 (default 0.9; 1.0 with --seeded)",
     )
     parser.add_argument(
         "--register-dataset",
@@ -300,16 +352,32 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.judge_model and not args.mlflow_eval:
         parser.error("--judge-model requires --mlflow-eval")
+    if args.seeded and args.suite != "routing":
+        parser.error("--seeded only applies to --suite routing")
+    if args.seeded and args.validate:
+        parser.error("--seeded and --validate are mutually exclusive")
     if args.suite == "routing":
+        if args.seeded:
+            if args.register_dataset or args.mlflow_eval:
+                parser.error(
+                    "--seeded cannot be combined with "
+                    "--register-dataset or --mlflow-eval"
+                )
+            # Seeded path is exact gold responses; default floor is 1.0 unless
+            # the caller overrides --min-accuracy.
+            min_accuracy = 1.0 if args.min_accuracy is None else args.min_accuracy
+            return _run_seeded_routing(min_accuracy)
         return _run_routing(
             args.validate,
-            args.min_accuracy,
+            0.9 if args.min_accuracy is None else args.min_accuracy,
             register_dataset=args.register_dataset,
             mlflow_eval=args.mlflow_eval,
             judge_model=args.judge_model,
         )
     if args.suite == "code":
-        return _run_code(args.validate, args.min_accuracy)
+        return _run_code(
+            args.validate, 0.9 if args.min_accuracy is None else args.min_accuracy
+        )
     parser.error(f"unknown suite {args.suite!r}")
 
 

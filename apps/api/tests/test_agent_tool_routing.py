@@ -116,3 +116,108 @@ def test_compile_gepa_candidate_requires_reflection_lm():
 
     with pytest.raises(ValueError, match="reflection_lm"):
         compile_gepa_candidate(program)
+
+
+def test_coerce_edge_cases_fixtures_match_live_coerce():
+    from evals.agent_tool_routing import validate_coerce_edge_cases
+
+    assert validate_coerce_edge_cases() == []
+
+
+def test_eval_runner_seeded_exits_zero_without_a_provider(capsys):
+    exit_code = eval_run_main(["--suite", "routing", "--seeded"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "coerce fixtures:" in out
+    assert "seeded router:" in out
+    assert "all seeded routes exact" in out
+
+
+def test_score_seeded_router_is_exact_on_canonical_gold():
+    from evals.agent_tool_routing import (
+        CANONICAL_ROUTING_EXAMPLES,
+        score_seeded_router,
+    )
+
+    mean, misses, failures = score_seeded_router()
+    assert failures == 0
+    assert misses == []
+    assert mean == 1.0
+    assert len(CANONICAL_ROUTING_EXAMPLES) >= len(
+        {
+            "direct",
+            "research",
+            "artifact",
+            "workspace_read",
+            "workspace_write",
+            "workspace_shell",
+        }
+    )
+
+
+def test_tool_routing_signature_parses_surface_noise_without_adapter_error():
+    from app.agent.routing import ToolRoutingSignature, coerce_route
+
+    lm = ScriptedLM([{"content": '{"route": "  \'WORKSPACE_WRITE\'  "}'}])
+    router = dspy.Predict(ToolRoutingSignature)
+    with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
+        prediction = router(user_request="write tests")
+    assert coerce_route(prediction.route) == "workspace_write"
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--register-dataset"],
+        ["--mlflow-eval"],
+        ["--mlflow-eval", "--judge-model", "test-judge"],
+    ],
+)
+def test_seeded_rejects_mlflow_options_before_running(options, monkeypatch, capsys):
+    def unexpected_run(*args):
+        pytest.fail("seeded evaluation must not run with incompatible options")
+
+    monkeypatch.setattr("evals.run._run_seeded_routing", unexpected_run)
+    with pytest.raises(SystemExit) as exc:
+        eval_run_main(["--seeded", *options])
+
+    assert exc.value.code == 2
+    assert "--seeded cannot be combined" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("options", "expected_exit"),
+    [([], 2), (["--min-accuracy", "0.9"], 0), (["--min-accuracy", "0.96"], 2)],
+)
+def test_seeded_honors_explicit_accuracy(options, expected_exit, monkeypatch):
+    monkeypatch.setattr("evals.run.score_seeded_router", lambda: (0.95, [], 0))
+
+    assert eval_run_main(["--seeded", *options]) == expected_exit
+
+
+@pytest.mark.parametrize("suite", ["routing", "code"])
+@pytest.mark.parametrize("threshold", [None, "0.0", "0.9", "1.0"])
+def test_nonseeded_accuracy_defaults_and_overrides(suite, threshold, monkeypatch):
+    from unittest.mock import Mock
+
+    runner = Mock(return_value=0)
+    monkeypatch.setattr(f"evals.run._run_{suite}", runner)
+    options = [] if threshold is None else ["--min-accuracy", threshold]
+
+    assert eval_run_main(["--suite", suite, *options]) == 0
+    assert runner.call_args.args == (
+        False,
+        0.9 if threshold is None else float(threshold),
+    )
+
+
+def test_nonseeded_judge_model_remains_supported(monkeypatch):
+    from unittest.mock import Mock
+
+    runner = Mock(return_value=0)
+    monkeypatch.setattr("evals.run._run_routing", runner)
+
+    assert eval_run_main(["--mlflow-eval", "--judge-model", "test-judge"]) == 0
+    assert runner.call_args.kwargs["mlflow_eval"] is True
+    assert runner.call_args.kwargs["judge_model"] == "test-judge"

@@ -37,6 +37,9 @@ ROUTES: tuple[ToolRoute, ...] = (
     "workspace_shell",
 )
 
+_ROUTE_WRAP_CHARS = "\"'`"
+"""Quotes LMs sometimes wrap around a route token."""
+
 
 class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     """
@@ -73,15 +76,28 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     """
 
     user_request: str = dspy.InputField(desc="The user's current request.")
-    route: ToolRoute = dspy.OutputField(
+    route: str = dspy.OutputField(
         desc="The minimum capability profile required for the task."
     )
 
 
 def coerce_route(value: object) -> ToolRoute:
-    """Convert an untrusted router output to a least-privileged route."""
+    """Convert an untrusted router output to a least-privileged route.
+
+    Exact ``ROUTES`` members pass through. Strings are normalized for common
+    LM surface noise (whitespace, case, hyphens/spaces as separators, wrapping
+    quotes) before membership is checked. Invented names and non-strings
+    fail-closed to ``direct`` — coerce never elevates privilege via aliases.
+    """
     if value in ROUTES:
         return value
+    if isinstance(value, str):
+        normalized = value.strip().strip(_ROUTE_WRAP_CHARS).strip().lower()
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        while "__" in normalized:
+            normalized = normalized.replace("__", "_")
+        if normalized in ROUTES:
+            return normalized
     return "direct"
 
 
@@ -92,7 +108,7 @@ def routing_signature(instructions: str | None = None) -> type[dspy.Signature]:
     A fresh class per instruction set: ``Signature.instructions`` lives on the
     class itself, so overriding the shared ``ToolRoutingSignature`` would leak
     one promoted artifact into every other program in the process.
-    ``with_instructions`` keeps the declared fields and the route ``Literal``.
+    ``with_instructions`` keeps the declared fields and their types.
     """
     if not instructions:
         return ToolRoutingSignature
