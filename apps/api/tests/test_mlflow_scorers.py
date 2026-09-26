@@ -41,7 +41,7 @@ def _restore_mlflow_env() -> Iterator[None]:
 
     ``mlflow.set_tracking_uri`` and ``mlflow.set_experiment`` write
     ``MLFLOW_TRACKING_URI`` and ``MLFLOW_EXPERIMENT_ID`` into the environment
-    "so that subprocess can inherit it" (verified in mlflow 3.15.2). The shared
+    "so that subprocess can inherit it" (verified in mlflow 3.16.0). The shared
     conftest purges ``FLEET_AGENT_*`` and ``MODAL_*`` but not ``MLFLOW_*``, and
     ``resolve_tracking_uri`` reads the environment first — so a test that
     resolves a store would otherwise repoint every later test, including
@@ -189,7 +189,7 @@ class TestJudgeIsOptIn:
     def test_a_named_model_builds_a_scorer_without_calling_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Construction is offline (verified on mlflow 3.15.2); scoring is not."""
+        """Construction is offline (verified on mlflow 3.16.0); scoring is not."""
         from mlflow.genai.scorers import Scorer
 
         monkeypatch.setenv(JUDGE_MODEL_ENV, "openai:/gpt-4o-mini")

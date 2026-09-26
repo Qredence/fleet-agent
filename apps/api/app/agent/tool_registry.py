@@ -300,7 +300,7 @@ class ToolRegistry:
         if is_async_tool(tool):
             raise TypeError(
                 f"tool {metadata.name!r} is async, but ToolRegistry and the "
-                "DSPy 3.3.1 ReActV2 path execute tools synchronously"
+                "DSPy 3.4.0 ReActV2 path execute tools synchronously"
             )
 
         self._tools[metadata.name] = RegisteredTool(tool=tool, metadata=metadata)

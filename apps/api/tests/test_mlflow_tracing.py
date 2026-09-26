@@ -105,7 +105,7 @@ def test_compose_callbacks_extends_dspy_callbacks() -> None:
 
 
 def test_dspy_context_callbacks_replaces_rather_than_extends() -> None:
-    """Document WHY compose_callbacks exists (pins dspy 3.3.1 semantics).
+    """Document WHY compose_callbacks exists (pins dspy 3.4.0 semantics).
 
     If a future DSPy switches ``context(callbacks=...)`` to extend, this tripwire
     fails and ``compose_callbacks`` can be simplified back to a plain assignment.

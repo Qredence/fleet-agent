@@ -140,7 +140,7 @@ def routing_metric(
 ) -> dspy.Prediction:
     """Score exact route and provide feedback that GEPA can use.
 
-    The parameter list matches dspy 3.3.1's ``GEPAFeedbackMetric`` contract:
+    The parameter list matches dspy 3.4.0's ``GEPAFeedbackMetric`` contract:
     GEPA binds the metric with five positional arguments and calls it with
     the target predictor's name and sub-trace during optimization.
     """

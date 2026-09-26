@@ -4,7 +4,7 @@ Hermetic: the tracking store is a tmp SQLite file and the artifact root is a tmp
 directory, so a build can neither touch the operator's store nor write into the
 repository tree.
 
-These tests also pin the mlflow 3.15.2 limitation the design works around —
+These tests also pin the mlflow 3.16.0 limitation the design works around —
 dataset *versions* are Databricks-only, so on a local store ``version`` stays
 None and ``list_versions()`` raises. If a future mlflow implements versions
 locally, ``test_mlflow_has_no_local_dataset_versions`` fails and the name-plus-
@@ -47,7 +47,7 @@ def _restore_mlflow_env() -> Iterator[None]:
 
     ``mlflow.set_tracking_uri`` and ``mlflow.set_experiment`` write
     ``MLFLOW_TRACKING_URI`` and ``MLFLOW_EXPERIMENT_ID`` into the environment
-    "so that subprocess can inherit it" (verified in mlflow 3.15.2). The shared
+    "so that subprocess can inherit it" (verified in mlflow 3.16.0). The shared
     conftest purges ``FLEET_AGENT_*`` and ``MODAL_*`` but not ``MLFLOW_*``, and
     ``resolve_tracking_uri`` reads the environment first — so a test that
     resolves a store would otherwise repoint every later test, including

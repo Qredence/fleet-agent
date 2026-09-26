@@ -1,4 +1,4 @@
-"""DSPy contract tests: pin the dspy==3.3.* assumptions the backend relies on.
+"""DSPy contract tests: pin the dspy==3.4.* assumptions the backend relies on.
 
 These are tripwires, not behavior tests. When one fails after a dependency
 bump, the failure message should say which invariant broke and what to do
