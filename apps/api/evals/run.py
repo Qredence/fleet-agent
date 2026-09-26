@@ -208,9 +208,7 @@ def _run_seeded_routing(min_accuracy: float) -> int:
 
     mean, misses, failures = score_seeded_router()
     total = len(CANONICAL_ROUTING_EXAMPLES)
-    print(
-        f"seeded router: {total} canonical examples, mean score {mean:.3f}"
-    )
+    print(f"seeded router: {total} canonical examples, mean score {mean:.3f}")
     if failures:
         print(
             f"WARNING: {failures} of {total} seeded calls raised "
@@ -331,8 +329,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--min-accuracy",
         type=float,
-        default=0.9,
-        help="minimum mean score for a scored run to exit 0 (default 0.9)",
+        default=None,
+        help="minimum mean score to exit 0 (default 0.9; 1.0 with --seeded)",
     )
     parser.add_argument(
         "--register-dataset",
@@ -360,21 +358,26 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--seeded and --validate are mutually exclusive")
     if args.suite == "routing":
         if args.seeded:
+            if args.register_dataset or args.mlflow_eval:
+                parser.error(
+                    "--seeded cannot be combined with "
+                    "--register-dataset or --mlflow-eval"
+                )
             # Seeded path is exact gold responses; default floor is 1.0 unless
             # the caller overrides --min-accuracy.
-            min_accuracy = (
-                1.0 if args.min_accuracy == 0.9 else args.min_accuracy
-            )
+            min_accuracy = 1.0 if args.min_accuracy is None else args.min_accuracy
             return _run_seeded_routing(min_accuracy)
         return _run_routing(
             args.validate,
-            args.min_accuracy,
+            0.9 if args.min_accuracy is None else args.min_accuracy,
             register_dataset=args.register_dataset,
             mlflow_eval=args.mlflow_eval,
             judge_model=args.judge_model,
         )
     if args.suite == "code":
-        return _run_code(args.validate, args.min_accuracy)
+        return _run_code(
+            args.validate, 0.9 if args.min_accuracy is None else args.min_accuracy
+        )
     parser.error(f"unknown suite {args.suite!r}")
 
 
