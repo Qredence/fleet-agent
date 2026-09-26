@@ -91,7 +91,14 @@ export function ProcessStepCard({
       )}
 
       {step.publicSummary && (
-        <p className="ps-[52px] pe-1 text-xs leading-5 text-foreground/40">
+        <p
+          className={cn(
+            'ps-[52px] pe-1 text-xs leading-5',
+            step.status === 'failed'
+              ? 'text-red-600/80 dark:text-red-400/80'
+              : 'text-foreground/40',
+          )}
+        >
           {step.publicSummary}
           {showLiveCursor && (
             <span

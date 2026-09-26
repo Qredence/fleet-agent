@@ -347,11 +347,54 @@ describe('RunActivityInlineContent', () => {
     )
   })
 
-  it('renders failed state as an alert with the public error code', async () => {
+  it('renders failed state as an alert with the public error message and code', async () => {
     await renderActivity(failedState)
 
-    expect(screen.getByRole('alert')).toBeInTheDocument()
+    const alert = screen.getByRole('alert')
+    expect(alert).toBeInTheDocument()
+    expect(alert).toHaveTextContent(
+      /finished without producing a final answer/i,
+    )
+    // forced_submit on a failed run is quieter context under the error message
+    expect(alert).toHaveTextContent(/stopped early/i)
     expect(screen.getByText('agent_no_output')).toBeInTheDocument()
+  })
+
+  it('renders hard-stop terminations with the matching public error copy', async () => {
+    const maxItersState: AgentWorkspaceState = {
+      ...failedState,
+      run: {
+        ...failedState.run,
+        terminationReason: 'max_iters',
+        errorCode: 'agent_no_output',
+      },
+    }
+    await renderActivity(maxItersState)
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(
+      /finished without producing a final answer/i,
+    )
+    expect(alert).toHaveTextContent(/iteration limit reached/i)
+  })
+
+  it('treats a successful forced_submit as amber caution, not a red alert', async () => {
+    const forcedState: AgentWorkspaceState = {
+      ...completedState,
+      run: {
+        ...completedState.run,
+        terminationReason: 'forced_submit',
+      },
+      caveats: [
+        'The agent was stopped before completing its process; the answer was summarized from partial progress and may be incomplete.',
+      ],
+    }
+    await renderActivity(forcedState)
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const notice = screen.getByRole('status')
+    expect(notice).toHaveTextContent(/stopped early/i)
+    expect(screen.getByLabelText('Caveats')).toBeInTheDocument()
   })
 
   it('treats the routed program synthesis ending as a normal completion', async () => {
@@ -366,6 +409,24 @@ describe('RunActivityInlineContent', () => {
     await renderActivity(cancelledState)
     expect(screen.getByText('Cancelled')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('gracefully degrades unknown error codes to internal_error copy', async () => {
+    const unknownErrorState: AgentWorkspaceState = {
+      ...failedState,
+      run: {
+        ...failedState.run,
+        errorCode: 'custom_unrecognized_code',
+        terminationReason: undefined,
+      },
+    }
+    await renderActivity(unknownErrorState)
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('The agent run failed.')
+    expect(screen.getByText('custom_unrecognized_code')).toBeInTheDocument()
+    const icon = alert.querySelector('svg')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('expands the active step to show tools and evidence', async () => {
