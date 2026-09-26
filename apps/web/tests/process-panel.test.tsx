@@ -411,6 +411,24 @@ describe('RunActivityInlineContent', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('gracefully degrades unknown error codes to internal_error copy', async () => {
+    const unknownErrorState: AgentWorkspaceState = {
+      ...failedState,
+      run: {
+        ...failedState.run,
+        errorCode: 'custom_unrecognized_code',
+        terminationReason: undefined,
+      },
+    }
+    await renderActivity(unknownErrorState)
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('The agent run failed.')
+    expect(screen.getByText('custom_unrecognized_code')).toBeInTheDocument()
+    const icon = alert.querySelector('svg')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('expands the active step to show tools and evidence', async () => {
     await renderActivity(runningState, true)
 

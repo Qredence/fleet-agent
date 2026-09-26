@@ -136,6 +136,10 @@ export function RunActivityInlineContent({
       : formatDuration(state.metrics.durationMs)
   const busy = isRunning || state.run.status === 'queued'
   const panel = variant === 'panel'
+  const hasCautionCaveat =
+    state.run.status === 'failed' ||
+    Boolean(state.run.errorCode) ||
+    state.run.terminationReason === 'forced_submit'
 
   return (
     <Collapsible
@@ -245,9 +249,7 @@ export function RunActivityInlineContent({
               aria-label="Caveats"
               className={cn(
                 'flex flex-col gap-1',
-                (state.run.status === 'failed' ||
-                  state.run.terminationReason === 'forced_submit' ||
-                  Boolean(state.run.errorCode)) &&
+                hasCautionCaveat &&
                   'rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-2.5 py-2',
               )}
             >
@@ -257,9 +259,7 @@ export function RunActivityInlineContent({
               <ul
                 className={cn(
                   'list-disc space-y-0.5 ps-5 text-xs',
-                  state.run.status === 'failed' ||
-                    state.run.terminationReason === 'forced_submit' ||
-                    Boolean(state.run.errorCode)
+                  hasCautionCaveat
                     ? 'text-amber-800/90 dark:text-amber-200/90'
                     : 'text-foreground/45',
                 )}

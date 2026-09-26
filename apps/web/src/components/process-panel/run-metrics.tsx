@@ -91,9 +91,9 @@ const CAUTION_TERMINATIONS = new Set([
 /** Quiet endings: intentional stop with no failure chrome. */
 const QUIET_TERMINATIONS = new Set(['cancelled'])
 
-type NoticeTone = 'normal' | 'caution' | 'quiet' | 'problem'
+export type NoticeTone = 'normal' | 'caution' | 'quiet' | 'problem'
 
-function noticeTone(
+export function noticeTone(
   terminationReason: string | undefined,
   errorCode: string | undefined,
 ): NoticeTone {
@@ -109,7 +109,9 @@ function noticeCopy(
   terminationReason: string | undefined,
   errorCode: string | undefined,
 ): { title: string; detail?: string } {
-  const errorLabel = errorCode ? ERROR_CODE_LABELS[errorCode] : undefined
+  const errorLabel = errorCode
+    ? (ERROR_CODE_LABELS[errorCode] ?? ERROR_CODE_LABELS.internal_error)
+    : undefined
   const reasonLabel = terminationReason
     ? (TERMINATION_LABELS[terminationReason] ?? terminationReason)
     : undefined
@@ -151,18 +153,24 @@ export function TerminationNotice({
           'border border-red-500/30 bg-red-500/[0.08] text-red-700 dark:text-red-300',
         isCaution &&
           'border border-amber-500/30 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300',
-        tone === 'normal' && 'text-foreground/45',
-        tone === 'quiet' && 'text-foreground/45',
+        (tone === 'normal' || tone === 'quiet') && 'text-foreground/45',
       )}
     >
-      {isProblem ? (
-        <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
-      ) : isCaution ? (
-        <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+      {isProblem || isCaution ? (
+        <AlertTriangleIcon
+          aria-hidden="true"
+          className="mt-0.5 size-3.5 shrink-0"
+        />
       ) : tone === 'normal' ? (
-        <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+        <CheckIcon
+          aria-hidden="true"
+          className="mt-0.5 size-3.5 shrink-0 text-emerald-500"
+        />
       ) : (
-        <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-foreground/35" />
+        <InfoIcon
+          aria-hidden="true"
+          className="mt-0.5 size-3.5 shrink-0 text-foreground/35"
+        />
       )}
       <div className="min-w-0 flex-1">
         <p className="font-medium">{title}</p>
