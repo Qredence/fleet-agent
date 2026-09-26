@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
@@ -17,6 +18,7 @@ from typing import Any, Literal, Protocol
 import dspy
 from dspy.streaming.messages import StreamResponse
 from dspy.utils.callback import BaseCallback
+from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 
 from app.agent.event_bus import RunEventBus
 from app.agent.provider import ProviderOverride
@@ -137,6 +139,95 @@ _REASON_TO_PUBLIC_CODE = {
     "context_window_exceeded": "agent_context_limit",
 }
 
+
+_FORCED_SUBMIT_REASON_RE = re.compile(
+    r"ReActV2 failed to produce final outputs after (?P<reason>\w+):"
+)
+
+
+def _reason_from_react_exc(exc: BaseException) -> str | None:
+    """Extract the public termination_reason from a DSPy 3.4 forced-submit raise."""
+    if isinstance(exc, ContextWindowExceededError):
+        return "context_window_exceeded"
+    if isinstance(exc, AdapterParseError):
+        return "parse_error"
+    if isinstance(exc, ValueError):
+        match = _FORCED_SUBMIT_REASON_RE.search(str(exc))
+        return match.group("reason") if match else None
+    return None
+
+
+def _map_react_raise(exc: BaseException) -> AgentRunResult | None:
+    """Map a ReActV2 raise that escaped the program into a public failure."""
+    reason = _reason_from_react_exc(exc)
+    if reason is None:
+        return None
+    return AgentRunResult(
+        status="failed",
+        answer=None,
+        process_summary=None,
+        termination_reason=reason,
+        error_code=_REASON_TO_PUBLIC_CODE.get(reason, "agent_no_output"),
+    )
+
+
+def _install_forced_submit_compat(program: Any) -> None:
+    """Restore Prediction-with-termination_reason when forced submit fails.
+
+    DSPy 3.4 ``ReActV2._forced_submit`` raises on failure; 3.3 returned a
+    Prediction. Wrapping at the engine boundary keeps ``_map_result`` as the
+    single mapper and preserves the in-loop history the raise would drop.
+    """
+    targets: list[Any] = []
+    stack: list[Any] = [program]
+    seen: set[int] = set()
+    while stack:
+        obj = stack.pop()
+        oid = id(obj)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        if callable(getattr(obj, "_forced_submit", None)):
+            targets.append(obj)
+        for value in getattr(obj, "__dict__", {}).values():
+            if isinstance(value, dspy.Module):
+                stack.append(value)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    if isinstance(item, dspy.Module):
+                        stack.append(item)
+
+    for obj in targets:
+        original = obj._forced_submit
+        if getattr(original, "_fleet_forced_submit_compat", False):
+            continue
+
+        def _compat(
+            history: Any,
+            pending_inputs: dict[str, Any],
+            break_reason: str,
+            turn_index: int,
+            *,
+            _original: Any = original,
+        ) -> dspy.Prediction:
+            try:
+                return _original(history, pending_inputs, break_reason, turn_index)
+            except (
+                ValueError,
+                AdapterParseError,
+                ContextWindowExceededError,
+            ) as exc:
+                reason = _reason_from_react_exc(exc) or break_reason
+                return dspy.Prediction(
+                    answer=None,
+                    history=history,
+                    termination_reason=reason,
+                )
+
+        _compat._fleet_forced_submit_compat = True  # type: ignore[attr-defined]
+        obj._forced_submit = _compat
+
+
 _FORCED_SUBMIT_CAVEAT = (
     "The agent was stopped before completing its process; "
     "the answer was summarized from partial progress and may be incomplete."
@@ -246,45 +337,59 @@ class DspyAgentEngine:
             return
 
         scrubbers = {field_name: StreamingScrubber() for field_name in stream_fields}
+        _install_forced_submit_compat(program)
         callbacks = compose_callbacks(program, self._callbacks)
         try:
             prediction: dspy.Prediction | None = None
-            with dspy.context(
-                lm=self._lm,
-                adapter=self._adapter,
-                callbacks=callbacks,
-                track_usage=True,
-            ):
-                streamer = dspy.streamify(
-                    program,
-                    stream_listeners=synthesis_stream_listeners(stream_fields),
-                    include_final_prediction_in_output_stream=True,
-                )
-                async for value in streamer(user_request=user_request, history=history):
-                    if isinstance(value, dspy.Prediction):
-                        prediction = value
-                    elif isinstance(value, StreamResponse):
-                        scrubber = scrubbers.get(value.signature_field_name)
-                        if scrubber is None:
-                            continue
-                        safe_delta = scrubber.push(value.chunk or "")
-                        if safe_delta:
-                            yield AgentStreamUpdate(
-                                kind="token",
-                                stream_field=value.signature_field_name,
-                                delta=safe_delta,
-                            )
-            # End of stream: release the scrubbers' held-back tails so the
-            # streamed text is complete before the settled fields arrive.
-            for field_name, scrubber in scrubbers.items():
-                tail = scrubber.flush()
-                if tail:
-                    yield AgentStreamUpdate(
-                        kind="token", stream_field=field_name, delta=tail
+            try:
+                with dspy.context(
+                    lm=self._lm,
+                    adapter=self._adapter,
+                    callbacks=callbacks,
+                    track_usage=True,
+                ):
+                    streamer = dspy.streamify(
+                        program,
+                        stream_listeners=synthesis_stream_listeners(stream_fields),
+                        include_final_prediction_in_output_stream=True,
                     )
-            if prediction is None:
-                raise RuntimeError("streaming program ended without a prediction")
-            result = _map_result(prediction)
+                    async for value in streamer(
+                        user_request=user_request, history=history
+                    ):
+                        if isinstance(value, dspy.Prediction):
+                            prediction = value
+                        elif isinstance(value, StreamResponse):
+                            scrubber = scrubbers.get(value.signature_field_name)
+                            if scrubber is None:
+                                continue
+                            safe_delta = scrubber.push(value.chunk or "")
+                            if safe_delta:
+                                yield AgentStreamUpdate(
+                                    kind="token",
+                                    stream_field=value.signature_field_name,
+                                    delta=safe_delta,
+                                )
+            except (
+                ValueError,
+                AdapterParseError,
+                ContextWindowExceededError,
+            ) as exc:
+                mapped = _map_react_raise(exc)
+                if mapped is None:
+                    raise
+                result = mapped
+            else:
+                # End of stream: release the scrubbers' held-back tails so the
+                # streamed text is complete before the settled fields arrive.
+                for field_name, scrubber in scrubbers.items():
+                    tail = scrubber.flush()
+                    if tail:
+                        yield AgentStreamUpdate(
+                            kind="token", stream_field=field_name, delta=tail
+                        )
+                if prediction is None:
+                    raise RuntimeError("streaming program ended without a prediction")
+                result = _map_result(prediction)
         finally:
             if self._cleanup is not None:
                 try:
@@ -317,6 +422,7 @@ class DspyAgentEngine:
     ) -> AgentRunResult:
         try:
             program = program or self._program_factory()
+            _install_forced_submit_compat(program)
             callbacks = compose_callbacks(program, self._callbacks)
             with dspy.context(
                 lm=self._lm,
@@ -327,7 +433,17 @@ class DspyAgentEngine:
                 # Invoke the Module through __call__, never forward(), so DSPy
                 # usage tracking, callbacks, caller-module context, and future
                 # optimizer/runtime hooks remain active.
-                prediction = program(user_request=user_request, history=history)
+                try:
+                    prediction = program(user_request=user_request, history=history)
+                except (
+                    ValueError,
+                    AdapterParseError,
+                    ContextWindowExceededError,
+                ) as exc:
+                    mapped = _map_react_raise(exc)
+                    if mapped is None:
+                        raise
+                    return mapped
             return _map_result(prediction)
         finally:
             if self._cleanup is not None:
