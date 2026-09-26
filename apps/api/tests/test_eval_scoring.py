@@ -105,3 +105,21 @@ def test_production_router_signature_scores_through_the_shared_harness() -> None
 
     assert scored.mean == 1.0
     assert scored.misses == []
+
+
+def test_production_router_passes_noncanonical_strings_to_coercion() -> None:
+    from app.agent.routing import ToolRoutingSignature
+
+    examples = _examples("workspace_read", "workspace_write", "artifact", "direct")
+    lm = ScriptedLM(
+        [
+            router_call(route)
+            for route in [" WORKSPACE-READ ", "workspace write", '"artifact"', "sudo"]
+        ]
+    )
+
+    scored = score_router(dspy.Predict(ToolRoutingSignature), lm, examples)
+
+    assert scored.failures == 0
+    assert scored.mean == 1.0
+    assert scored.misses == []

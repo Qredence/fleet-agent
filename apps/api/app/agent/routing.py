@@ -108,7 +108,7 @@ def routing_signature(instructions: str | None = None) -> type[dspy.Signature]:
     A fresh class per instruction set: ``Signature.instructions`` lives on the
     class itself, so overriding the shared ``ToolRoutingSignature`` would leak
     one promoted artifact into every other program in the process.
-    ``with_instructions`` keeps the declared fields and the route ``Literal``.
+    ``with_instructions`` keeps the declared fields and their types.
     """
     if not instructions:
         return ToolRoutingSignature

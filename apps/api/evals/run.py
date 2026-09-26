@@ -330,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         "--min-accuracy",
         type=float,
         default=None,
-        help="minimum mean score to exit 0 (default 1.0 for seeded, 0.9 otherwise)",
+        help="minimum mean score to exit 0 (default 0.9; 1.0 with --seeded)",
     )
     parser.add_argument(
         "--register-dataset",
@@ -356,28 +356,28 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--seeded only applies to --suite routing")
     if args.seeded and args.validate:
         parser.error("--seeded and --validate are mutually exclusive")
-    if args.seeded and (args.register_dataset or args.mlflow_eval):
-        parser.error(
-            "--seeded cannot be combined with --register-dataset or --mlflow-eval"
-        )
     if args.suite == "routing":
-        min_accuracy = (
-            args.min_accuracy
-            if args.min_accuracy is not None
-            else (1.0 if args.seeded else 0.9)
-        )
         if args.seeded:
+            if args.register_dataset or args.mlflow_eval:
+                parser.error(
+                    "--seeded cannot be combined with "
+                    "--register-dataset or --mlflow-eval"
+                )
+            # Seeded path is exact gold responses; default floor is 1.0 unless
+            # the caller overrides --min-accuracy.
+            min_accuracy = 1.0 if args.min_accuracy is None else args.min_accuracy
             return _run_seeded_routing(min_accuracy)
         return _run_routing(
             args.validate,
-            min_accuracy,
+            0.9 if args.min_accuracy is None else args.min_accuracy,
             register_dataset=args.register_dataset,
             mlflow_eval=args.mlflow_eval,
             judge_model=args.judge_model,
         )
     if args.suite == "code":
-        min_accuracy = args.min_accuracy if args.min_accuracy is not None else 0.9
-        return _run_code(args.validate, min_accuracy)
+        return _run_code(
+            args.validate, 0.9 if args.min_accuracy is None else args.min_accuracy
+        )
     parser.error(f"unknown suite {args.suite!r}")
 
 
