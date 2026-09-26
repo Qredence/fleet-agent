@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Plug, Plus, Database, FolderGit2, Globe, Info, LogOut } from 'lucide-react'
+import { Plug, Plus, Database, FolderGit2, Globe, LogOut } from 'lucide-react'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
+import { WorkspacePage } from '@/components/workspace/workspace-page'
 import { useThreads } from '@/features/threads/use-threads'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardFooter, CardGroup, CardHeader, CardMedia, CardTitle } from '@/components/ui/card'
 import { OpenRouterLogo } from '@/components/auth/openrouter-logo'
 import { OpenRouterButton } from '@/components/auth/openrouter-button'
 import { useOpenRouterAuth } from '@/hooks/use-openrouter-auth'
 import { SettingsDialog } from '@/components/settings/settings-dialog'
 import { maskApiKey } from '@/lib/openrouter-auth'
+import { useIsMobile } from '@/hooks/use-media-query'
 
 const sampleConnectors = [
   {
@@ -18,7 +21,6 @@ const sampleConnectors = [
     icon: FolderGit2,
     type: 'Model Context Protocol (Remote HTTP)',
     endpoint: 'http://localhost:8001/mcp',
-    status: 'connected',
     latency: '34ms',
     toolsCount: 8,
   },
@@ -27,7 +29,6 @@ const sampleConnectors = [
     icon: Database,
     type: 'Local Stdio Process',
     endpoint: 'stdio://@bytebase/mcp-postgres',
-    status: 'connected',
     latency: '12ms',
     toolsCount: 5,
   },
@@ -36,17 +37,12 @@ const sampleConnectors = [
     icon: Globe,
     type: 'REST Gateway',
     endpoint: 'https://api.tavily.com/v1',
-    status: 'connected',
     latency: '128ms',
     toolsCount: 2,
   },
 ]
 
-/**
- * Renders the preview hub for project connectors and MCP integrations.
- *
- * @returns The connectors hub interface with sample connector data and preview controls.
- */
+/** Renders the live OpenRouter integration and preview-only connector examples. */
 export function ConnectorsRoute() {
   const { projectId } = useParams<{ projectId: string }>()
   const threads = useThreads(projectId)
@@ -54,6 +50,7 @@ export function ConnectorsRoute() {
   const { apiKey, isAuthenticated, signOut, selectedModel, customModelEnabled } =
     useOpenRouterAuth()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const isMobile = useIsMobile()
 
   return (
     <AgentWorkspace
@@ -61,134 +58,74 @@ export function ConnectorsRoute() {
       threadId={thread?.id}
       threadTitle="Connectors & MCP Hub"
       customMain={
-        <main
-          aria-label="Connectors Hub"
-          className="flex h-full min-w-0 flex-1 flex-col bg-background"
+        <WorkspacePage
+          title="Connectors & MCP Hub"
+          description="Connect Model Context Protocol (MCP) servers, databases, and external providers into DSPy tools."
+          icon={Plug}
+          notice="OpenRouter is live. The other connectors are examples only and are not connected."
+          action={
+            <Button disabled aria-describedby="add-connector-note">
+              <Plus className="size-4" aria-hidden="true" />
+              Add Connector
+            </Button>
+          }
         >
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="flex items-center justify-between border-b pb-4">
-              <div>
-                <h1 className="text-xl font-semibold flex items-center gap-2">
-                  <Plug className="size-5 text-emerald-400" />
-                  Connectors & MCP Hub
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Connect Model Context Protocol (MCP) servers, databases, and external providers into DSPy tools.
-                </p>
-                <p className="text-xs text-muted-foreground/70 mt-2 flex items-center gap-1.5">
-                  <Info className="size-3" aria-hidden />
-                  Preview — the connectors below show sample data and are not yet connected to the backend.
-                </p>
-              </div>
-              <Button className="gap-2 bg-primary text-primary-foreground" disabled title="Preview — coming soon">
-                <Plus className="size-4" />
-                Add Connector
-              </Button>
-            </div>
-
-            <div className="space-y-3">
-              {/* LIVE OPENROUTER PROVIDER */}
-              <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-card p-4 hover:border-primary/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <OpenRouterLogo className="size-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-semibold">OpenRouter AI Gateway</h2>
-                      {isAuthenticated ? (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
-                        >
-                          connected
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10"
-                        >
-                          ready to connect
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                      <span>OAuth PKCE / REST LLM Gateway</span>
-                      <span>•</span>
-                      <code className="font-mono text-[11px]">
-                        {isAuthenticated
-                          ? `Key: ${maskApiKey(apiKey)} (${customModelEnabled ? selectedModel : 'server-default'})`
-                          : 'https://openrouter.ai'}
-                      </code>
-                    </div>
-                  </div>
+          <span id="add-connector-note" className="sr-only">Preview only — adding connectors is not available yet.</span>
+          <CardGroup orientation="card" columns={isMobile ? 1 : 2} border="outlined" separated>
+            <Card className="bg-card">
+              <CardHeader className="min-w-0">
+                <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <OpenRouterLogo className="size-5" />
                 </div>
-
-                <div className="flex items-center gap-3">
-                  {isAuthenticated ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSettingsOpen(true)}
-                        className="text-xs"
-                      >
-                        Configure
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={signOut}
-                        className="text-xs text-destructive hover:bg-destructive/10"
-                      >
-                        <LogOut className="size-3.5 me-1" />
-                        Disconnect
-                      </Button>
-                    </>
-                  ) : (
-                    <OpenRouterButton variant="cta" size="sm">
-                      Connect OpenRouter
-                    </OpenRouterButton>
-                  )}
-                </div>
-              </div>
-
-              {sampleConnectors.map((connector) => (
-                <div key={connector.name} className="flex items-center justify-between rounded-xl border bg-card p-4 hover:border-primary/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-xl bg-muted text-foreground">
-                      <connector.icon className="size-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-semibold">{connector.name}</h2>
-                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
-                          {connector.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                        <span>{connector.type}</span>
-                        <span>•</span>
-                        <code className="font-mono text-[11px]">{connector.endpoint}</code>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-end text-xs">
-                      <span className="text-muted-foreground font-mono">{connector.latency}</span>
-                      <div className="text-[11px] text-muted-foreground">{connector.toolsCount} tools exposed</div>
-                    </div>
-                    <Button variant="outline" size="sm" disabled title="Preview — coming soon">
-                      Configure
+                <h3><CardTitle>OpenRouter AI Gateway</CardTitle></h3>
+                <p className="text-xs text-muted-foreground">OAuth PKCE / REST LLM Gateway</p>
+              </CardHeader>
+              <CardContent className="min-w-0 space-y-2">
+                <Badge variant="outline" className="text-xs">
+                  {isAuthenticated ? 'Connected' : 'Ready to connect'}
+                </Badge>
+                <p className="break-all font-mono text-xs text-muted-foreground">
+                  {isAuthenticated
+                    ? `Key: ${maskApiKey(apiKey)} (${customModelEnabled ? selectedModel : 'server-default'})`
+                    : 'https://openrouter.ai'}
+                </p>
+              </CardContent>
+              <CardFooter className="mt-auto gap-2">
+                {isAuthenticated ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>Configure</Button>
+                    <Button variant="ghost" size="sm" onClick={signOut} className="text-destructive hover:bg-destructive/10">
+                      <LogOut className="size-3.5" aria-hidden="true" />
+                      Disconnect
                     </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                  </>
+                ) : (
+                  <OpenRouterButton variant="cta" size="sm">Connect OpenRouter</OpenRouterButton>
+                )}
+              </CardFooter>
+            </Card>
+            {sampleConnectors.map((connector) => (
+              <Card key={connector.name} className="bg-card">
+                <CardHeader className="min-w-0">
+                  <CardMedia icon={connector.icon} />
+                  <h3><CardTitle>{connector.name}</CardTitle></h3>
+                  <p className="text-xs text-muted-foreground">{connector.type}</p>
+                </CardHeader>
+                <CardContent className="min-w-0 space-y-2">
+                  <Badge variant="secondary" className="text-xs">Sample · not connected</Badge>
+                  <p className="break-all font-mono text-xs text-muted-foreground">{connector.endpoint}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Sample latency: {connector.latency} · Sample tools: {connector.toolsCount}
+                  </p>
+                </CardContent>
+                <CardFooter className="mt-auto">
+                  <Button variant="outline" size="sm" disabled title="Preview — coming soon">Configure</Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </CardGroup>
           <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-        </main>
+        </WorkspacePage>
       }
     />
   )

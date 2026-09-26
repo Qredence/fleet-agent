@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { AgentWorkspace } from '@/components/workspace/agent-workspace'
+import { WorkspacePage } from '@/components/workspace/workspace-page'
 import { useThreads } from '@/features/threads/use-threads'
 import {
   type ToolCatalogEntry,
@@ -76,7 +77,7 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
     <Card index={index}>
       <CardHeader>
         <CardMedia icon={Icon} />
-        <CardTitle className="font-mono">{tool.name}</CardTitle>
+        <h3><CardTitle className="font-mono">{tool.name}</CardTitle></h3>
         <CardDescription className="text-xs">{type}</CardDescription>
         <CardAction>
           <Badge variant="outline" className="text-xs">
@@ -142,28 +143,19 @@ export function ToolsRoute() {
       threadId={thread?.id}
       threadTitle="DSPy Tools Catalog"
       customMain={
-        <main
-          aria-label="Tools Catalog"
-          className="flex h-full min-w-0 flex-1 flex-col bg-background"
+        <WorkspacePage
+          title="DSPy Tools Catalog"
+          description="Inspect registered tools, capabilities, and execution policies available to the DSPy engine."
+          icon={Wrench}
+          action={
+            <Switch
+              label="Read-only tools"
+              checked={readOnlyOnly}
+              onToggle={() => setReadOnlyOnly((value) => !value)}
+              disabled={!tools.data}
+            />
+          }
         >
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="flex items-start justify-between gap-4 border-b pb-4">
-              <div>
-                <h1 className="text-xl font-semibold flex items-center gap-2">
-                  <Wrench className="size-5 text-sky-400" />
-                  DSPy Tools Catalog
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Inspect registered tools, parameter schemas, and execution policies available to the DSPy engine.
-                </p>
-              </div>
-              <Switch
-                label="Read-only tools"
-                checked={readOnlyOnly}
-                onToggle={() => setReadOnlyOnly((value) => !value)}
-                disabled={!tools.data}
-              />
-            </div>
 
             {tools.isPending && (
               <p className="text-sm text-muted-foreground" role="status">
@@ -202,8 +194,7 @@ export function ToolsRoute() {
                 ))}
               </CardGroup>
             )}
-          </div>
-        </main>
+        </WorkspacePage>
       }
     />
   )
