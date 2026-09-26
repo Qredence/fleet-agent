@@ -241,11 +241,29 @@ export function RunActivityInlineContent({
           )}
 
           {state.caveats && state.caveats.length > 0 && (
-            <section aria-label="Caveats" className="flex flex-col gap-1">
+            <section
+              aria-label="Caveats"
+              className={cn(
+                'flex flex-col gap-1',
+                (state.run.status === 'failed' ||
+                  state.run.terminationReason === 'forced_submit' ||
+                  Boolean(state.run.errorCode)) &&
+                  'rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-2.5 py-2',
+              )}
+            >
               <h3 className={cn(mono, 'text-foreground/35 font-normal')}>
                 Caveats
               </h3>
-              <ul className="list-disc space-y-0.5 ps-5 text-xs text-foreground/45">
+              <ul
+                className={cn(
+                  'list-disc space-y-0.5 ps-5 text-xs',
+                  state.run.status === 'failed' ||
+                    state.run.terminationReason === 'forced_submit' ||
+                    Boolean(state.run.errorCode)
+                    ? 'text-amber-800/90 dark:text-amber-200/90'
+                    : 'text-foreground/45',
+                )}
+              >
                 {state.caveats.map((caveat) => (
                   <li key={caveat}>{caveat}</li>
                 ))}
