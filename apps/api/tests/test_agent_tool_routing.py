@@ -116,3 +116,41 @@ def test_compile_gepa_candidate_requires_reflection_lm():
 
     with pytest.raises(ValueError, match="reflection_lm"):
         compile_gepa_candidate(program)
+
+
+def test_coerce_edge_cases_fixtures_match_live_coerce():
+    from evals.agent_tool_routing import validate_coerce_edge_cases
+
+    assert validate_coerce_edge_cases() == []
+
+
+def test_eval_runner_seeded_exits_zero_without_a_provider(capsys):
+    exit_code = eval_run_main(["--suite", "routing", "--seeded"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "coerce fixtures:" in out
+    assert "seeded router:" in out
+    assert "all seeded routes exact" in out
+
+
+def test_score_seeded_router_is_exact_on_canonical_gold():
+    from evals.agent_tool_routing import (
+        CANONICAL_ROUTING_EXAMPLES,
+        score_seeded_router,
+    )
+
+    mean, misses, failures = score_seeded_router()
+    assert failures == 0
+    assert misses == []
+    assert mean == 1.0
+    assert len(CANONICAL_ROUTING_EXAMPLES) >= len(
+        {
+            "direct",
+            "research",
+            "artifact",
+            "workspace_read",
+            "workspace_write",
+            "workspace_shell",
+        }
+    )

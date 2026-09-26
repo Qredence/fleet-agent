@@ -215,6 +215,73 @@ def compile_gepa_candidate(
     )
 
 
+# Surface-noise fixtures for coerce_route: (raw, expected). No LM required.
+# Invented names stay fail-closed to direct; only form-normalization recovers.
+COERCE_EDGE_CASES: list[tuple[object, ToolRoute]] = [
+    # Exact members.
+    ("direct", "direct"),
+    ("research", "research"),
+    ("artifact", "artifact"),
+    ("workspace_read", "workspace_read"),
+    ("workspace_write", "workspace_write"),
+    ("workspace_shell", "workspace_shell"),
+    # Whitespace / case / hyphen / space / quotes.
+    ("  research  ", "research"),
+    ("\nworkspace_read\n", "workspace_read"),
+    ("WORKSPACE_WRITE", "workspace_write"),
+    ("Workspace_Shell", "workspace_shell"),
+    ("workspace-read", "workspace_read"),
+    ("workspace write", "workspace_write"),
+    ('"artifact"', "artifact"),
+    ("'direct'", "direct"),
+    ("`research`", "research"),
+    # Empty / non-string / invented — fail-closed.
+    ("", "direct"),
+    ("   ", "direct"),
+    (None, "direct"),
+    (42, "direct"),
+    ("web_search", "direct"),
+    ("code", "direct"),
+    ("sudo", "direct"),
+    ("bash", "direct"),
+    ("read", "direct"),
+    ("write", "direct"),
+]
+
+
+def validate_coerce_edge_cases() -> list[str]:
+    """Structural check that coerce fixtures match live coerce_route."""
+    problems: list[str] = []
+    for raw, expected in COERCE_EDGE_CASES:
+        actual = coerce_route(raw)
+        if actual != expected:
+            problems.append(f"coerce_route({raw!r}) -> {actual!r}, want {expected!r}")
+        if expected not in ROUTES:
+            problems.append(f"fixture expected route {expected!r} not in ROUTES")
+    return problems
+
+
+def score_seeded_router() -> tuple[float, list[tuple[str, str, str, float]], int]:
+    """Score the production Predict router over CANONICAL with a fixture LM.
+
+    Each example gets a ScriptedLM JSON answer equal to its gold route. This
+    proves the Predict + coerce + metric path without a live provider. Mean
+    must be 1.0 when the wiring is sound.
+    """
+    from app.agent.routing import ToolRoutingSignature
+    from evals.scoring import score_router
+    from tests.helpers.scripted_lm import ScriptedLM
+
+    steps = [
+        {"content": '{"route": "%s"}' % example.expected_route}
+        for example in CANONICAL_ROUTING_EXAMPLES
+    ]
+    lm = ScriptedLM(steps)
+    router = dspy.Predict(ToolRoutingSignature)
+    scored = score_router(router, lm, CANONICAL_ROUTING_EXAMPLES, num_threads=1)
+    return scored.mean, scored.misses, scored.failures
+
+
 def validate_routing_dataset() -> list[str]:
     """Structural invariants of the evaluation set (no LM required).
 

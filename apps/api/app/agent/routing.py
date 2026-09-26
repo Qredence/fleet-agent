@@ -37,6 +37,9 @@ ROUTES: tuple[ToolRoute, ...] = (
     "workspace_shell",
 )
 
+_ROUTE_WRAP_CHARS = "\"'`"
+"""Quotes LMs sometimes wrap around a route token."""
+
 
 class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     """
@@ -79,9 +82,22 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
 
 
 def coerce_route(value: object) -> ToolRoute:
-    """Convert an untrusted router output to a least-privileged route."""
+    """Convert an untrusted router output to a least-privileged route.
+
+    Exact ``ROUTES`` members pass through. Strings are normalized for common
+    LM surface noise (whitespace, case, hyphens/spaces as separators, wrapping
+    quotes) before membership is checked. Invented names and non-strings
+    fail-closed to ``direct`` — coerce never elevates privilege via aliases.
+    """
     if value in ROUTES:
-        return value
+        return cast(ToolRoute, value)
+    if isinstance(value, str):
+        normalized = value.strip().strip(_ROUTE_WRAP_CHARS).strip().lower()
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        while "__" in normalized:
+            normalized = normalized.replace("__", "_")
+        if normalized in ROUTES:
+            return cast(ToolRoute, normalized)
     return "direct"
 
 

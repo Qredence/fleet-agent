@@ -157,3 +157,23 @@ def test_untrusted_router_output_degrades_to_direct() -> None:
     assert coerce_route(None) == "direct"
     assert coerce_route(42) == "direct"
     assert coerce_route("") == "direct"
+
+
+def test_coerce_route_normalizes_surface_noise_without_elevating() -> None:
+    """Whitespace/case/hyphen/quotes recover; invented names stay direct."""
+    assert coerce_route("  research  ") == "research"
+    assert coerce_route("\nworkspace_read\n") == "workspace_read"
+    assert coerce_route("WORKSPACE_WRITE") == "workspace_write"
+    assert coerce_route("Workspace_Shell") == "workspace_shell"
+    assert coerce_route("workspace-read") == "workspace_read"
+    assert coerce_route("workspace write") == "workspace_write"
+    assert coerce_route('"artifact"') == "artifact"
+    assert coerce_route("'direct'") == "direct"
+    assert coerce_route("`research`") == "research"
+    # Invented / tool-ish names must not elevate privilege.
+    assert coerce_route("web_search") == "direct"
+    assert coerce_route("code") == "direct"
+    assert coerce_route("bash") == "direct"
+    assert coerce_route("read") == "direct"
+    assert coerce_route("write") == "direct"
+    assert coerce_route("   ") == "direct"
