@@ -16,14 +16,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/tools/use-tools', () => ({ useTools: () => mocks.useTools() }))
 vi.mock('@/features/threads/use-threads', () => ({ useThreads: () => ({ data: [] }) }))
-vi.mock('@/hooks/use-openrouter-auth', () => ({ useOpenRouterAuth: () => mocks.useOpenRouterAuth() }))
+vi.mock('@/features/providers/use-openrouter-auth', () => ({ useOpenRouterAuth: () => mocks.useOpenRouterAuth() }))
 vi.mock('@/components/workspace/agent-workspace', () => ({
   AgentWorkspace: ({ customMain }: { customMain: ReactNode }) => <main>{customMain}</main>,
 }))
-vi.mock('@/components/auth/openrouter-button', () => ({
+vi.mock('@/features/providers/components/openrouter-button', () => ({
   OpenRouterButton: ({ children }: { children: ReactNode }) => <button>{children}</button>,
 }))
-vi.mock('@/components/settings/settings-dialog', () => ({
+vi.mock('@/features/providers/settings/settings-dialog', () => ({
   SettingsDialog: ({ open }: { open: boolean }) => open ? <div role="dialog" aria-label="Settings" /> : null,
 }))
 

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "vitest run",
+    "test": "NODE_ENV=test vitest run",
     "contracts:sync": "json2ts --input ../../packages/contracts/agent-workspace-state.schema.json --output src/contracts/generated.ts",
     "preview": "vite preview"
   },

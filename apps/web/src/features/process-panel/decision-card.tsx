@@ -1,4 +1,4 @@
-import { StatusIcon } from '@/components/process-panel/status-chip'
+import { StatusIcon } from './status-chip'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { ProcessDecision } from '@/contracts/generated'

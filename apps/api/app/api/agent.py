@@ -22,13 +22,13 @@ from app.agui.run_coordinator import RunCoordinator
 from app.api.deps import get_sessions
 from app.contracts.error_codes import ERROR_MESSAGES
 from app.persistence.repositories import RunsRepository, ThreadsRepository
-from app.services.metrics import MetricsRegistry
-from app.services.mock_run import load_fixture, select_fixture_name
-from app.services.run_persistence import (
+from app.persistence.run_persistence import (
     ReservationErrorCode,
     RunPersistence,
     RunReservationError,
 )
+from app.services.metrics import MetricsRegistry
+from app.services.mock_run import load_fixture, select_fixture_name
 from app.settings import Settings
 
 router = APIRouter(prefix="/api", tags=["agent"])

@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 
-import { useOpenRouterAuth } from '@/hooks/use-openrouter-auth'
+import { useOpenRouterAuth } from '@/features/providers/use-openrouter-auth'
 import { queryClient } from '@/lib/query-client'
 import { applyTheme, useWorkspaceStore } from '@/state/workspace-store'
 

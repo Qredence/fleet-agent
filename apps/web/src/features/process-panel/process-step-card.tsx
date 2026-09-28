@@ -1,8 +1,8 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { StatusIcon, formatDuration } from '@/components/process-panel/status-chip'
-import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
+import { StatusIcon, formatDuration } from './status-chip'
+import { ToolExecutionCard } from './tool-execution-card'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { ProcessStep, ToolExecution } from '@/contracts/generated'

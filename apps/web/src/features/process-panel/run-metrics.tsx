@@ -1,6 +1,6 @@
 import { AlertTriangleIcon, CheckIcon, InfoIcon } from 'lucide-react'
 
-import { formatDuration } from '@/components/process-panel/status-chip'
+import { formatDuration } from './status-chip'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { RunMetrics } from '@/contracts/generated'

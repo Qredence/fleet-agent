@@ -20,7 +20,7 @@ import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-u
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
 import { API_BASE_URL, API_KEY } from '@/lib/api-client'
-import { getAgentProviderHeaders } from '@/lib/providers'
+import { getAgentProviderHeaders } from '@/features/providers/providers-store'
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`
 const AGENT_PATHNAME = new URL(AGENT_URL).pathname

@@ -13,12 +13,12 @@ import {
   getApiKey as getOpenRouterApiKey,
   getSelectedModel as getOpenRouterSelectedModel,
   isCustomModelEnabled as isOpenRouterCustomModelEnabled,
-} from '@/lib/openrouter-auth'
+} from '@/features/providers/openrouter-auth'
 import {
   getApiKey as getOpenCodeZenApiKey,
   getSelectedModel as getOpenCodeZenSelectedModel,
   isCustomModelEnabled as isOpenCodeZenCustomModelEnabled,
-} from '@/lib/opencode-zen-auth'
+} from '@/features/providers/opencode-zen-auth'
 
 export const PROVIDERS_STORAGE_KEY = 'fleet_providers_v1'
 export const OPENROUTER_PROFILE_ID = 'openrouter'

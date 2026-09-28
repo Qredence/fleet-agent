@@ -274,34 +274,6 @@ def _run_routing(
     return 0 if scored.mean >= min_accuracy else 2
 
 
-def _run_code(validate_only: bool, min_accuracy: float) -> int:
-    """Run the code-agent fixture task end to end."""
-    from evals.code import TASK, run_code_task, validate_code_fixture
-
-    problems = validate_code_fixture()
-    if problems:
-        print("code fixture is unsound:")
-        for problem in problems:
-            print(f"  - {problem}")
-        return 1
-    print(f"code fixture: {TASK} (suite fails pre-fix)")
-
-    if validate_only:
-        return 0
-
-    lm = _resolve_lm()
-    if lm is None:
-        print(
-            "no provider configured (MODAL_* or FLEET_AGENT_LLM_*); "
-            "fixture validated without running the agent"
-        )
-        return 0
-    score = run_code_task(lm=lm)
-    print(f"code suite: {'PASS' if score.passed else 'FAIL'}")
-    print(score.summary)
-    return 0 if (score.passed and 1.0 >= min_accuracy) else 2
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m evals.run",
@@ -309,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--suite",
-        choices=["routing", "code"],
+        choices=["routing"],
         default="routing",
         help="evaluation suite to run",
     )
@@ -373,10 +345,6 @@ def main(argv: list[str] | None = None) -> int:
             register_dataset=args.register_dataset,
             mlflow_eval=args.mlflow_eval,
             judge_model=args.judge_model,
-        )
-    if args.suite == "code":
-        return _run_code(
-            args.validate, 0.9 if args.min_accuracy is None else args.min_accuracy
         )
     parser.error(f"unknown suite {args.suite!r}")
 

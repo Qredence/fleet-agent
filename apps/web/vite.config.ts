@@ -32,5 +32,11 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
     testTimeout: 15000,
+    // React's production CJS builds have no `act` export; without this, a
+    // shell-exported NODE_ENV=production makes vitest load them and every
+    // rendering test fails with "React.act is not a function".
+    env: {
+      NODE_ENV: 'test',
+    },
   },
 })

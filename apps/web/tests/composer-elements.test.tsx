@@ -24,7 +24,7 @@ import {
   ComposerAttachments,
 } from '@/components/assistant-ui/attachment'
 import { Thread } from '@/components/assistant-ui/thread'
-import { PROVIDERS_STORAGE_KEY } from '@/lib/providers'
+import { PROVIDERS_STORAGE_KEY } from '@/features/providers/providers-store'
 
 const noOpAdapter: ChatModelAdapter = {
   async *run() {},

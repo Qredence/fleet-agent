@@ -53,6 +53,7 @@ skills-lock.json
 apps/api/mlruns/
 *.db
 .factory/
+.remember/
 # Lab generated artifacts
 /AGENTS.md
 /CLAUDE.md

@@ -1,7 +1,7 @@
 import { Copy, ExternalLink, FolderSearch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
-import { EmptyTabState } from '@/components/process-panel/empty-tab-state'
+import { EmptyTabState } from './empty-tab-state'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { AgentSource } from '@/contracts/generated'

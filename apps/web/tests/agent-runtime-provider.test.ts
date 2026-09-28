@@ -5,7 +5,7 @@ import {
   setApiKey,
   setCustomModelEnabled,
   setSelectedModel,
-} from '@/lib/openrouter-auth'
+} from '@/features/providers/openrouter-auth'
 
 afterEach(() => {
   localStorage.clear()

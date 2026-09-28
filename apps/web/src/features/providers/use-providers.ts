@@ -8,7 +8,7 @@ import {
   setActiveProviderId as setStoredActiveProviderId,
   upsertProfile as upsertStoredProfile,
   type ProviderProfile,
-} from '@/lib/providers'
+} from '@/features/providers/providers-store'
 
 export interface UseProvidersReturn {
   profiles: ProviderProfile[]

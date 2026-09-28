@@ -12,7 +12,7 @@ import {
   initiateOAuth,
   onAuthChange,
   DEFAULT_OPENROUTER_MODEL,
-} from '@/lib/openrouter-auth'
+} from '@/features/providers/openrouter-auth'
 
 export interface UseOpenRouterAuthOptions {
   /**

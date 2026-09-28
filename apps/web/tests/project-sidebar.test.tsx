@@ -4,11 +4,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ProjectSidebar } from '@/components/projects/project-sidebar'
+import { ProjectSidebar } from '@/features/projects/project-sidebar'
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api-client')>()
-  return { ...original, apiFetch: vi.fn() }
+  const apiFetch = vi.fn()
+  return {
+    ...original,
+    apiFetch,
+    apiJsonFetch: vi.fn((path: string, method: string, body: unknown, init?: RequestInit) => {
+      const { headers: extraHeaders, ...rest } = init ?? {}
+      return apiFetch(path, {
+        ...rest,
+        method,
+        headers: { 'Content-Type': 'application/json', ...extraHeaders },
+        body: JSON.stringify(body),
+      })
+    }),
+  }
 })
 
 import { apiFetch } from '@/lib/api-client'

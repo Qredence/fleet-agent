@@ -4,7 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.api.agent import _reservation_http_error
-from app.services.run_persistence import ReservationErrorCode, RunReservationError
+from app.persistence.run_persistence import ReservationErrorCode, RunReservationError
 from tests.conftest import make_test_app
 
 THREAD_ID = "thread-abc"

@@ -10,7 +10,7 @@ import {
   setCustomModelEnabled as setStoredCustomModelEnabled,
   onAuthChange,
   DEFAULT_OPENCODE_ZEN_MODEL,
-} from '@/lib/opencode-zen-auth'
+} from '@/features/providers/opencode-zen-auth'
 
 export interface UseOpenCodeZenAuthReturn {
   apiKey: string | null
