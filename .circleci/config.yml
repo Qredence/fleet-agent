@@ -49,6 +49,9 @@ jobs:
           paths:
             - ~/.cache/pnpm
       - run:
+          name: Audit web dependencies
+          command: pnpm audit --audit-level=high
+      - run:
           name: Lint web
           command: pnpm --filter web lint
       - run:
@@ -81,6 +84,16 @@ jobs:
           key: v1-uv-{{ checksum "apps/api/uv.lock" }}
           paths:
             - ~/.cache/uv
+      - run:
+          name: Audit API dependencies
+          # Dependabot reads the GitHub advisory DB; pip-audit reads PyPI/OSV.
+          # They disagree, so this gate is deliberately independent. Accepted
+          # risk: PYSEC-2026-2447 (diskcache pickle deserialization, pulled in
+          # by dspy) has no fixed release and needs local write access to the
+          # cache directory. Drop the ignore once upstream publishes a fix.
+          command: |
+            uv export --frozen --no-emit-project --no-hashes --format requirements-txt > /tmp/requirements-audit.txt
+            uvx pip-audit -r /tmp/requirements-audit.txt --ignore-vuln PYSEC-2026-2447
       - run:
           name: Wait for and initialize test database
           command: |

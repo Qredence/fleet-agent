@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  # pnpm workspace at the repository root. apps/web is the only package with
+  # third-party dependencies, and pnpm-lock.yaml is the only npm manifest.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    # Mirrors the pnpm minimumReleaseAge supply-chain policy for version updates.
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # FastAPI service; Dependabot reads apps/api/uv.lock with the uv ecosystem.
+  - package-ecosystem: uv
+    directory: "/apps/api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    cooldown:
+      default-days: 7
+    groups:
+      uv-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch

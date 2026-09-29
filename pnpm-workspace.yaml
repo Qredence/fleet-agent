@@ -9,5 +9,11 @@ minimumReleaseAgeExclude:
   - '@assistant-ui/tap@0.9.14'
   - remend@1.3.1
   - streamdown@2.6.0
+  - qs@6.15.4 || 6.16.0
+  - fast-uri@3.1.6 || 3.1.7
+  - js-yaml@4.3.2
+  - hono@4.13.5
+  - undici@7.29.1
+  - ip-address@10.5.1
 patchedDependencies:
   '@assistant-ui/react-ag-ui': patches/@assistant-ui__react-ag-ui.patch
