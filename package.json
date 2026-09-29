@@ -13,7 +13,8 @@
     "build": "pnpm --filter web build",
     "test:web": "pnpm --filter web test",
     "test:api": "cd apps/api && uv run pytest",
-    "lint": "pnpm --filter web lint"
+    "lint": "pnpm --filter web lint",
+    "lint:all": "pnpm --filter web lint && cd apps/api && uv run ruff check . && uv run ruff format --check . && uv run mypy app"
   },
   "registries": {
     "@fluid": "https://www.fluidfunctionalism.com/r/{name}.json"

@@ -133,6 +133,39 @@ def test_databricks_gateway_replaces_daytona_key_with_workspace_token(
     assert lm.api_key == "dapi-workspace-token"
 
 
+@pytest.mark.parametrize("configured_key", [None, "dtn_unusable"])
+@pytest.mark.parametrize("source", ["environment", "dotenv"])
+@pytest.mark.parametrize("primary", [None, "", "dapi-primary"])
+def test_databricks_token_uses_first_nonempty_alias(
+    monkeypatch, tmp_path, configured_key, source, primary
+):
+    from app.agent.factory import _build_lm
+
+    monkeypatch.delenv("DATABRICKS_TOKEN", raising=False)
+    monkeypatch.delenv("DATABRICKS_API_TOKEN", raising=False)
+    tokens = {"DATABRICKS_API_TOKEN": "dapi-secondary"}
+    if primary is not None:
+        tokens["DATABRICKS_TOKEN"] = primary
+    env_file = tmp_path / "settings.env"
+    if source == "environment":
+        for key, value in tokens.items():
+            monkeypatch.setenv(key, value)
+    else:
+        env_file.write_text(
+            "\n".join(f"{key}={value}" for key, value in tokens.items())
+        )
+
+    settings = make_settings(
+        _env_file=env_file if source == "dotenv" else None,
+        llm_base_url="https://example.gcp.databricks.com/ai-gateway/openai/v1",
+        llm_api_key=SecretStr(configured_key) if configured_key else None,
+        modal_model_id=None,
+    )
+    lm = _build_lm(settings, None)
+    assert isinstance(lm, OpenAICompatibleLM)
+    assert lm.api_key == (primary or "dapi-secondary")
+
+
 @pytest.mark.parametrize(
     "api_base",
     [

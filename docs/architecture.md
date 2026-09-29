@@ -1,6 +1,6 @@
 # Fleet Agent — Architecture
 
-An experimental agent workbench built around **DSPy 3.3.1**. Multi-step agent
+An experimental agent workbench built around **DSPy 3.4.0**. Multi-step agent
 work that is useful, inspectable, and recoverable — a direct answer plus a
 persistent, browser-visible agent workspace.
 
@@ -125,11 +125,11 @@ sequenceDiagram
     E->>LM: synthesis Predict (streamed, ChatAdapter)
     E-->>LC: token deltas (scrubbed) / AgentStreamUpdate / AgentRunResult
     E-->LC: callbacks (ToolStart/End, LmStart, ...)
-    LC->>P: persist run, run_state, sources, artifacts, approval checkpoints
+    LC->>P: persist run, run_state, sources, artifacts
     LC->>A: map domain → AG-UI events (StateDelta, Tool*, Text*)
     A-->>U: SSE stream (STREAM, STATE_DELTA, DONE/RUN_ERROR)
     Note over A,U: history (raw next_thought) stays server-side;
-    approval pauses persist durably and survive restarts
+    gated tools are withheld up front unless the run authorizes them
 ```
 
 **Fixtures mode** replays deterministic, provider-free AG-UI streams
@@ -193,8 +193,10 @@ flowchart TB
 - **Scoped DSPy** — `dspy.context(...)` only, never global `dspy.configure`.
 - **Streamed equals batch** — synthesis token streams are scrubbed
   per-field; their concatenation always equals the scrubbed final fields.
-- **Durable approvals** — approval interrupts persist in PostgreSQL, are
-  consumed exactly once, and orphaned interrupted runs are swept on restart.
+- **Approval is a decision, not a pause** — gated tools (`write`, `edit`,
+  `bash`) are withheld from every tool profile unless the run authorizes them
+  up front via `forwardedProps.approvedTools`; there is no durable checkpoint
+  table. Orphaned interrupted runs are swept on restart.
 - **Alembic migrations** for persistence; engine runs require an existing thread.
 - **Contract workflow**: edit schema → `contracts:sync` (TS) → regenerate Python
   model → run freshness tests.

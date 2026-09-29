@@ -19,7 +19,7 @@ import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-pres
 import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
-import { API_BASE_URL, API_KEY } from '@/lib/api-client'
+import { API_BASE_URL, API_KEY } from '@/lib/env'
 import { getAgentProviderHeaders } from '@/features/providers/providers-store'
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`

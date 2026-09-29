@@ -9,6 +9,8 @@
  * typed messages).
  */
 
+import providerContract from '@fleet-agent/contracts/provider.json'
+
 import {
   getApiKey as getOpenRouterApiKey,
   getSelectedModel as getOpenRouterSelectedModel,
@@ -22,12 +24,14 @@ import {
 
 export const PROVIDERS_STORAGE_KEY = 'fleet_providers_v1'
 export const OPENROUTER_PROFILE_ID = 'openrouter'
-export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+export const OPENROUTER_BASE_URL = providerContract.openRouter.apiBaseUrl
 export const OPENCODE_ZEN_PROFILE_ID = 'opencode-zen'
-export const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1'
+export const OPENCODE_ZEN_BASE_URL = providerContract.openCodeZen.apiBaseUrl
 export const SERVER_DEFAULT_ID = 'server'
 
 export type ChatCompletionFormat = 'openai-chat-completions'
+// These unions are static TypeScript types; a contract test keeps them in sync
+// with the canonical lists in packages/contracts/provider.json.
 export type ResponseFormat = 'native_function_calling' | 'json_tool_calls'
 export type MessagesFormat = 'system_role' | 'developer_role'
 

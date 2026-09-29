@@ -11,14 +11,15 @@ import {
   CardMedia,
   CardButton,
 } from "@/components/ui/card";
-import { useIcons, type IconName } from "@/lib/icon-context";
+import { useIcons, type IconComponent, type IconName } from "@/lib/icon-context";
 import { cn } from "@/lib/utils";
 
 export interface CardSectionItem {
   id: string;
   name: string;
   description?: string;
-  icon?: any;
+  /** Either a themed icon name or a custom icon component. */
+  icon?: IconName | IconComponent;
 }
 
 // Seed content for the generated card group — replace with your own.
@@ -59,7 +60,7 @@ export function CardSection({
           const isSelected = selectedModel === item.id;
           const iconComponent =
             typeof item.icon === "string"
-              ? icons[item.icon as IconName] || Circle
+              ? icons[item.icon] || Circle
               : item.icon || Circle;
 
           return (

@@ -42,7 +42,8 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "TID252"]
 
-# app/contracts/*.py is generated from packages/contracts/*.schema.json.
+# app/contracts/ holds generated models (agent_state.py, thread_bootstrap.py)
+# plus the small authored loaders that read packages/contracts at runtime.
 [tool.ruff.lint.per-file-ignores]
 "app/contracts/**" = ["E501"]
 # pathlib/polling in tests are infra details, not the road.
@@ -63,5 +64,5 @@ ignore_missing_imports = true
 
 # Generated from packages/contracts/*.schema.json — not authored code.
 [[tool.mypy.overrides]]
-module = "app.contracts.*"
+module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap"]
 ignore_errors = true

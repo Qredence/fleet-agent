@@ -28,6 +28,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@fleet-agent/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0

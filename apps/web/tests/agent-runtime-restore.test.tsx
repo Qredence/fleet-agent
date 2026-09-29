@@ -21,8 +21,9 @@ vi.mock('@/features/threads/threads-api', () => ({
 }))
 
 import { AgentRuntimeProvider } from '@/features/agent-runtime/agent-runtime-provider'
+import type { ThreadBootstrap } from '@/features/threads/threads-api'
 
-const bootstrap = {
+const bootstrap: ThreadBootstrap = {
   schemaVersion: 1,
   thread: {
     id: 't-1',

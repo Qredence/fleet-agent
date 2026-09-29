@@ -23,7 +23,7 @@ from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 from app.agent.event_bus import RunEventBus
 from app.agent.provider import ProviderOverride
 from app.agent.synthesis_stream import synthesis_stream_listeners
-from app.services.content_safety import (
+from app.kernel.content_safety import (
     StreamingScrubber,
     scrub_public_lines,
     scrub_public_text,

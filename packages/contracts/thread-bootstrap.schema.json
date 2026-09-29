@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fleet-agent.dev/contracts/thread-bootstrap.schema.json",
+  "title": "ThreadBootstrap",
+  "description": "Everything the client needs to restore a thread after reload or switch. Served by GET /api/threads/{thread_id}/bootstrap.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "thread",
+    "messageRepository",
+    "messages",
+    "agentState",
+    "latestRun"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Contract version. Any breaking shape change increments it."
+    },
+    "thread": {
+      "$ref": "#/$defs/threadOut"
+    },
+    "messageRepository": {
+      "$ref": "#/$defs/messageRepository",
+      "description": "Branch repository in the current bootstrap format."
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "description": "Legacy flat message list kept for older clients; new clients use messageRepository."
+    },
+    "agentState": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Latest AgentWorkspaceState snapshot for the process panel, or null."
+    },
+    "latestRun": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/latestRun"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "threadOut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "projectId",
+        "title",
+        "status",
+        "lastRunId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "lastRunId": {
+          "type": ["string", "null"]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "title": "ThreadOut"
+    },
+    "messageRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headId", "messages"],
+      "properties": {
+        "headId": {
+          "type": ["string", "null"]
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/messageStorageEntry"
+          }
+        }
+      },
+      "title": "MessageRepository"
+    },
+    "messageStorageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "parentId", "format", "content"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": ["string", "null"]
+        },
+        "format": {
+          "type": "string",
+          "description": "Wire format of the stored branch node. Known values: \"ag-ui/v1\" (AG-UI messages) and \"aui/v0\" (assistant-ui nodes); clients validate before decoding, and the repository passes persisted values through untouched."
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "The assistant-ui message node as persisted."
+        },
+        "runConfig": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Run configuration captured with the message, when present."
+        }
+      },
+      "title": "MessageStorageEntry"
+    },
+    "latestRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "terminationReason", "errorCode"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "terminationReason": {
+          "type": ["string", "null"],
+          "description": "One of the public termination reasons, or null while in flight."
+        },
+        "errorCode": {
+          "type": ["string", "null"],
+          "description": "Stable public error code. Never a raw exception string."
+        }
+      },
+      "title": "LatestRun"
+    }
+  }
+}

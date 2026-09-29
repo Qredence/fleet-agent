@@ -120,10 +120,12 @@ server retains the model history needed for continuation.
 ## Repository map
 
 ```text
-apps/web/          React 19 + Vite workspace and browser tests
-apps/api/          FastAPI API, DSPy engine, AG-UI bridge, persistence, migrations
-packages/contracts Public agent-state schema and deterministic fixtures
-compose.yaml       Local PostgreSQL service
+apps/web/            React 19 + Vite workspace and browser tests
+apps/api/            FastAPI API, DSPy engine, AG-UI bridge, persistence, offline evals
+packages/contracts/  Public protocol contracts (JSON Schema, constants, fixtures)
+configs/             Prime Intellect eval/GEPA/training matrices (external CLI configs)
+scripts/             End-to-end fixture and engine checks
+compose.yaml         Local PostgreSQL service
 ```
 
 ## Requirements

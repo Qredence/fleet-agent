@@ -17,6 +17,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "app"
 AGENT = APP / "agent"
+KERNEL = APP / "kernel"
 
 # Third-party roots the agent layer must never import.
 FORBIDDEN_THIRD_PARTY = (
@@ -28,8 +29,30 @@ FORBIDDEN_THIRD_PARTY = (
     "alembic",
 )
 
-# Application layers that depend ON the agent, so the agent must not import them.
-FORBIDDEN_APP_LAYERS = ("app.agui", "app.api", "app.persistence", "app.main")
+# Application layers that depend ON the agent, so the agent must not import
+# them. ``app.services`` is listed for a different reason: it is
+# infrastructure (filesystem backends, MLflow, metrics, fixture replay), and
+# the agent layer must take its shared logic from ``app.kernel`` instead of
+# reaching into infrastructure.
+FORBIDDEN_APP_LAYERS = (
+    "app.agui",
+    "app.api",
+    "app.persistence",
+    "app.main",
+    "app.services",
+)
+
+# The kernel is the bottom of the app: third-party libraries and app.contracts
+# are fine, but it must never import a layer that builds on it.
+FORBIDDEN_KERNEL_LAYERS = (
+    "app.agent",
+    "app.agui",
+    "app.api",
+    "app.persistence",
+    "app.services",
+    "app.main",
+    "app.settings",
+)
 
 
 def _imports(path: Path) -> list[str]:
@@ -43,15 +66,15 @@ def _imports(path: Path) -> list[str]:
     return found
 
 
-def _agent_violations(forbidden: tuple[str, ...]) -> list[str]:
-    """Return imports of a forbidden module or any of its submodules.
+def _layer_violations(root: Path, forbidden: tuple[str, ...]) -> list[str]:
+    """Return imports of a forbidden module or any of its submodules below root.
 
     Prefix matching, not ``split(".")[0]``: the app-layer entries are dotted
     (``app.agui``), so comparing only the first segment would compare ``"app"``
     against ``"app.agui"`` and never match - a guard that silently passes.
     """
     violations: list[str] = []
-    for path in sorted(AGENT.rglob("*.py")):
+    for path in sorted(root.rglob("*.py")):
         for module in _imports(path):
             if any(
                 module == banned or module.startswith(f"{banned}.")
@@ -62,7 +85,7 @@ def _agent_violations(forbidden: tuple[str, ...]) -> list[str]:
 
 
 def test_the_agent_layer_has_no_web_or_database_dependency() -> None:
-    violations = _agent_violations(FORBIDDEN_THIRD_PARTY)
+    violations = _layer_violations(AGENT, FORBIDDEN_THIRD_PARTY)
     assert violations == [], (
         "the agent layer must stay free of web and database dependencies so it "
         f"can be built and optimized on its own: {violations}"
@@ -76,7 +99,7 @@ def test_the_agent_layer_does_not_import_the_layers_that_serve_it() -> None:
     agent layer precisely so this direction holds; moving them back would make the
     two layers import each other.
     """
-    violations = _agent_violations(FORBIDDEN_APP_LAYERS)
+    violations = _layer_violations(AGENT, FORBIDDEN_APP_LAYERS)
     assert violations == [], (
         f"the agent layer must not depend on its own transport or API: {violations}"
     )
@@ -95,6 +118,14 @@ def test_the_agui_layer_imports_the_agent_contracts_it_consumes() -> None:
     )
 
 
+def test_the_kernel_stays_free_of_app_layers() -> None:
+    """The shared kernel must not import any layer built on it."""
+    violations = _layer_violations(KERNEL, FORBIDDEN_KERNEL_LAYERS)
+    assert violations == [], (
+        f"the kernel must not depend on the layers built on it: {violations}"
+    )
+
+
 # --- configuration truth ----------------------------------------------------
 
 SETTINGS = APP / "settings.py"
@@ -109,7 +140,8 @@ def _settings_env_names() -> set[str]:
 
     Parsed per field annotation, not with a file-wide regex: a greedy pattern
     cross-links ``validation_alias`` between neighbouring fields and reports real
-    settings as phantoms.
+    settings as phantoms. Plain aliases and ``AliasChoices(...)`` lists both
+    count as the names the field reads.
     """
     source = SETTINGS.read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -125,9 +157,14 @@ def _settings_env_names() -> set[str]:
                 continue
             segment = ast.get_source_segment(source, item) or ""
             match = re.search(r'validation_alias="([A-Z_]+)"', segment)
-            names.add(
-                match.group(1) if match else f"FLEET_AGENT_{item.target.id.upper()}"
-            )
+            if match:
+                names.add(match.group(1))
+                continue
+            choices = re.search(r"validation_alias=AliasChoices\(([^)]*)\)", segment)
+            if choices:
+                names.update(re.findall(r'"([A-Z][A-Z0-9_]+)"', choices.group(1)))
+                continue
+            names.add(f"FLEET_AGENT_{item.target.id.upper()}")
     return names
 
 

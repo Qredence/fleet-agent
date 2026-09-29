@@ -166,12 +166,19 @@ describe('openrouter-auth module', () => {
       const originalLocation = window.location
       // @ts-expect-error mocking window.location
       delete window.location
-      window.location = {
-        ...originalLocation,
-        origin: 'http://localhost:5173',
-        pathname: '/projects/test',
-        href: '',
-      }
+      // defineProperty, not assignment: jsdom's location is unforgeable, and
+      // the DOM lib types assignment to it as an intersection this mock and
+      // the restore below cannot satisfy.
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: {
+          ...originalLocation,
+          origin: 'http://localhost:5173',
+          pathname: '/projects/test',
+          href: '',
+        },
+      })
 
       await initiateOAuth()
 
@@ -184,7 +191,11 @@ describe('openrouter-auth module', () => {
       expect(window.location.href).toContain('code_challenge_method=S256')
       expect(window.location.href).toContain('code_challenge=')
 
-      window.location = originalLocation
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: originalLocation,
+      })
     })
 
     it('exchanges code for API key and removes verifier on handleOAuthCallback', async () => {

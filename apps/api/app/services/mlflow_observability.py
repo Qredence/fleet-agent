@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
-from app.services.content_safety import scrub_public_text
+from app.kernel.content_safety import scrub_public_text
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)

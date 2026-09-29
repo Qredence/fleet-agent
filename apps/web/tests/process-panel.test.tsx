@@ -93,6 +93,18 @@ const runningState: AgentWorkspaceState = {
   metrics: { toolCallCount: 1 },
 }
 
+const synthesisStep: AgentWorkspaceState['steps'][number] = {
+  id: 'step-synthesis',
+  phase: 'synthesis',
+  title: 'Preparing the response',
+  status: 'completed',
+  finishedAt: '2026-01-01T00:00:04Z',
+  durationMs: 750,
+  toolCallIds: [],
+  sourceIds: [],
+  artifactIds: [],
+}
+
 const completedState: AgentWorkspaceState = {
   ...runningState,
   run: {
@@ -101,20 +113,7 @@ const completedState: AgentWorkspaceState = {
     finishedAt: '2026-01-01T00:00:04Z',
     terminationReason: 'submit',
   },
-  steps: [
-    ...baseSteps,
-    {
-      id: 'step-synthesis',
-      phase: 'synthesis',
-      title: 'Preparing the response',
-      status: 'completed',
-      finishedAt: '2026-01-01T00:00:04Z',
-      durationMs: 750,
-      toolCallIds: [],
-      sourceIds: [],
-      artifactIds: [],
-    },
-  ].map((step) =>
+  steps: [...baseSteps, synthesisStep].map((step) =>
     step.id === 'step-research' ? { ...step, status: 'completed' } : step,
   ),
   metrics: {

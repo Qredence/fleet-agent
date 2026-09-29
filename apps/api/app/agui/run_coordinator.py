@@ -21,7 +21,7 @@ from ag_ui.core import (
 )
 from ag_ui.encoder import EventEncoder
 
-from app.services.mock_run import TimedEvent
+from app.contracts.replay import TimedEvent
 
 logger = logging.getLogger(__name__)
 

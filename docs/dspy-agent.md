@@ -1,4 +1,4 @@
-# Fleet Agent DSPy architecture (DSPy 3.3.1)
+# Fleet Agent DSPy architecture (DSPy 3.4.0)
 
 ## Goal
 
@@ -41,16 +41,16 @@ FleetAgent(dspy.Module)
             dspy.streamify + StreamListener (ChatAdapter)
 ```
 
-## RLM availability in 3.3.1
+## RLM availability in 3.4.0
 
-DSPy 3.3.1 exposes `RLM` at the package root as `dspy.RLM`; the implementation
+DSPy 3.4.0 exposes `RLM` at the package root as `dspy.RLM`; the implementation
 is also available at `dspy/predict/rlm.py` for explicit imports. Fleet Agent's
 code does not depend on RLM — the routed `FleetAgent` uses `ReActV2` only — but
 these notes keep older RLM examples aligned with the pinned DSPy version.
 
 ## Why keep ReActV2
 
-DSPy 3.3.1 marks `ReActV2` experimental, but it is the relevant 3.3 agent
+DSPy 3.4.0 marks `ReActV2` experimental, but it is the relevant agent
 primitive for Fleet Agent because it uses structured `dspy.History`, explicit
 `dspy.Tool` objects, `dspy.ToolCalls`, native function calling, and a typed
 `submit` tool for final outputs.
@@ -188,7 +188,7 @@ it.
 
 ## Async and MCP boundary
 
-DSPy 3.3.1 `ReActV2` executes tools synchronously. `dspy.Tool.from_mcp_tool`
+DSPy 3.4.0 `ReActV2` executes tools synchronously. `dspy.Tool.from_mcp_tool`
 creates async tools, so MCP tools must not be inserted into this program by
 turning on implicit async-to-sync conversion. Under FastAPI's running event
 loop that conversion can fail and it violates the current synchronous contract.
@@ -214,7 +214,7 @@ The runtime owns:
 - cleanup
 - mapping `dspy.Prediction` to `AgentRunResult`
 
-The runtime no longer mutates `agent.tools["submit"].func`. DSPy 3.3.1 does not
+The runtime no longer mutates `agent.tools["submit"].func`. DSPy 3.4.0 does not
 publish that as an extension point. The default program now does true token
 streaming on the public DSPy path (`dspy.streamify` + `StreamListener`); see
 the next section.
@@ -319,7 +319,7 @@ not run yet - a boot whose database was unreachable, which now degrades to a war
 
 ## Secret scrubbing (batch and streaming)
 
-`app/services/content_safety.py` masks high-precision credential patterns
+`app/kernel/content_safety.py` masks high-precision credential patterns
 (provider keys, AWS/Google/GitHub/Slack tokens, JWTs, Bearer headers, PEM
 blocks, explicit credential assignments) at every boundary where free text
 crosses to the browser or persistent public state: final result fields, tool
@@ -356,7 +356,7 @@ or a deletion that needs the shell because no delete tool exists).
 
 The metric scores least privilege: exact route 1.0, over-selection 0.35,
 under-selection 0.0 (the run cannot succeed). `routing_metric` returns the
-score/feedback prediction that satisfies dspy 3.3.1's GEPA metric contract, so
+score/feedback prediction that satisfies dspy 3.4.0's GEPA metric contract, so
 `compile_gepa_candidate` can optimize the router offline; `routing_score` is
 its numeric projection for `dspy.Evaluate`.
 

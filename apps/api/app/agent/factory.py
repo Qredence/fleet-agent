@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from urllib.parse import urlsplit
 
 import dspy
@@ -34,18 +33,20 @@ from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agent.tools.web import WebToolBundle, build_web_tool_bundle
 from app.agent.tools.workspace import WorkspacePolicy, WorkspaceTools
-from app.services.artifact_storage import ArtifactStorage
+from app.kernel.storage import ArtifactStorage
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_gateway_api_key(api_key: str | None, api_base: str) -> str | None:
+def _resolve_gateway_api_key(
+    api_key: str | None, api_base: str, *, workspace_token: str | None
+) -> str | None:
     """Pick a credential the gateway will actually accept.
 
     Databricks serving/AI Gateway rejects non-workspace tokens (Daytona
     ``dtn_…`` keys produce HTTP 401 "unsupported type"). When the configured
-    key cannot work, prefer ``DATABRICKS_TOKEN`` from the environment.
+    key cannot work, prefer the resolved ``DATABRICKS_TOKEN`` settings value.
     """
     try:
         hostname = urlsplit(api_base).hostname
@@ -56,13 +57,10 @@ def _resolve_gateway_api_key(api_key: str | None, api_base: str) -> str | None:
     hostname = hostname.rstrip(".").lower()
     if hostname != "databricks.com" and not hostname.endswith(".databricks.com"):
         return api_key
-    env_token = os.environ.get("DATABRICKS_TOKEN") or os.environ.get(
-        "DATABRICKS_API_TOKEN"
-    )
-    if not env_token:
+    if not workspace_token:
         return api_key
     if api_key is None or api_key.startswith("dtn_"):
-        return env_token
+        return workspace_token
     return api_key
 
 
@@ -122,7 +120,15 @@ def _build_lm(
     if api_base is not None:
         return OpenAICompatibleLM(
             model=model,
-            api_key=_resolve_gateway_api_key(api_key, api_base),
+            api_key=_resolve_gateway_api_key(
+                api_key,
+                api_base,
+                workspace_token=(
+                    settings.databricks_token.get_secret_value()
+                    if settings.databricks_token
+                    else None
+                ),
+            ),
             api_base=api_base,
             temperature=settings.llm_temperature,
             cache=False,

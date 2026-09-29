@@ -23,13 +23,13 @@ from app.agent.tooling import create_dspy_tool
 from app.agent.tools.report import WriteReportTool
 from app.api.threads import _safe_bootstrap_agent_state
 from app.contracts.domain import ToolCompleted, ToolStarted
-from app.services.artifact_storage import LocalArtifactStorage
-from app.services.content_safety import (
+from app.kernel.content_safety import (
     StreamingScrubber,
     scrub_json_strings,
     scrub_public_lines,
     scrub_public_text,
 )
+from app.services.artifact_storage import LocalArtifactStorage
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 from tests.helpers.signatures import AgentSignature
 

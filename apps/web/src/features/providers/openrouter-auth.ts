@@ -6,8 +6,15 @@
  * - Code challenge computed via SHA-256 (S256 method)
  * - Exchange code for user API key without backend client secret
  * - Cross-tab synchronization via localStorage and storage events
- * - OpenRouter app attribution headers (HTTP-Referer and X-Title)
+ *
+ * The localStorage-backed key/model state is shared with the other BYOK
+ * providers through `local-storage-auth`; this module owns the OpenRouter
+ * storage keys, catalog, and OAuth flow.
  */
+
+import providerContract from '@fleet-agent/contracts/provider.json'
+
+import { createLocalStorageAuth } from '@/features/providers/local-storage-auth'
 
 export const STORAGE_KEY = 'openrouter_api_key'
 export const VERIFIER_KEY = 'openrouter_code_verifier'
@@ -26,8 +33,14 @@ export const POPULAR_OPENROUTER_MODELS = [
   { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen 2.5 72B (Alibaba)' },
 ] as const
 
-type AuthListener = () => void
-const listeners = new Set<AuthListener>()
+const OPENROUTER_OAUTH_AUTHORIZE_URL = 'https://openrouter.ai/auth'
+
+const auth = createLocalStorageAuth({
+  storageKey: STORAGE_KEY,
+  modelStorageKey: MODEL_STORAGE_KEY,
+  customModelEnabledKey: CUSTOM_MODEL_ENABLED_KEY,
+  defaultModel: DEFAULT_OPENROUTER_MODEL,
+})
 
 /**
  * Subscribes to auth and settings changes in this tab and across tabs.
@@ -35,125 +48,43 @@ const listeners = new Set<AuthListener>()
  * @param fn - Listener function called when auth state changes
  * @returns Unsubscribe function
  */
-export const onAuthChange = (fn: AuthListener): (() => void) => {
-  listeners.add(fn)
-  return () => {
-    listeners.delete(fn)
-  }
-}
-
-const notify = () => {
-  listeners.forEach((fn) => {
-    try {
-      fn()
-    } catch {
-      // Ignore listener errors
-    }
-  })
-}
-
-// Cross-tab sync: other tabs update when user signs in or out
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (
-      event.key === STORAGE_KEY ||
-      event.key === MODEL_STORAGE_KEY ||
-      event.key === CUSTOM_MODEL_ENABLED_KEY
-    ) {
-      notify()
-    }
-  })
-}
+export const onAuthChange = (fn: () => void): (() => void) => auth.onAuthChange(fn)
 
 /**
  * Returns the stored OpenRouter API key, or null if not authenticated.
  */
-export const getApiKey = (): string | null => {
-  if (typeof window === 'undefined') return null
-  try {
-    return localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
+export const getApiKey = (): string | null => auth.getApiKey()
 
 /**
  * Stores the OpenRouter API key in localStorage and notifies all subscribers.
  */
-export const setApiKey = (key: string): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, key.trim())
-    notify()
-  } catch {
-    // Ignore storage write failures
-  }
-}
+export const setApiKey = (key: string): void => auth.setApiKey(key)
 
 /**
  * Clears the OpenRouter API key from localStorage and notifies all subscribers.
  */
-export const clearApiKey = (): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-    notify()
-  } catch {
-    // Ignore storage remove failures
-  }
-}
+export const clearApiKey = (): void => auth.clearApiKey()
 
 /**
  * Gets the selected model override for OpenRouter.
  */
-export const getSelectedModel = (): string => {
-  if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL
-  try {
-    return (
-      localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_OPENROUTER_MODEL
-    )
-  } catch {
-    return DEFAULT_OPENROUTER_MODEL
-  }
-}
+export const getSelectedModel = (): string => auth.getSelectedModel()
 
 /**
  * Sets the selected model override for OpenRouter.
  */
-export const setSelectedModel = (model: string): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(MODEL_STORAGE_KEY, model.trim())
-    notify()
-  } catch {
-    // Ignore
-  }
-}
+export const setSelectedModel = (model: string): void => auth.setSelectedModel(model)
 
 /**
  * Checks whether custom model selection is enabled.
  */
-export const isCustomModelEnabled = (): boolean => {
-  if (typeof window === 'undefined') return false
-  try {
-    return localStorage.getItem(CUSTOM_MODEL_ENABLED_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
+export const isCustomModelEnabled = (): boolean => auth.isCustomModelEnabled()
 
 /**
  * Enables or disables custom model selection.
  */
-export const setCustomModelEnabled = (enabled: boolean): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(CUSTOM_MODEL_ENABLED_KEY, enabled ? 'true' : 'false')
-    notify()
-  } catch {
-    // Ignore
-  }
-}
+export const setCustomModelEnabled = (enabled: boolean): void =>
+  auth.setCustomModelEnabled(enabled)
 
 /**
  * Guard: only process ?code= if we initiated an OAuth flow in this tab.
@@ -220,7 +151,7 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
     code_challenge_method: 'S256',
   })
 
-  window.location.href = `https://openrouter.ai/auth?${params.toString()}`
+  window.location.href = `${OPENROUTER_OAUTH_AUTHORIZE_URL}?${params.toString()}`
 }
 
 /**
@@ -241,15 +172,18 @@ export async function handleOAuthCallback(code: string): Promise<string> {
   // Remove the verifier as it is a one-time secret
   sessionStorage.removeItem(VERIFIER_KEY)
 
-  const response = await fetch('https://openrouter.ai/api/v1/auth/keys', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code,
-      code_verifier: verifier,
-      code_challenge_method: 'S256',
-    }),
-  })
+  const response = await fetch(
+    `${providerContract.openRouter.apiBaseUrl}/auth/keys`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        code_verifier: verifier,
+        code_challenge_method: 'S256',
+      }),
+    },
+  )
 
   if (!response.ok) {
     throw new Error(`Key exchange failed with status ${response.status}`)
