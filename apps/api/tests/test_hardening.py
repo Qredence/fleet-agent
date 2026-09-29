@@ -224,7 +224,7 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
 
     from app.agent.engine import DspyAgentEngine
     from app.agent.tools.docs import SearchDocsTool
-    from app.services.run_persistence import RunPersistence
+    from app.persistence.run_persistence import RunPersistence
     from tests.helpers.scripted_lm import ScriptedLM
     from tests.helpers.signatures import AgentSignature
 

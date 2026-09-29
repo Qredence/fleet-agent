@@ -44,9 +44,9 @@ from app.contracts.domain import (
     ToolFailed,
 )
 from app.contracts.error_codes import public_error
+from app.persistence.run_persistence import RunPersistence
 from app.services.metrics import MetricsRegistry
 from app.services.run_input import history_from_agui_messages, last_user_text
-from app.services.run_persistence import RunPersistence
 
 logger = logging.getLogger(__name__)
 _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0

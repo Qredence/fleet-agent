@@ -6,19 +6,17 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.artifacts import artifact_to_out
-from app.api.deps import LOCAL_OWNER, get_sessions, require_project
+from app.api.deps import LOCAL_OWNER, get_sessions, require_project, require_thread
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.error_codes import ERROR_MESSAGES
-from app.persistence.models import Message, Project, Run, Thread
+from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     ArtifactsRepository,
     MessagesRepository,
-    ProjectsRepository,
-    RunStatesRepository,
     SourcesRepository,
     ThreadsRepository,
 )
@@ -160,18 +158,6 @@ def thread_to_out(thread: Thread) -> ThreadOut:
     )
 
 
-async def require_thread(
-    thread_id: str, sessions: async_sessionmaker[AsyncSession]
-) -> Thread:
-    thread = await ThreadsRepository(sessions).get(thread_id)
-    if thread is None:
-        raise HTTPException(status_code=404, detail="Thread not found.")
-    project = await ProjectsRepository(sessions).get(thread.project_id)
-    if project is None or project.owner_id != LOCAL_OWNER:
-        raise HTTPException(status_code=404, detail="Thread not found.")
-    return thread
-
-
 @router.get("/projects/{project_id}/threads")
 async def list_threads(
     project_id: str,
@@ -202,90 +188,29 @@ async def thread_bootstrap(
     sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
 ) -> BootstrapOut:
     """Everything the client needs to restore a thread after reload/switch."""
-    async with sessions() as session:
-        async with session.begin():
-            await session.execute(
-                text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            )
-            thread = await session.get(Thread, thread_id)
-            if thread is None:
-                raise HTTPException(status_code=404, detail="Thread not found.")
-            project = await session.get(Project, thread.project_id)
-            if project is None or project.owner_id != LOCAL_OWNER:
-                raise HTTPException(status_code=404, detail="Thread not found.")
-            messages_result = await session.execute(
-                select(Message)
-                .where(Message.thread_id == thread_id)
-                .order_by(Message.created_at.asc(), Message.id.asc())
-            )
-            message_rows = list(messages_result.scalars())
-            storage = [MessagesRepository.storage_dict(row) for row in message_rows]
-            state_row = await RunStatesRepository.nearest_in_session(
-                session,
-                thread_id=thread_id,
-                head_message_id=thread.active_head_message_id,
-            )
-            latest = (
-                await session.get(Run, state_row.run_id)
-                if state_row is not None and state_row.run_id is not None
-                else None
-            )
-            if latest is None:
-                candidates = list(
-                    (
-                        await session.execute(
-                            select(Run)
-                            .where(Run.thread_id == thread_id)
-                            .order_by(Run.reserved_at.desc().nullslast(), Run.id.desc())
-                        )
-                    ).scalars()
-                )
-                if thread.active_head_message_id is not None:
-                    parent_rows = list(
-                        (
-                            await session.execute(
-                                select(
-                                    Message.message_id, Message.parent_message_id
-                                ).where(Message.thread_id == thread_id)
-                            )
-                        ).all()
-                    )
-                    parents = {message_id: parent for message_id, parent in parent_rows}
-                    branch_ids: set[str] = set()
-                    current_id: str | None = thread.active_head_message_id
-                    while current_id is not None and current_id not in branch_ids:
-                        branch_ids.add(current_id)
-                        current_id = parents.get(current_id)
-                    latest = next(
-                        (
-                            candidate
-                            for candidate in candidates
-                            if candidate.output_message_id in branch_ids
-                            or candidate.input_message_id in branch_ids
-                        ),
-                        None,
-                    )
-                latest = latest or (candidates[0] if candidates else None)
-            latest_payload = _safe_latest_run_payload(latest)
-            repository = {
-                "headId": thread.active_head_message_id,
-                "messages": storage,
-            }
-            return BootstrapOut(
-                thread=thread_to_out(thread),
-                messageRepository=repository,
-                messages=[
-                    sanitize_message_content(row.message_json) for row in message_rows
-                ],
-                agentState=(
-                    _safe_bootstrap_agent_state(
-                        state_row.state_json, thread_id=thread_id
-                    )
-                    if state_row
-                    else None
-                ),
-                latestRun=latest_payload,
-            )
+    data = await ThreadsRepository(sessions).get_bootstrap_data(
+        thread_id, owner_id=LOCAL_OWNER
+    )
+    if data is None:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    thread, message_rows, state_row, latest = data
+    storage = [MessagesRepository.storage_dict(row) for row in message_rows]
+    latest_payload = _safe_latest_run_payload(latest)
+    repository = {
+        "headId": thread.active_head_message_id,
+        "messages": storage,
+    }
+    return BootstrapOut(
+        thread=thread_to_out(thread),
+        messageRepository=repository,
+        messages=[sanitize_message_content(row.message_json) for row in message_rows],
+        agentState=(
+            _safe_bootstrap_agent_state(state_row.state_json, thread_id=thread_id)
+            if state_row
+            else None
+        ),
+        latestRun=latest_payload,
+    )
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}")
@@ -395,25 +320,10 @@ async def persist_thread_head(
     sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
 ) -> dict[str, str | None]:
     await require_thread(thread_id, sessions)
-    async with sessions() as session:
-        async with session.begin():
-            if body.headId is not None:
-                exists = await session.scalar(
-                    select(Message.id).where(
-                        Message.thread_id == thread_id,
-                        Message.message_id == body.headId,
-                    )
-                )
-                if exists is None:
-                    raise HTTPException(status_code=409, detail="Unknown branch head.")
-            await session.execute(
-                update(Thread)
-                .where(Thread.id == thread_id)
-                .values(
-                    active_head_message_id=body.headId,
-                    updated_at=datetime.now(UTC),
-                )
-            )
+    try:
+        await ThreadsRepository(sessions).set_active_head(thread_id, body.headId)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"headId": body.headId}
 
 

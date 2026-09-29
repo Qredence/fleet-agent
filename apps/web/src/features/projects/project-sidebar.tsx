@@ -68,7 +68,7 @@ import {
   deleteThread,
 } from '@/features/threads/threads-api'
 import { useWorkspaceStore } from '@/state/workspace-store'
-import { SettingsDialog } from '@/components/settings/settings-dialog'
+import { SettingsDialog } from '@/features/providers/settings/settings-dialog'
 import { useShape } from '@/lib/shape-context'
 import { cn } from '@/lib/utils'
 

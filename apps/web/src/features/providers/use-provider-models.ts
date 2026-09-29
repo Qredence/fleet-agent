@@ -4,7 +4,7 @@ import {
   OPENROUTER_BASE_URL,
   OPENCODE_ZEN_PROFILE_ID,
   OPENCODE_ZEN_BASE_URL,
-} from '@/lib/providers'
+} from '@/features/providers/providers-store'
 
 export interface ProviderModel {
   id: string

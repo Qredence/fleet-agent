@@ -29,7 +29,7 @@ import { spring } from "@/lib/springs";
 import { fontWeights } from "@/lib/font-weight";
 import { useShape } from "@/lib/shape-context";
 import { useSize, SizeProvider, type SizeVariant } from "@/lib/size-context";
-import { useProximityHover, type ItemRect } from "@/hooks/use-proximity-hover";
+import { useFluidHover as useProximityHover, type ItemRect } from "@/hooks/use-fluid-hover";
 import type { IconComponent } from "@/lib/icon-context";
 import { resolveSlotTemplate, slotElement } from "@/components/ui/sidebar-core";
 

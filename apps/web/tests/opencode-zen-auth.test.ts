@@ -14,7 +14,7 @@ import {
   isCustomModelEnabled,
   setCustomModelEnabled,
   onAuthChange,
-} from '@/lib/opencode-zen-auth'
+} from '@/features/providers/opencode-zen-auth'
 
 describe('opencode-zen-auth module', () => {
   beforeEach(() => {

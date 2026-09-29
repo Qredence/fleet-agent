@@ -16,7 +16,7 @@ from app.persistence.repositories import (
     RunStatesRepository,
     ThreadsRepository,
 )
-from app.services.run_persistence import HISTORY_SCHEMA_VERSION, RunPersistence
+from app.persistence.run_persistence import HISTORY_SCHEMA_VERSION, RunPersistence
 from tests.conftest import requires_db
 from tests.helpers.scripted_lm import submit_call
 
@@ -474,7 +474,7 @@ async def test_stale_user_branch_does_not_move_active_head(db_sessions):
 
 def test_branch_anchor_skips_frontend_tool_messages():
     """Tool-result messages are frontend-only; the branch anchor must skip them."""
-    from app.services.run_persistence import _branch_anchor
+    from app.persistence.run_persistence import _branch_anchor
 
     messages = [
         {"id": "user-1", "role": "user", "content": "first"},
@@ -636,7 +636,7 @@ async def test_continuation_history_does_not_leak_cross_branch(db_sessions):
     import uuid
 
     from app.persistence.models import DspyHistory, Message
-    from app.services.run_persistence import RunPersistence
+    from app.persistence.run_persistence import RunPersistence
 
     _, thread_id = await seed_project_and_thread(db_sessions)
     async with db_sessions() as session:

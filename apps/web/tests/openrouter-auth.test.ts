@@ -18,7 +18,7 @@ import {
   STORAGE_KEY,
   VERIFIER_KEY,
   DEFAULT_OPENROUTER_MODEL,
-} from '@/lib/openrouter-auth'
+} from '@/features/providers/openrouter-auth'
 
 describe('openrouter-auth module', () => {
   beforeEach(() => {

@@ -1,8 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ArtifactsTab } from '@/components/process-panel/artifacts-tab'
-import { SourcesTab } from '@/components/process-panel/sources-tab'
+import { ArtifactsTab } from '@/features/process-panel/artifacts-tab'
+import { SourcesTab } from '@/features/process-panel/sources-tab'
 import type { AgentWorkspaceState } from '@/contracts/generated'
 import { useWorkspaceStore } from '@/state/workspace-store'
 

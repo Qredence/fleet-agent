@@ -8,7 +8,7 @@ import {
   setCustomModelEnabled,
   setSelectedModel,
   STORAGE_KEY,
-} from '@/lib/openrouter-auth'
+} from '@/features/providers/openrouter-auth'
 import {
   getApiKey as getOpenCodeZenApiKey,
   setApiKey as setOpenCodeZenApiKey,
@@ -16,7 +16,7 @@ import {
   setCustomModelEnabled as setOpenCodeZenCustomModelEnabled,
   clearApiKey as clearOpenCodeZenApiKey,
   STORAGE_KEY as OPENCODE_ZEN_STORAGE_KEY,
-} from '@/lib/opencode-zen-auth'
+} from '@/features/providers/opencode-zen-auth'
 import {
   getActiveProfile,
   getActiveProviderId,
@@ -32,7 +32,7 @@ import {
   SERVER_DEFAULT_ID,
   setActiveProviderId,
   upsertProfile,
-} from '@/lib/providers'
+} from '@/features/providers/providers-store'
 
 describe('providers store', () => {
   beforeEach(() => {

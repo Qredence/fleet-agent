@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Standalone ToolGroup visual card for inline agent data presentation.
+ * Rendered by InlineAgentDataUI to visualize batches of tools outside assistant-ui message trees.
+ */
+
 import type { ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, Loader2Icon, XIcon } from "lucide-react";
 import { useShape } from "@/lib/shape-context";

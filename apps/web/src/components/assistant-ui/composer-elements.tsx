@@ -36,18 +36,18 @@ import {
   ReasoningEffort,
   type ReasoningEffortLevel,
 } from "@/components/assistant-ui/reasoning-effort";
-import { useProviders } from "@/hooks/use-providers";
-import { useOpenCodeZenAuth } from "@/hooks/use-opencode-zen-auth";
-import { useOpenRouterAuth } from "@/hooks/use-openrouter-auth";
+import { useProviders } from "@/features/providers/use-providers";
+import { useOpenCodeZenAuth } from "@/features/providers/use-opencode-zen-auth";
+import { useOpenRouterAuth } from "@/features/providers/use-openrouter-auth";
 import {
   POPULAR_OPENCODE_ZEN_MODELS,
-} from "@/lib/opencode-zen-auth";
-import { POPULAR_OPENROUTER_MODELS } from "@/lib/openrouter-auth";
+} from "@/features/providers/opencode-zen-auth";
+import { POPULAR_OPENROUTER_MODELS } from "@/features/providers/openrouter-auth";
 import {
   OPENCODE_ZEN_PROFILE_ID,
   OPENROUTER_PROFILE_ID,
   SERVER_DEFAULT_ID,
-} from "@/lib/providers";
+} from "@/features/providers/providers-store";
 import {
   ComposerPrimitive,
   type Unstable_DirectiveFormatter,

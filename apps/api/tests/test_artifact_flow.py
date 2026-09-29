@@ -21,8 +21,8 @@ from app.persistence.repositories import (
     SourcesRepository,
     ThreadsRepository,
 )
+from app.persistence.run_persistence import RunPersistence
 from app.services.artifact_storage import LocalArtifactStorage
-from app.services.run_persistence import RunPersistence
 from tests.conftest import requires_db
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 from tests.helpers.signatures import AgentSignature  # noqa: E402

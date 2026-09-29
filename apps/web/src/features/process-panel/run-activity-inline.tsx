@@ -5,18 +5,18 @@ import { ChevronRightIcon } from 'lucide-react'
 import { useAuiState } from '@assistant-ui/react'
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
 
-import { DecisionCard } from '@/components/process-panel/decision-card'
-import { ProcessStepCard } from '@/components/process-panel/process-step-card'
+import { DecisionCard } from './decision-card'
+import { ProcessStepCard } from './process-step-card'
 import {
   RunMetricsLine,
   TerminationNotice,
-} from '@/components/process-panel/run-metrics'
+} from './run-metrics'
 import {
   StatusIcon,
   StatusChip,
   formatDuration,
-} from '@/components/process-panel/status-chip'
-import { ToolExecutionCard } from '@/components/process-panel/tool-execution-card'
+} from './status-chip'
+import { ToolExecutionCard } from './tool-execution-card'
 import {
   Collapsible,
   CollapsibleContent,

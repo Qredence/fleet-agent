@@ -1,10 +1,10 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 
-import { ProcessPanel } from '@/components/process-panel/process-panel'
-import { ProjectSidebar } from '@/components/projects/project-sidebar'
+import { ProcessPanel } from '@/features/process-panel/process-panel'
+import { ProjectSidebar } from '@/features/projects/project-sidebar'
 import { ComposerPreferencesProvider } from '@/components/assistant-ui/composer-elements'
-import { ConversationPane } from '@/components/thread/conversation-pane'
+import { ConversationPane } from '@/features/threads/conversation-pane'
 import type { ComposerWorkspaceContext } from '@/components/assistant-ui/composer-elements'
 import {
   ResizableHandle,

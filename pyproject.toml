@@ -1,19 +1,7 @@
 [project]
-name = "fleet-agent"
+name = "fleet-agent-workspace"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fleet Agent experimental agent workbench monorepo"
 readme = "README.md"
-authors = [
-    { name = "Zachary BENSALEM", email = "zachary@qredence.ai" }
-]
-requires-python = ">=3.13,<3.14"
-dependencies = [
-    "verifiers==0.2.0",
-]
-
-[project.scripts]
-fleet-agent = "fleet_agent:main"
-
-[build-system]
-requires = ["uv_build>=0.12.2,<0.13.0"]
-build-backend = "uv_build"
+requires-python = ">=3.13"
+dependencies = []

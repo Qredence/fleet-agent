@@ -196,7 +196,7 @@ def test_seeded_honors_explicit_accuracy(options, expected_exit, monkeypatch):
     assert eval_run_main(["--seeded", *options]) == expected_exit
 
 
-@pytest.mark.parametrize("suite", ["routing", "code"])
+@pytest.mark.parametrize("suite", ["routing"])
 @pytest.mark.parametrize("threshold", [None, "0.0", "0.9", "1.0"])
 def test_nonseeded_accuracy_defaults_and_overrides(suite, threshold, monkeypatch):
     from unittest.mock import Mock

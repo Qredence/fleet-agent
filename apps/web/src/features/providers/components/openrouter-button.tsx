@@ -2,8 +2,8 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cva, type VariantProps } from 'class-variance-authority'
 
-import { OpenRouterLogo } from '@/components/auth/openrouter-logo'
-import { useOpenRouterAuth } from '@/hooks/use-openrouter-auth'
+import { OpenRouterLogo } from '@/features/providers/components/openrouter-logo'
+import { useOpenRouterAuth } from '@/features/providers/use-openrouter-auth'
 import { cn } from '@/lib/utils'
 
 export const openRouterButtonVariants = cva(

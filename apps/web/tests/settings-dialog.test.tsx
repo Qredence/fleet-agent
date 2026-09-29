@@ -3,8 +3,8 @@ import { render, screen, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ComponentProps } from 'react'
 import userEvent from '@testing-library/user-event'
-import { SettingsDialog } from '@/components/settings/settings-dialog'
-import * as openrouterAuth from '@/lib/openrouter-auth'
+import { SettingsDialog } from '@/features/providers/settings/settings-dialog'
+import * as openrouterAuth from '@/features/providers/openrouter-auth'
 import {
   getActiveProviderId,
   getAgentProviderHeaders,
@@ -12,7 +12,7 @@ import {
   loadProviderStore,
   PROVIDERS_STORAGE_KEY,
   SERVER_DEFAULT_ID,
-} from '@/lib/providers'
+} from '@/features/providers/providers-store'
 
 function renderDialog(props: ComponentProps<typeof SettingsDialog>) {
   const queryClient = new QueryClient({

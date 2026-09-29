@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Assistant-UI ToolGroup component wrapping assistant-ui primitives and Collapsible.
+ * Rendered directly within Thread message parts for conversational tool execution groups.
+ */
+
 import {
   memo,
   useCallback,
