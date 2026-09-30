@@ -21,6 +21,8 @@ globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObse
 Element.prototype.getAnimations ??= () => []
 // jsdom does not implement scrollIntoView.
 Element.prototype.scrollIntoView ??= () => {}
+// assistant-ui scrolls the message viewport after editing or sending.
+Element.prototype.scrollTo ??= () => {}
 
 /**
  * Controllable matchMedia stub.

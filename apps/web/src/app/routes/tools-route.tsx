@@ -32,7 +32,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { useIsMobile } from '@/hooks/use-media-query'
 
 const TOOL_META: Record<string, { icon: typeof Search; type: string }> = {
   search_docs: { icon: Search, type: 'Built-in Knowledge' },
@@ -92,12 +91,7 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
         </p>
       </CardContent>
 
-      <CardFooter className="gap-1.5">
-        {tool.read_only && (
-          <Badge variant="secondary" className="text-[10px] font-normal">
-            Read-Only
-          </Badge>
-        )}
+      <CardFooter className="flex-wrap gap-1.5">
         {tool.parallelizable && (
           <Badge variant="secondary" className="text-[10px] font-normal">
             Parallelizable
@@ -109,13 +103,13 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
           </Badge>
         )}
         {tool.requires_approval && (
-          <Badge variant="outline" className="text-[10px] text-amber-400">
-            Approval metadata
+          <Badge variant="outline" className="text-[10px] text-warning">
+            Approval required
           </Badge>
         )}
-        <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
-          ⏱ {tool.timeout_seconds}s
-        </Badge>
+        {tool.timeout_seconds !== undefined && <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+          <Clock className="size-3" aria-hidden="true" /> {tool.timeout_seconds}s
+        </Badge>}
       </CardFooter>
     </Card>
   )
@@ -129,7 +123,6 @@ export function ToolsRoute() {
   const threads = useThreads(projectId)
   const thread = threads.data?.[0]
   const tools = useTools()
-  const isMobile = useIsMobile()
   const [readOnlyOnly, setReadOnlyOnly] = useState(false)
 
   const visibleTools =
@@ -188,7 +181,7 @@ export function ToolsRoute() {
               </p>
             )}
             {visibleTools && visibleTools.length > 0 && (
-              <CardGroup columns={isMobile ? 1 : 2} separated border="outlined">
+              <CardGroup orientation="card" columns={1} separated border="outlined">
                 {visibleTools.map((tool) => (
                   <ToolCard key={tool.name} tool={tool} />
                 ))}

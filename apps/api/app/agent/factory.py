@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlsplit
+from contextlib import ExitStack
 
 import dspy
 
@@ -11,7 +11,7 @@ from app.agent.approval import offered_tool_names
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentEngine, DspyAgentEngine, EngineBuilder
 from app.agent.event_bus import RunEventBus
-from app.agent.openai_compatible import OpenAICompatibleLM
+from app.agent.gateway import GatewayEngine, HostedEngine, ProviderConfig, close_lm
 from app.agent.program import FleetAgent
 from app.agent.provider import (
     OPENROUTER_API_BASE_URL,
@@ -39,114 +39,59 @@ from app.settings import Settings
 logger = logging.getLogger(__name__)
 
 
-def _resolve_gateway_api_key(
-    api_key: str | None, api_base: str, *, workspace_token: str | None
-) -> str | None:
-    """Pick a credential the gateway will actually accept.
-
-    Databricks serving/AI Gateway rejects non-workspace tokens (Daytona
-    ``dtn_…`` keys produce HTTP 401 "unsupported type"). When the configured
-    key cannot work, prefer the resolved ``DATABRICKS_TOKEN`` settings value.
-    """
-    try:
-        hostname = urlsplit(api_base).hostname
-    except ValueError:
-        hostname = None
-    if hostname is None:
-        return api_key
-    hostname = hostname.rstrip(".").lower()
-    if hostname != "databricks.com" and not hostname.endswith(".databricks.com"):
-        return api_key
-    if not workspace_token:
-        return api_key
-    if api_key is None or api_key.startswith("dtn_"):
-        return workspace_token
-    return api_key
-
-
-def _build_lm(
-    settings: Settings, override: ProviderOverride | None = None
-) -> dspy.BaseLM:
-    """Build the run LM: browser override, then MODAL_*, then LLM settings.
-
-    Precedence for the server-side default: the MODAL_API_KEY / MODAL_BASE_URL
-    / MODAL_MODEL_ID trio (when MODAL_MODEL_ID is set), falling back to the
-    FLEET_AGENT_LLM_* settings. A browser provider override always wins.
-
-    Any provider configured with a base URL is by definition an
-    OpenAI-compatible gateway, so it is served by ``OpenAICompatibleLM``
-    (the OpenAI SDK, no LiteLLM routing) and its model id is sent verbatim.
-    Hosted providers without a base URL keep ``dspy.LM`` and LiteLLM routing.
-    """
-    api_key: str | None
-    if override is not None:
-        model = override.model or settings.llm_model
-        api_key = override.api_key
-        api_base = override.api_base
-        # An override that does not pin a response format inherits the
-        # operator's FLEET_AGENT_LLM_NATIVE_FUNCTION_CALLING selection.
-        native_function_calling = _native_function_calling(settings, override)
-        use_developer_role = override.messages_format == "developer_role"
-    elif settings.modal_model_id:
-        model = settings.modal_model_id or settings.llm_model
-        api_key = (
-            settings.modal_api_key.get_secret_value()
-            if settings.modal_api_key
-            else None
-        )
-        api_base = settings.modal_base_url
-        native_function_calling = settings.llm_native_function_calling
-        use_developer_role = False
-    else:
-        model = settings.llm_model
-        api_key = (
-            settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
-        )
-        api_base = settings.llm_base_url
-        native_function_calling = settings.llm_native_function_calling
-        use_developer_role = False
-
-    extra_headers: dict[str, str] | None = None
-    if (
-        api_base is not None
-        and api_base.rstrip("/") == OPENROUTER_API_BASE_URL
-        and settings.openrouter_http_referer
+def _build_lm(settings: Settings, override: ProviderOverride | None = None) -> dspy.LM:
+    """Build a native, run-scoped LM from browser or canonical server settings."""
+    config = ProviderConfig(
+        model=(override.model or settings.llm_model)
+        if override
+        else settings.llm_model,
+        api_key=override.api_key if override else settings.llm_api_key,
+        base_url=override.api_base if override else settings.llm_base_url,
+        native_function_calling=_native_function_calling(settings, override),
+        diagnostics_enabled=settings.provider_diagnostics_enabled,
+        request_limit=settings.provider_request_limit,
+        developer_role=bool(override and override.messages_format == "developer_role"),
+    )
+    if config.base_url is None and not (
+        config.diagnostics_enabled or config.request_limit is not None
     ):
-        extra_headers = {
-            "HTTP-Referer": settings.openrouter_http_referer,
-            "X-Title": OPENROUTER_APP_TITLE,
-        }
-
-    if api_base is not None:
-        return OpenAICompatibleLM(
-            model=model,
-            api_key=_resolve_gateway_api_key(
-                api_key,
-                api_base,
-                workspace_token=(
-                    settings.databricks_token.get_secret_value()
-                    if settings.databricks_token
-                    else None
-                ),
-            ),
-            api_base=api_base,
+        return dspy.LM(
+            config.model,
+            engine="lm15",
+            api_key=config.api_key.get_secret_value() if config.api_key else None,
             temperature=settings.llm_temperature,
             cache=False,
-            supports_native_function_calling=native_function_calling,
-            use_developer_role=use_developer_role,
-            extra_headers=extra_headers,
         )
-
-    # Hosted providers keep LiteLLM routing, where the provider prefix in the
-    # model id is meaningful and capability tables are known.
-    return dspy.LM(
-        model=model,
-        api_key=api_key,
-        api_base=None,
-        temperature=settings.llm_temperature,
-        cache=False,
-        use_developer_role=use_developer_role,
+    headers: tuple[tuple[str, str], ...] = ()
+    if (
+        config.base_url is not None
+        and config.base_url.rstrip("/") == OPENROUTER_API_BASE_URL
+        and settings.openrouter_http_referer
+    ):
+        headers = (
+            ("HTTP-Referer", settings.openrouter_http_referer),
+            ("X-Title", OPENROUTER_APP_TITLE),
+        )
+    engine = (
+        HostedEngine(config)
+        if config.base_url is None
+        else GatewayEngine(config, headers=headers)
     )
+    try:
+        lm = dspy.LM(
+            config.model
+            if config.base_url is None
+            else f"fleet-gateway/{config.model}",
+            engine=engine,
+            temperature=settings.llm_temperature,
+            cache=False,
+        )
+        if config.request_limit is not None:
+            lm.num_retries = 0
+        return lm
+    except BaseException:
+        engine.close()
+        raise
 
 
 def _native_function_calling(
@@ -236,22 +181,25 @@ def build_tool_profiles(
 
 def build_dspy_engine(settings: Settings) -> AgentEngine:
     """Build the default engine used by focused backend tests."""
-    lm = _build_lm(settings)
-    adapter = _build_adapter(settings)
-    registry = _build_tool_registry([search_docs, get_current_time])
-    profiles = build_tool_profiles(registry)
+    with ExitStack() as resources:
+        lm = _build_lm(settings)
+        resources.callback(close_lm, lm)
+        adapter = _build_adapter(settings)
+        registry = _build_tool_registry([search_docs, get_current_time])
+        profiles = build_tool_profiles(registry)
 
-    def program_factory() -> FleetAgent:
-        return FleetAgent(
-            tool_profiles=profiles,
-            max_iters=settings.llm_max_iters,
+        def program_factory() -> FleetAgent:
+            return FleetAgent(
+                tool_profiles=profiles,
+                max_iters=settings.llm_max_iters,
+            )
+
+        return DspyAgentEngine(
+            program_factory=program_factory,
+            lm=lm,
+            adapter=adapter,
+            cleanup=resources.pop_all().close,
         )
-
-    return DspyAgentEngine(
-        program_factory=program_factory,
-        lm=lm,
-        adapter=adapter,
-    )
 
 
 def _build_web_tools(settings: Settings) -> WebToolBundle | None:
@@ -303,56 +251,62 @@ def make_engine_builder(
         provider_override: ProviderOverride | None = None,
         approved: frozenset[str] | None = None,
     ) -> AgentEngine:
-        lm = _build_lm(settings, provider_override)
-        adapter = _build_adapter(settings, provider_override)
-        report_tool = WriteReportTool(
-            storage=storage,
-            bus=bus,
-            thread_id=thread_id,
-            max_bytes=settings.artifact_max_bytes,
-        )
-        web_bundle = _build_web_tools(settings)
-        sources: list[ToolSource] = [
-            *(web_bundle.tools if web_bundle else []),
-            SearchDocsTool(),
-            report_tool,
-            get_current_time,
-        ]
-        if workspace_root_available(settings):
-            workspace_tools = WorkspaceTools(
-                WorkspacePolicy(
-                    root=workspace_root(settings),
-                    max_read_bytes=settings.workspace_max_read_bytes,
-                    max_write_bytes=settings.workspace_max_write_bytes,
-                    max_output_chars=settings.workspace_max_output_chars,
-                    bash_default_timeout_seconds=(
-                        settings.workspace_bash_default_timeout_seconds
-                    ),
-                    bash_max_timeout_seconds=settings.workspace_bash_max_timeout_seconds,
-                    allow_write=settings.workspace_write_tools_enabled,
-                    allow_bash=settings.workspace_bash_tool_enabled,
+        with ExitStack() as resources:
+            lm = _build_lm(settings, provider_override)
+            resources.callback(close_lm, lm)
+            adapter = _build_adapter(settings, provider_override)
+            report_tool = WriteReportTool(
+                storage=storage,
+                bus=bus,
+                thread_id=thread_id,
+                max_bytes=settings.artifact_max_bytes,
+            )
+            web_bundle = _build_web_tools(settings)
+            if web_bundle:
+                resources.callback(web_bundle.close)
+            sources: list[ToolSource] = [
+                *(web_bundle.tools if web_bundle else []),
+                SearchDocsTool(),
+                report_tool,
+                get_current_time,
+            ]
+            if workspace_root_available(settings):
+                workspace_tools = WorkspaceTools(
+                    WorkspacePolicy(
+                        root=workspace_root(settings),
+                        max_read_bytes=settings.workspace_max_read_bytes,
+                        max_write_bytes=settings.workspace_max_write_bytes,
+                        max_output_chars=settings.workspace_max_output_chars,
+                        bash_default_timeout_seconds=(
+                            settings.workspace_bash_default_timeout_seconds
+                        ),
+                        bash_max_timeout_seconds=settings.workspace_bash_max_timeout_seconds,
+                        allow_write=settings.workspace_write_tools_enabled,
+                        allow_bash=settings.workspace_bash_tool_enabled,
+                    )
                 )
+                sources.extend(workspace_tools.dspy_tools())
+
+            registry = _build_tool_registry(sources)
+            profiles = build_tool_profiles(registry, approved)
+            callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
+
+            def program_factory() -> FleetAgent:
+                """The routed ReActV2 program over the least-privileged profiles."""
+                return FleetAgent(
+                    tool_profiles=profiles,
+                    max_iters=settings.llm_max_iters,
+                    router_instructions=router_instructions,
+                )
+
+            engine = DspyAgentEngine(
+                program_factory=program_factory,
+                lm=lm,
+                adapter=adapter,
+                callbacks=[callback],
+                cleanup=resources.pop_all().close,
             )
-            sources.extend(workspace_tools.dspy_tools())
 
-        registry = _build_tool_registry(sources)
-        profiles = build_tool_profiles(registry, approved)
-        callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
-
-        def program_factory() -> FleetAgent:
-            """The routed ReActV2 program over the least-privileged profiles."""
-            return FleetAgent(
-                tool_profiles=profiles,
-                max_iters=settings.llm_max_iters,
-                router_instructions=router_instructions,
-            )
-
-        return DspyAgentEngine(
-            program_factory=program_factory,
-            lm=lm,
-            adapter=adapter,
-            callbacks=[callback],
-            cleanup=web_bundle.close if web_bundle else None,
-        )
+            return engine
 
     return build

@@ -3,13 +3,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, SecretStr
-from pydantic_settings import (
-    BaseSettings,
-    EnvSettingsSource,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-)
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _APP_DIR = Path(__file__).resolve().parent
 _ENV_FILE = os.environ.get("FLEET_AGENT_ENV_FILE", str(_APP_DIR.parent / ".env"))
@@ -18,31 +13,6 @@ _ENV_FILE = os.environ.get("FLEET_AGENT_ENV_FILE", str(_APP_DIR.parent / ".env")
 class Settings(BaseSettings):
     """Application configuration, validated at startup."""
 
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # AliasChoices picks the first present value, even if it is empty.
-        # Ignore only the empty primary token so the secondary alias can win,
-        # without changing empty-value semantics for other application settings.
-        for source in (env_settings, dotenv_settings):
-            if isinstance(source, EnvSettingsSource):
-                key = (
-                    "DATABRICKS_TOKEN" if source.case_sensitive else "databricks_token"
-                )
-                if source.env_vars.get(key) == "":
-                    source.env_vars = {
-                        name: value
-                        for name, value in source.env_vars.items()
-                        if name != key
-                    }
-        return init_settings, env_settings, dotenv_settings, file_secret_settings
-
     model_config = SettingsConfigDict(
         env_prefix="FLEET_AGENT_",
         # apps/api/.env — resolved absolutely, independent of process CWD;
@@ -50,8 +20,6 @@ class Settings(BaseSettings):
         env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
-        # Provider default fields use validation_alias (MODAL_*), so allow
-        # constructing Settings(modal_model_id=...) by field name in tests.
         populate_by_name=True,
     )
 
@@ -64,7 +32,7 @@ class Settings(BaseSettings):
 
     llm_model: str = Field(
         default="openai/gpt-4o-mini",
-        description="LiteLLM model identifier for the DSPy engine.",
+        description="Native DSPy model identifier for the DSPy engine.",
     )
     llm_base_url: str | None = Field(
         default=None,
@@ -78,6 +46,9 @@ class Settings(BaseSettings):
         default=None,
         description="Provider API key. Never logged or returned by the API.",
     )
+    provider_diagnostics_enabled: bool = False
+    provider_request_limit: int | None = Field(default=None, ge=1, le=32)
+
     llm_max_iters: int = Field(
         default=6,
         ge=1,
@@ -109,41 +80,6 @@ class Settings(BaseSettings):
             "URLs, e.g. a local LLM server. Off by default: the browser must "
             "not be able to direct the server at internal addresses."
         ),
-    )
-    modal_api_key: SecretStr | None = Field(
-        default=None,
-        description=(
-            "Default provider API key for local runs (reads MODAL_API_KEY). "
-            "Server-side default when the browser sends no provider override; "
-            "never logged or returned by the API."
-        ),
-        validation_alias="MODAL_API_KEY",
-    )
-    modal_base_url: str | None = Field(
-        default=None,
-        description=(
-            "Default OpenAI-compatible endpoint base URL (reads MODAL_BASE_URL), "
-            "e.g. a Modal proxy gateway."
-        ),
-        validation_alias="MODAL_BASE_URL",
-    )
-    modal_model_id: str | None = Field(
-        default=None,
-        description=(
-            "Default model identifier (reads MODAL_MODEL_ID), sent to the "
-            "gateway verbatim. When set, the MODAL_* trio takes precedence "
-            "over FLEET_AGENT_LLM_* as the server-side default provider."
-        ),
-        validation_alias="MODAL_MODEL_ID",
-    )
-    databricks_token: SecretStr | None = Field(
-        default=None,
-        description=(
-            "Workspace token substituted for an unusable configured key when an "
-            "OpenAI-compatible base URL points at a *.databricks.com AI Gateway "
-            "(reads DATABRICKS_TOKEN, then DATABRICKS_API_TOKEN)."
-        ),
-        validation_alias=AliasChoices("DATABRICKS_TOKEN", "DATABRICKS_API_TOKEN"),
     )
     openrouter_http_referer: str | None = Field(
         default=None,

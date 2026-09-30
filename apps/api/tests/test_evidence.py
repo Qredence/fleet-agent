@@ -225,12 +225,12 @@ class TestSynthesizerPrompt:
         prompts: list[str] = []
 
         class RecordingLM(ScriptedLM):
-            def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
+            def __call__(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
                 for message in messages or []:
                     content = message.get("content")
                     if isinstance(content, str) and "evidence_json" in content:
                         prompts.append(content)
-                return super().forward(prompt=prompt, messages=messages, **kwargs)
+                return super().__call__(prompt=prompt, messages=messages, **kwargs)
 
         def big(query: str) -> str:
             """Return a large payload."""

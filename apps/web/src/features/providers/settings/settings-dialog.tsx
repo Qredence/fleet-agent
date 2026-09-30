@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { useOpenRouterAuth } from '@/features/providers/use-openrouter-auth'
 import { useOpenCodeZenAuth } from '@/features/providers/use-opencode-zen-auth'
+import { useIsMobile } from '@/hooks/use-media-query'
 import { useProviders } from '@/features/providers/use-providers'
 import {
   maskApiKey,
@@ -46,10 +47,10 @@ import {
 } from '@/features/providers/opencode-zen-auth'
 import {
   OPENROUTER_PROFILE_ID,
+  getProviderReadiness,
   OPENROUTER_BASE_URL,
   OPENCODE_ZEN_PROFILE_ID,
   OPENCODE_ZEN_BASE_URL,
-  SERVER_DEFAULT_ID,
   type ProviderProfile,
 } from '@/features/providers/providers-store'
 import { ModelCardsRow } from './model-cards-row'
@@ -198,6 +199,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [providerForm, setProviderForm] = useState<ProviderFormData>(EMPTY_FORM)
   const [providerFormError, setProviderFormError] = useState<string | null>(null)
+  const isMobile = useIsMobile()
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('providers')
 
   const handleManualKeySubmit = (e: FormEvent) => {
@@ -386,39 +388,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <SettingsSection
                   icon={Server}
                   title="Active Provider"
-                  description="Choose which LLM provider serves engine runs. Server default uses the operator-configured environment (MODAL_* or FLEET_AGENT_LLM_*)."
+                  description="Choose and configure a provider before sending a message."
                 >
                   <CardGroup
-                    columns={Math.min(3, profiles.length + 1)}
+                    columns={isMobile ? 1 : Math.min(3, profiles.length)}
                     separated
                     border="outlined"
                     className="w-full"
                   >
-                    <Card
-                      onClick={() => setActiveProviderId(SERVER_DEFAULT_ID)}
-                      selected={activeProviderId === SERVER_DEFAULT_ID}
-                      label="Server default"
-                      className="cursor-pointer"
-                    >
-                      <CardHeader className="p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <CardMedia icon={Server} className="mb-0" />
-                            <div className="min-w-0">
-                              <CardTitle className="text-xs font-semibold truncate">
-                                Server default
-                              </CardTitle>
-                              <CardDescription className="text-[10px] text-muted-foreground truncate">
-                                Environment default
-                              </CardDescription>
-                            </div>
-                          </div>
-                          {activeProviderId === SERVER_DEFAULT_ID && (
-                            <Check className="size-3.5 shrink-0 text-primary" />
-                          )}
-                        </div>
-                      </CardHeader>
-                    </Card>
                     {profiles.map((profile) => {
                       const isSelected = activeProviderId === profile.id
                       const ProviderIcon =
@@ -444,7 +421,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                     {profile.name}
                                   </CardTitle>
                                   <CardDescription className="text-[10px] text-muted-foreground truncate font-mono">
-                                    {profile.modelId || 'default model'}
+                                    {getProviderReadiness(profile.id).ready ? profile.modelId || 'Provider default model' : 'Needs setup'}
                                   </CardDescription>
                                 </div>
                               </div>

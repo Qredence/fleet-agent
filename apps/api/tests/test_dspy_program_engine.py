@@ -112,10 +112,10 @@ async def test_fleet_agent_multi_turn_stateful_history() -> None:
     recorded_calls: list[list[dict[str, Any]]] = []
 
     class MultiTurnRecordingLM(ScriptedLM):
-        def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
+        def __call__(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
             if messages:
                 recorded_calls.append(list(messages))
-            return super().forward(prompt=prompt, messages=messages, **kwargs)
+            return super().__call__(prompt=prompt, messages=messages, **kwargs)
 
     # Turn 1: direct route, answers RLM question
     turn1_steps = [

@@ -42,6 +42,9 @@ echo "project=$PROJECT_ID thread=$THREAD_ID"
 note "phase 1: thread loads"
 $AB set viewport 1440 900 >/dev/null
 $AB open "$WEB_BASE/projects/$PROJECT_ID/threads/$THREAD_ID" >/dev/null
+# This dedicated smoke session must not inherit provider credentials or selection.
+$AB eval "localStorage.clear()" >/dev/null
+$AB reload >/dev/null
 sleep 1.5
 SNAP=$($AB snapshot -i -c)
 require_grep "$SNAP" "E2E thread" "conversation header shows the thread title"
@@ -93,7 +96,7 @@ PATHNAME=$($AB eval "location.pathname" 2>&1 | tr -d '"')
 printf 'ok: %s\n' "reload preserves the thread URL + shell"
 
 note "phase 5: thread switching"
-THREAD2_BODY=$(curl -sS -X POST "http://localhost:8000/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Second thread"}')
+THREAD2_BODY=$(curl -sS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Second thread"}')
 THREAD2_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$THREAD2_BODY")
 $AB open "$WEB_BASE/projects/$PROJECT_ID/threads/$THREAD2_ID" >/dev/null
 sleep 1.2

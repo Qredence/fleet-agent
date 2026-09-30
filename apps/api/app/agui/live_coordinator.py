@@ -20,7 +20,7 @@ from ag_ui.core import (
     TextMessageStartEvent,
 )
 from ag_ui.encoder import EventEncoder
-from dspy import LMAuthError, LMRateLimitError
+from dspy import LMAuthError, LMInvalidRequestError, LMRateLimitError
 
 from app.agent.approval import approved_tool_names
 from app.agent.engine import (
@@ -556,6 +556,8 @@ class LiveDSPyCoordinator:
             if terminal_emitted or terminal_settled:
                 raise
             code, message = _code_for_exception(exc)
+            if code == "provider_request_rejected":
+                message = f"{message} Run ID: {run_id}."
             failure = AgentRunResult(
                 status="failed",
                 answer=None,
@@ -672,6 +674,8 @@ def _code_for_exception(exc: Exception) -> tuple[str, str]:
         or "429" in text
     ):
         return public_error("rate_limited")
+    if any(isinstance(item, LMInvalidRequestError) for item in leaves):
+        return public_error("provider_request_rejected")
     return public_error("internal_error")
 
 

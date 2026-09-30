@@ -3,31 +3,35 @@ name = "fleet-agent"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "ag-ui-protocol>=0.1.20",
+    "ag-ui-protocol>=1.0.0",
     "alembic>=1.20.0",
+    "anyio>=4.15.1",
     "asyncpg>=0.31.0",
-    "dspy[typesafe]==3.4.0",
-    "fastapi[standard]>=0.141.1",
-    "greenlet>=3.5.6",
+    "dspy==3.4.0",
+    "fastapi>=0.142.1",
+    "httpcore>=1.0.9",
     "httpx>=0.28.1",
     "mlflow==3.16.1",
-    "openai>=2.54.0,<3",
-    "orjson>=3.12.0",
+    "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
-    "sqlalchemy>=2.0.52",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "starlette>=1.7.0",
     "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
     "datamodel-code-generator>=0.83.0",
-    "httpx>=0.28.1",
+    "deptry>=0.25.1",
+    "fastapi-cli>=0.0.32",
     "jsonpatch>=1.33",
     "jsonschema>=4.26.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.9",
+    "types-PyYAML>=6.0.12.20260906",
 ]
 
 [tool.pytest.ini_options]
@@ -66,3 +70,11 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap"]
 ignore_errors = true
+
+[tool.deptry]
+# Evaluation workspaces contain sample imports, not backend dependencies.
+extend_exclude = ["evals/fixtures"]
+
+[tool.deptry.per_rule_ignores]
+# Loaded by SQLAlchemy's URL and the deployment/dev CLI respectively.
+DEP002 = ["asyncpg", "uvicorn"]

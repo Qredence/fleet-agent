@@ -264,29 +264,55 @@ class ScriptedLM(DummyLM):
         self.lock = threading.Lock()
         self.calls: list[dict[str, Any]] = []
 
-    def forward(self, prompt=None, messages=None, **kwargs):
-        messages = messages or [{"role": "user", "content": prompt or ""}]
-        with self.lock:
+        self._engine_spec = SignatureEngine(self, self._engine_spec)
+
+    def copy(self, **kwargs):
+        copied = super().copy(**kwargs)
+        copied._engine_spec = SignatureEngine(copied, copied._engine_spec)
+        return copied
+
+
+class SignatureEngine:
+    """Select scripted answers at the canonical engine boundary."""
+
+    supports_function_calling = False
+    supports_response_schema = False
+    supports_reasoning = False
+    supported_params: set[str] = set()
+
+    def __init__(self, lm, delegate):
+        self.lm = lm
+        self.delegate = delegate
+
+    def complete(self, request):
+        if isinstance(self.lm, SlowLM):
+            time.sleep(0.2)
+        messages = [
+            {"role": message.role, "content": message.text}
+            for message in request.messages
+        ]
+        if request.system is not None:
+            messages.insert(0, {"role": "system", "content": str(request.system)})
+        with self.lm.lock:
             key = prompt_key(messages)
-            queue = self.script.get(key or "", [])
+            queue = self.lm.script.get(key or "", [])
             answer = queue.pop(0) if queue else {}
-            self.answers = iter([answer])
-            self.calls.append(
+            self.lm.answers = iter([answer])
+            self.lm.calls.append(
                 {
                     "key": key,
                     "thread": threading.current_thread().name,
                     "system": messages[0]["content"],
                 }
             )
-        return super().forward(prompt=prompt, messages=messages, **kwargs)
+            return self.delegate.complete(request)
+
+    def close(self):
+        self.delegate.close()
 
 
 class SlowLM(ScriptedLM):
-    """Every call costs 0.2s, so branch concurrency shows up in wall time."""
-
-    def forward(self, prompt=None, messages=None, **kwargs):
-        time.sleep(0.2)
-        return super().forward(prompt=prompt, messages=messages, **kwargs)
+    """Each engine call costs 0.2s to make branch concurrency observable."""
 
 
 SCRIPT: dict[str, list[dict[str, Any]]] = {

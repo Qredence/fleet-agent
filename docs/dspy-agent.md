@@ -225,13 +225,12 @@ the next section.
 `StreamListener`s bound to the synthesis predictor's public output fields
 (`answer`, `process_summary`). The pieces:
 
-- `OpenAICompatibleLM.forward` watches `dspy_settings.send_stream`. When a
-  listener-targeted predict opens a stream, the gateway request is sent with
-  `stream: true`, each content delta is wrapped as a litellm-shaped chunk
-  carrying the caller's `predict_id` and pushed through
-  `sync_send_to_stream`, and the full completion is rebuilt from the
-  accumulated content so the adapter's parse path is unchanged. Streamed
-  responses are never served from the DSPy cache.
+- `dspy.LM` uses a native `lm15` engine. A run-owned gateway router declares
+  endpoint, credentials and wire policy; DSPy converts canonical responses and
+  stream events for its adapters/listeners. Application code does not assemble
+  provider SDK responses or LiteLLM chunks. Caching is disabled per run.
+- The async program wrapper waits for its thread to unwind on cancellation,
+  timeout or disconnect before closing the native LM/router and web clients.
 - Synthesis runs under a scoped `dspy.context(adapter=ChatAdapter())`. The
   JSON adapter leaks its section boilerplate into streamed fields; ChatAdapter
   reconstructs fields exactly from token deltas.
@@ -374,7 +373,7 @@ Run it without any provider (CI mode - dataset structure only):
 cd apps/api && uv run python -m evals.run --suite routing --validate
 ```
 
-With provider credentials configured (`MODAL_*` or `FLEET_AGENT_LLM_*`), the
+With provider credentials configured (`FLEET_AGENT_LLM_*`), the
 same command scores every example through the production router predictor and
 prints a per-route miss breakdown, exiting nonzero below `--min-accuracy`
 (default 0.9). GEPA compilation stays an explicit, separate offline step.

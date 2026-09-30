@@ -49,6 +49,7 @@ export function createLocalStorageAuth(
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (event) => {
       if (
+        event.key === null ||
         event.key === config.storageKey ||
         event.key === config.modelStorageKey ||
         event.key === config.customModelEnabledKey

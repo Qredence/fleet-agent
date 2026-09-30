@@ -7,13 +7,12 @@ import { WorkspacePage } from '@/components/workspace/workspace-page'
 import { useThreads } from '@/features/threads/use-threads'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardFooter, CardGroup, CardHeader, CardMedia, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardGroup, CardHeader, CardMedia, CardTitle, CardDescription } from '@/components/ui/card'
 import { OpenRouterLogo } from '@/features/providers/components/openrouter-logo'
 import { OpenRouterButton } from '@/features/providers/components/openrouter-button'
 import { useOpenRouterAuth } from '@/features/providers/use-openrouter-auth'
 import { SettingsDialog } from '@/features/providers/settings/settings-dialog'
 import { maskApiKey } from '@/features/providers/openrouter-auth'
-import { useIsMobile } from '@/hooks/use-media-query'
 
 const sampleConnectors = [
   {
@@ -50,7 +49,6 @@ export function ConnectorsRoute() {
   const { apiKey, isAuthenticated, signOut, selectedModel, customModelEnabled } =
     useOpenRouterAuth()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const isMobile = useIsMobile()
 
   return (
     <AgentWorkspace
@@ -71,14 +69,12 @@ export function ConnectorsRoute() {
           }
         >
           <span id="add-connector-note" className="sr-only">Preview only — adding connectors is not available yet.</span>
-          <CardGroup orientation="card" columns={isMobile ? 1 : 2} border="outlined" separated>
-            <Card className="bg-card">
+          <CardGroup orientation="card" columns={1} border="outlined" separated>
+            <Card>
               <CardHeader className="min-w-0">
-                <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <OpenRouterLogo className="size-5" />
-                </div>
+                <CardMedia icon={OpenRouterLogo} />
                 <h3><CardTitle>OpenRouter AI Gateway</CardTitle></h3>
-                <p className="text-xs text-muted-foreground">OAuth PKCE / REST LLM Gateway</p>
+                <CardDescription>OAuth PKCE / REST LLM Gateway</CardDescription>
               </CardHeader>
               <CardContent className="min-w-0 space-y-2">
                 <Badge variant="outline" className="text-xs">
@@ -86,11 +82,11 @@ export function ConnectorsRoute() {
                 </Badge>
                 <p className="break-all font-mono text-xs text-muted-foreground">
                   {isAuthenticated
-                    ? `Key: ${maskApiKey(apiKey)} (${customModelEnabled ? selectedModel : 'server-default'})`
+                    ? `Key: ${maskApiKey(apiKey)} (${customModelEnabled ? selectedModel : 'provider default model'})`
                     : 'https://openrouter.ai'}
                 </p>
               </CardContent>
-              <CardFooter className="mt-auto gap-2">
+              <CardFooter className="flex-wrap gap-2">
                 {isAuthenticated ? (
                   <>
                     <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>Configure</Button>
@@ -105,11 +101,11 @@ export function ConnectorsRoute() {
               </CardFooter>
             </Card>
             {sampleConnectors.map((connector) => (
-              <Card key={connector.name} className="bg-card">
+              <Card key={connector.name}>
                 <CardHeader className="min-w-0">
                   <CardMedia icon={connector.icon} />
                   <h3><CardTitle>{connector.name}</CardTitle></h3>
-                  <p className="text-xs text-muted-foreground">{connector.type}</p>
+                  <CardDescription>{connector.type}</CardDescription>
                 </CardHeader>
                 <CardContent className="min-w-0 space-y-2">
                   <Badge variant="secondary" className="text-xs">Sample · not connected</Badge>
@@ -118,7 +114,7 @@ export function ConnectorsRoute() {
                     Sample latency: {connector.latency} · Sample tools: {connector.toolsCount}
                   </p>
                 </CardContent>
-                <CardFooter className="mt-auto">
+                <CardFooter className="flex-wrap gap-2">
                   <Button variant="outline" size="sm" disabled title="Preview — coming soon">Configure</Button>
                 </CardFooter>
               </Card>

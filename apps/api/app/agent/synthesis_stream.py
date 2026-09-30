@@ -10,13 +10,10 @@ synthesis call actually used.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import dspy
 from dspy.streaming import StreamListener
-
-if TYPE_CHECKING:
-    from litellm import ModelResponseStream
 
 
 class SynthesisStreamListener(StreamListener):  # type: ignore[misc]
@@ -31,7 +28,7 @@ class SynthesisStreamListener(StreamListener):  # type: ignore[misc]
     JSONAdapter's identifiers and never detect a field boundary.
     """
 
-    def receive(self, chunk: ModelResponseStream) -> Any:
+    def receive(self, chunk: Any) -> Any:
         with dspy.context(adapter=dspy.ChatAdapter()):
             return super().receive(chunk)
 

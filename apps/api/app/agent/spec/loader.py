@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import dspy
-import yaml  # type: ignore[import-untyped]  # PyYAML ships no stubs
+import yaml
 from dspy.utils.saving import get_dependency_versions
 from pydantic import ValidationError
 

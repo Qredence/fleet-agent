@@ -171,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     lm = _resolve_lm()
     if lm is None:
         print(
-            "no provider configured: set MODAL_* or FLEET_AGENT_LLM_* to run "
+            "no provider configured: set FLEET_AGENT_LLM_* to run "
             "optimization (use --validate for an offline dataset check)",
             file=sys.stderr,
         )

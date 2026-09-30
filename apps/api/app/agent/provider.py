@@ -1,12 +1,8 @@
 """Request-scoped provider overrides for browser-owned LLM runs.
 
 The browser owns provider credentials (BYOK) and sends them per run on the
-agent endpoint only. Two header families are accepted:
-
-- ``X-LLM-*`` headers describe a generic OpenAI-compatible provider (key,
-  model, base URL, and the wire-format selections from the settings UI).
-- ``X-OpenRouter-*`` headers are the legacy OpenRouter-only form; they map
-  onto the canonical OpenRouter endpoint so existing clients keep working.
+agent endpoint only, using canonical ``X-LLM-*`` headers for the key,
+model, base URL, response format, and message role.
 """
 
 from __future__ import annotations
@@ -15,9 +11,10 @@ import ipaddress
 import re
 import socket
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 OPENROUTER_API_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_APP_TITLE = "Fleet Agent"
@@ -36,15 +33,16 @@ class ProviderOverrideError(ValueError):
     """Raised when untrusted browser provider headers are invalid."""
 
 
-@dataclass(frozen=True)
-class ProviderOverride:
+class ProviderOverride(BaseModel):
     """Ephemeral provider settings for one agent request.
 
     The key is intentionally never serialized, logged, or included in a public
     result.
     """
 
-    api_key: str
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    api_key: SecretStr = Field(repr=False, exclude=True)
     model: str | None = None
     api_base: str | None = None
     # ``None`` means "not pinned by the browser": the run then inherits the
@@ -52,13 +50,6 @@ class ProviderOverride:
     # exists precisely for gateways that reject native tool calls.
     response_format: ResponseFormat | None = None
     messages_format: MessagesFormat = "system_role"
-
-    def __repr__(self) -> str:
-        return (
-            f"ProviderOverride(model={self.model!r}, api_base={self.api_base!r}, "
-            f"response_format={self.response_format!r}, "
-            f"messages_format={self.messages_format!r}, api_key=<redacted>)"
-        )
 
 
 def _validate_api_key(raw_key: str) -> str:
@@ -184,11 +175,10 @@ def parse_provider_override(
     raw_base_url = normalized_headers.get("x-llm-base-url")
     raw_response_format = normalized_headers.get("x-llm-response-format")
     raw_messages_format = normalized_headers.get("x-llm-messages-format")
-    legacy_key = normalized_headers.get("x-openrouter-key")
-    legacy_model = normalized_headers.get("x-openrouter-model")
-
-    has_generic_headers = any(
-        value is not None
+    if any(name.startswith("x-openrouter-") for name in normalized_headers):
+        raise ProviderOverrideError("use X-LLM-* headers instead of X-OpenRouter-*")
+    if all(
+        value is None
         for value in (
             raw_key,
             raw_model,
@@ -196,35 +186,16 @@ def parse_provider_override(
             raw_response_format,
             raw_messages_format,
         )
-    )
-    if not has_generic_headers and raw_key is None and legacy_key is None:
-        if legacy_model is None:
-            return None
-        raise ProviderOverrideError(
-            "an API key is required for a provider model override"
-        )
-
-    if raw_key is not None and legacy_key is not None:
-        raise ProviderOverrideError("conflicting provider headers")
-
-    if raw_key is not None:
-        if raw_base_url is None:
-            raise ProviderOverrideError(
-                "a base URL is required for a provider key override"
-            )
-        api_key = _validate_api_key(raw_key)
-        api_base = _validate_base_url(
-            raw_base_url, allow_private=allow_private_base_urls
-        )
-    elif legacy_key is not None:
-        api_key = _validate_api_key(legacy_key)
-        # Legacy browser BYOK is deliberately restricted to the canonical
-        # OpenRouter endpoint; the browser cannot select an arbitrary proxy.
-        api_base = OPENROUTER_API_BASE_URL
-        if raw_model is None:
-            raw_model = legacy_model
-    else:
+    ):
+        return None
+    if raw_key is None:
         raise ProviderOverrideError("an API key is required for a provider override")
+    if raw_base_url is None:
+        raise ProviderOverrideError(
+            "a base URL is required for a provider key override"
+        )
+    api_key = _validate_api_key(raw_key)
+    api_base = _validate_base_url(raw_base_url, allow_private=allow_private_base_urls)
 
     model: str | None = None
     if raw_model is not None:
@@ -234,7 +205,9 @@ def parse_provider_override(
     if raw_response_format is not None:
         if raw_response_format == "json_tool_calls":
             response_format = "json_tool_calls"
-        elif raw_response_format != "native_function_calling":
+        elif raw_response_format == "native_function_calling":
+            response_format = "native_function_calling"
+        else:
             raise ProviderOverrideError("the provider response format is invalid")
 
     messages_format: MessagesFormat = "system_role"
@@ -245,7 +218,7 @@ def parse_provider_override(
             raise ProviderOverrideError("the provider messages format is invalid")
 
     return ProviderOverride(
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         model=model,
         api_base=api_base,
         response_format=response_format,

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import {
   getApiKey,
+  clearApiKey,
   getSelectedModel,
   isCustomModelEnabled,
   setApiKey,
@@ -22,6 +23,8 @@ import {
   getActiveProviderId,
   getAgentProviderHeaders,
   getProfiles,
+  getProviderReadiness,
+  onProvidersChange,
   loadProviderStore,
   OPENROUTER_BASE_URL,
   OPENROUTER_PROFILE_ID,
@@ -29,7 +32,6 @@ import {
   OPENCODE_ZEN_PROFILE_ID,
   PROVIDERS_STORAGE_KEY,
   removeProfile,
-  SERVER_DEFAULT_ID,
   setActiveProviderId,
   upsertProfile,
 } from '@/features/providers/providers-store'
@@ -44,13 +46,13 @@ describe('providers store', () => {
     localStorage.clear()
   })
 
-  it('migrates a legacy OpenRouter key into an active OpenRouter profile', () => {
+  it('preserves a legacy OpenRouter key without selecting a provider', () => {
     setApiKey('sk-or-v1-legacykey123456')
 
     const store = loadProviderStore()
 
     expect(store.version).toBe(1)
-    expect(store.activeProviderId).toBe(OPENROUTER_PROFILE_ID)
+    expect(store.activeProviderId).toBeNull()
     // The default store ships the OpenRouter and OpenCode Zen presets
     // side-by-side; users see both on first load.
     expect(store.profiles).toEqual([
@@ -71,24 +73,25 @@ describe('providers store', () => {
     ])
   })
 
-  it('defaults to the server provider without a legacy key', () => {
+  it('requires selection without a legacy key', () => {
     const store = loadProviderStore()
 
-    expect(store.activeProviderId).toBe(SERVER_DEFAULT_ID)
+    expect(store.activeProviderId).toBe(null)
   })
 
-  it('returns no headers for the server default provider', () => {
+  it('rejects runs without a selected provider', () => {
     setApiKey('sk-or-v1-legacykey123456')
-
+    setActiveProviderId(OPENROUTER_PROFILE_ID)
     expect(getActiveProviderId()).toBe(OPENROUTER_PROFILE_ID)
-    setActiveProviderId(SERVER_DEFAULT_ID)
+    setActiveProviderId(null)
 
-    expect(getAgentProviderHeaders()).toEqual({})
+    expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider|needs setup/)
     expect(getActiveProfile()).toBeNull()
   })
 
   it('builds OpenRouter headers with the OAuth key and gated model', () => {
     setApiKey('sk-or-v1-legacykey123456')
+    setActiveProviderId(OPENROUTER_PROFILE_ID)
     setSelectedModel('anthropic/claude-3.5-sonnet')
     setCustomModelEnabled(false)
 
@@ -115,7 +118,7 @@ describe('providers store', () => {
     setActiveProviderId(OPENROUTER_PROFILE_ID)
     expect(getApiKey()).toBeNull()
 
-    expect(getAgentProviderHeaders()).toEqual({})
+    expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider|needs setup/)
   })
 
   it('builds headers for a custom provider profile', () => {
@@ -152,10 +155,10 @@ describe('providers store', () => {
     })
     setActiveProviderId('profile-incomplete')
 
-    expect(getAgentProviderHeaders()).toEqual({})
+    expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider|needs setup/)
   })
 
-  it('updates and removes custom profiles, restoring the server default when active', () => {
+  it('updates and removes custom profiles, clearing selection when active', () => {
     loadProviderStore()
     upsertProfile({
       id: 'profile-one',
@@ -190,7 +193,7 @@ describe('providers store', () => {
     removeProfile('profile-one')
 
     expect(getProfiles()).toHaveLength(2)
-    expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
+    expect(getActiveProviderId()).toBe(null)
   })
 
   it('protects the OpenRouter preset from removal and unknown active ids', () => {
@@ -200,7 +203,7 @@ describe('providers store', () => {
     expect(getProfiles().map((p) => p.id)).toContain(OPENROUTER_PROFILE_ID)
 
     setActiveProviderId('does-not-exist')
-    expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
+    expect(getActiveProviderId()).toBe(null)
 
     // Custom models stay untouched by provider selection.
     expect(isCustomModelEnabled()).toBe(false)
@@ -212,16 +215,49 @@ describe('providers store', () => {
 
     const store = loadProviderStore()
     expect(store.version).toBe(1)
-    expect(store.activeProviderId).toBe(SERVER_DEFAULT_ID)
+    expect(store.activeProviderId).toBe(null)
   })
 
   it('keeps the legacy OpenRouter storage out of the provider store', () => {
     setApiKey('sk-or-v1-legacykey123456')
+    setActiveProviderId(OPENROUTER_PROFILE_ID)
     loadProviderStore()
 
     const raw = localStorage.getItem(PROVIDERS_STORAGE_KEY)
     expect(raw).not.toContain('sk-or-v1-legacykey123456')
     expect(localStorage.getItem(STORAGE_KEY)).toBe('sk-or-v1-legacykey123456')
+  })
+
+  it.each(['server', 'unknown', 123, undefined])('migrates %s selection without losing configured profiles', (activeProviderId) => {
+    const profile = { id: 'custom', name: 'Custom', apiKey: 'test-key', baseUrl: 'https://example.com/v1', chatCompletionFormat: 'openai-chat-completions', responseFormat: 'json_tool_calls', messagesFormat: 'system_role' }
+    localStorage.setItem(PROVIDERS_STORAGE_KEY, JSON.stringify({version: 1, profiles: [profile], activeProviderId}))
+    expect(getActiveProviderId()).toBeNull()
+    expect(getProfiles()).toContainEqual(profile)
+    expect(JSON.parse(localStorage.getItem(PROVIDERS_STORAGE_KEY)! ).activeProviderId).toBeNull()
+    expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider/)
+  })
+
+  it('updates readiness on disconnect and requires explicit selection on reconnect', () => {
+    setApiKey('test-key')
+    expect(getProviderReadiness().ready).toBe(false)
+    setActiveProviderId('openrouter')
+    const listener = vi.fn()
+    const unsubscribe = onProvidersChange(listener)
+    expect(getProviderReadiness().ready).toBe(true)
+    clearApiKey()
+    expect(listener).toHaveBeenCalled()
+    expect(getActiveProviderId()).toBe('openrouter')
+    expect(getProviderReadiness().ready).toBe(false)
+    expect(() => getAgentProviderHeaders()).toThrow(/needs setup/)
+    unsubscribe()
+  })
+
+  it('notifies provider subscribers when another tab clears storage', () => {
+    const listener = vi.fn()
+    const unsubscribe = onProvidersChange(listener)
+    window.dispatchEvent(new StorageEvent('storage', { key: null }))
+    expect(listener).toHaveBeenCalled()
+    unsubscribe()
   })
 
   describe('OpenCode Zen preset', () => {
@@ -266,11 +302,11 @@ describe('providers store', () => {
       expect(headers['X-LLM-Base-Url']).toBe(OPENCODE_ZEN_BASE_URL)
     })
 
-    it('returns no OpenCode Zen headers without a key', () => {
+    it('rejects OpenCode Zen runs without a key', () => {
       clearOpenCodeZenApiKey()
       setActiveProviderId(OPENCODE_ZEN_PROFILE_ID)
       expect(getOpenCodeZenApiKey()).toBeNull()
-      expect(getAgentProviderHeaders()).toEqual({})
+      expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider|needs setup/)
     })
 
     it('protects the OpenCode Zen preset from removal and from foreign base URLs', () => {

@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "NODE_ENV=test vitest run",
-    "contracts:sync": "json2ts --input ../../packages/contracts/agent-workspace-state.schema.json --output src/contracts/generated.ts && json2ts --input ../../packages/contracts/thread-bootstrap.schema.json --output src/contracts/thread-bootstrap.ts",
+    "contracts:sync": "json2ts --input ../../packages/contracts/agent-workspace-state.schema.json --output src/contracts/generated.ts && json2ts --input ../../packages/contracts/thread-bootstrap.schema.json --output src/contracts/thread-bootstrap.ts && json2ts --input ../../packages/contracts/agent-capabilities.schema.json --output src/contracts/agent-capabilities.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -11,7 +11,6 @@ import {
   getProfiles,
   loadProviderStore,
   PROVIDERS_STORAGE_KEY,
-  SERVER_DEFAULT_ID,
 } from '@/features/providers/providers-store'
 
 function renderDialog(props: ComponentProps<typeof SettingsDialog>) {
@@ -187,7 +186,7 @@ describe('SettingsDialog', () => {
     )
   })
 
-  it('falls back to the server default when the active provider is removed', async () => {
+  it('clears selection when the active provider is removed', async () => {
     const user = userEvent.setup()
     localStorage.setItem(
       PROVIDERS_STORAGE_KEY,
@@ -226,23 +225,14 @@ describe('SettingsDialog', () => {
     // The two built-in presets (OpenRouter + OpenCode Zen) are protected and
     // re-appear in the profile list when missing from localStorage.
     expect(getProfiles()).toHaveLength(2)
-    expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
-    expect(getAgentProviderHeaders()).toEqual({})
+    expect(getActiveProviderId()).toBe(null)
+    expect(() => getAgentProviderHeaders()).toThrow(/Choose a provider/)
   })
 
-  it('activates the server default provider from the settings dialog', async () => {
-    const user = userEvent.setup()
-    openrouterAuth.setApiKey('sk-or-v1-9876543210abcdef')
+  it('does not expose a server default option or select a connected provider implicitly', () => {
+    openrouterAuth.setApiKey('sk-or-test')
     renderDialog({ open: true, onOpenChange: vi.fn() })
-
-    // The migrated OpenRouter key makes OpenRouter the active provider.
-    expect(getActiveProviderId()).toBe('openrouter')
-
-    await user.click(
-      screen.getByRole('button', { name: /server default/i }),
-    )
-
-    expect(getActiveProviderId()).toBe(SERVER_DEFAULT_ID)
-    expect(getAgentProviderHeaders()).toEqual({})
+    expect(screen.queryByRole('button', { name: /server default/i })).not.toBeInTheDocument()
+    expect(getActiveProviderId()).toBeNull()
   })
 })

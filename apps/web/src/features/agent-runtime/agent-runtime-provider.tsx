@@ -20,6 +20,7 @@ import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-u
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
 import { API_BASE_URL, API_KEY } from '@/lib/env'
+import { refreshAgentCapabilities } from '@/features/agent-runtime/agent-capabilities'
 import { getAgentProviderHeaders } from '@/features/providers/providers-store'
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`
@@ -51,7 +52,13 @@ export function createAgentFetch(
     if (isAgentRequest) {
       // Browser-owned provider profile headers (BYOK): only ever attached to
       // the agent run POST, never to other Fleet API resources.
-      const providerHeaders = getAgentProviderHeaders()
+      const capabilities = await refreshAgentCapabilities()
+      // Never send stored credentials to fixture runs, including caller-supplied headers.
+      const providerHeaderNames = Array.from(headers.keys()).filter((name) => name.startsWith('x-llm-'))
+      for (const name of providerHeaderNames) headers.delete(name)
+      const providerHeaders = capabilities.agent_mode === 'fixtures'
+        ? {}
+        : getAgentProviderHeaders()
       for (const [k, v] of Object.entries(providerHeaders)) {
         headers.set(k, v)
       }

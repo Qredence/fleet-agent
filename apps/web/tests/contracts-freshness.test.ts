@@ -10,6 +10,10 @@ const contractsDir = resolve(here, '../../../packages/contracts')
 
 const cases = [
   {
+    schema: `${contractsDir}/agent-capabilities.schema.json`,
+    generated: resolve(here, '../src/contracts/agent-capabilities.ts'),
+  },
+  {
     schema: `${contractsDir}/agent-workspace-state.schema.json`,
     generated: resolve(here, '../src/contracts/generated.ts'),
   },

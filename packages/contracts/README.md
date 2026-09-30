@@ -5,6 +5,8 @@ the React frontend.
 
 ## Contents
 
+- `agent-capabilities.schema.json` — active server run mode returned by
+  authenticated `GET /api/agent/capabilities`.
 - `agent-workspace-state.schema.json` — `AgentWorkspaceState` v1, the user-safe
   process state streamed via AG-UI `STATE_SNAPSHOT` / `STATE_DELTA`.
 - `thread-bootstrap.schema.json` — `ThreadBootstrap` v1, the

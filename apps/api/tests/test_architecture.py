@@ -132,7 +132,7 @@ SETTINGS = APP / "settings.py"
 ENV_EXAMPLE = APP.parent / ".env.example"
 
 # Fields read from unprefixed environment names, not the FLEET_AGENT_ prefix.
-_UNPREFIXED_ALIASES = {"MODAL_API_KEY", "MODAL_BASE_URL", "MODAL_MODEL_ID"}
+_UNPREFIXED_ALIASES: set[str] = set()
 
 
 def _settings_env_names() -> set[str]:

@@ -123,3 +123,11 @@ def test_production_router_passes_noncanonical_strings_to_coercion() -> None:
     assert scored.failures == 0
     assert scored.mean == 1.0
     assert scored.misses == []
+
+
+def test_unconfigured_eval_does_not_borrow_legacy_credentials(monkeypatch):
+    from app.settings import Settings
+    from evals.run import _resolve_lm
+
+    monkeypatch.setattr("app.settings.get_settings", lambda: Settings())
+    assert _resolve_lm() is None

@@ -174,7 +174,7 @@ flowchart LR
 
     TOOLS -->|"search · report"| DOCS["documentation corpus"]
     TOOLS -->|"optional web"| TAV["Tavily web_search / fetch_page"]
-    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(OpenAI SDK gateway client / dspy.LM)"]
+    DSPY -->|"model calls"| LM["OpenAI-compatible model\n(native DSPy lm15 engine)"]
 
     subgraph DATA["Persistence"]
         PUBLIC --> PG[("PostgreSQL 17")]

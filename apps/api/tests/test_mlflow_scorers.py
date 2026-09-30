@@ -42,7 +42,7 @@ def _restore_mlflow_env() -> Iterator[None]:
     ``mlflow.set_tracking_uri`` and ``mlflow.set_experiment`` write
     ``MLFLOW_TRACKING_URI`` and ``MLFLOW_EXPERIMENT_ID`` into the environment
     "so that subprocess can inherit it" (verified in mlflow 3.16.0). The shared
-    conftest purges ``FLEET_AGENT_*`` and ``MODAL_*`` but not ``MLFLOW_*``, and
+    conftest purges ``FLEET_AGENT_*`` and ``MLFLOW_*`` between tests, and
     ``resolve_tracking_uri`` reads the environment first — so a test that
     resolves a store would otherwise repoint every later test, including
     ``test_mlflow_tracing.py``, at a tmp store that no longer exists.

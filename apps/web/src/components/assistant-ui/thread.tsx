@@ -24,6 +24,7 @@ import {
   ToolGroupRoot,
   ToolGroupTrigger,
 } from "@/components/assistant-ui/tool-group";
+import { useRunReadiness } from "@/features/agent-runtime/agent-capabilities";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useShape } from "@/lib/shape-context";
@@ -325,6 +326,7 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
   workspaceContext,
 }) => {
   const shape = useShape();
+  const readiness = useRunReadiness();
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col overflow-visible">
@@ -347,7 +349,7 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
             rows={1}
             autoFocus
             enterKeyHint="send"
-            submitMode="enter"
+            submitMode={readiness.ready ? "enter" : "none"}
             cancelOnEscape
             unstable_insertNewlineOnTouchEnter
             addAttachmentOnPaste
@@ -363,6 +365,7 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
 };
 
 const ComposerAction: FC = () => {
+  const readiness = useRunReadiness();
   return (
     <div className="aui-composer-action-wrapper relative flex min-w-0 flex-wrap items-center justify-between gap-2 pt-0.5">
       <div className="flex min-w-0 items-center gap-1.5">
@@ -408,12 +411,14 @@ const ComposerAction: FC = () => {
 
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send
+            disabled={!readiness.ready}
             render={
               <Button
                 type="submit"
                 size="icon"
                 className="aui-composer-send size-8 rounded-full bg-foreground text-background hover:opacity-90 active:scale-95 flex items-center justify-center cursor-pointer shadow-xs transition-transform"
                 aria-label="Send message"
+                title={readiness.ready ? undefined : readiness.message}
               />
             }
           >
@@ -737,6 +742,7 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  const readiness = useRunReadiness();
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"
@@ -746,6 +752,7 @@ const EditComposer: FC = () => {
         <ComposerPrimitive.Input
           className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
           autoFocus
+          submitMode={readiness.ready ? "enter" : "none"}
           name="edited-message"
           id="edited-message-input"
         />
@@ -764,8 +771,9 @@ const EditComposer: FC = () => {
             Cancel
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send
+            disabled={!readiness.ready}
             render={
-              <Button size="sm" className="h-8 rounded-full px-3.5">
+              <Button size="sm" className="h-8 rounded-full px-3.5" title={readiness.ready ? undefined : readiness.message}>
                 Update
               </Button>
             }
