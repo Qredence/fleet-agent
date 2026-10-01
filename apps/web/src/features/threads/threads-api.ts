@@ -1,47 +1,40 @@
 import type { AgentWorkspaceState } from '@/contracts/generated'
+import type {
+  MessageRepository,
+  MessageStorageEntry,
+  ThreadBootstrap as ThreadBootstrapEnvelope,
+  ThreadOut,
+} from '@/contracts/thread-bootstrap'
 import { apiFetch, apiJsonFetch } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 
-export const THREAD_BOOTSTRAP_SCHEMA_VERSION = 1 as const
+export const THREAD_BOOTSTRAP_SCHEMA_VERSION: ThreadBootstrapEnvelope['schemaVersion'] =
+  1
 
-export interface ThreadOut {
-  id: string
-  projectId: string
-  title: string
-  status: string
-  lastRunId: string | null
-  createdAt: string
-  updatedAt: string
-}
+export type { MessageStorageEntry, ThreadOut }
 
-export interface ThreadBootstrap {
-  schemaVersion: typeof THREAD_BOOTSTRAP_SCHEMA_VERSION
-  thread: ThreadOut
-  /** Branch repository in the current bootstrap format. */
-  messageRepository?: {
-    headId: string | null
-    messages: MessageStorageEntry[]
-  }
-  /** Compatibility field for older consumers; use messageRepository. */
-  messages: Record<string, unknown>[]
-  /** Latest AgentWorkspaceState snapshot for the panel, or null. */
+/**
+ * The v1 bootstrap envelope from packages/contracts/thread-bootstrap.schema.json.
+ * `messageRepository` is always present in current server responses, but
+ * payloads written by older servers may lack it, so decoding tolerates its
+ * absence; `agentState` is the generated AgentWorkspaceState model.
+ */
+export interface ThreadBootstrap
+  extends Omit<ThreadBootstrapEnvelope, 'messageRepository' | 'agentState'> {
+  messageRepository?: MessageRepository
   agentState: AgentWorkspaceState | null
-  latestRun: {
-    id: string
-    status: string
-    terminationReason: string | null
-    errorCode: string | null
-  } | null
 }
 
 export type MessageStorageFormat = 'ag-ui/v1' | 'aui/v0'
 
-export interface MessageStorageEntry {
-  id: string
-  parentId: string | null
+/**
+ * A storage entry as this client writes it: the schema types `format` as a
+ * plain string (the repository passes persisted values through untouched),
+ * so the known-format union is pinned here and enforced by
+ * `validateThreadBootstrap` below.
+ */
+export type MessageStorageItem = Omit<MessageStorageEntry, 'format'> & {
   format: MessageStorageFormat
-  content: Record<string, unknown>
-  runConfig?: Record<string, unknown>
 }
 
 export class UnsupportedThreadBootstrapSchemaError extends Error {
@@ -111,7 +104,7 @@ export function invalidateThreadBootstrap(threadId: string): Promise<void> {
 export function persistThreadMessage(
   threadId: string,
   messageId: string,
-  item: Omit<MessageStorageEntry, 'id'>,
+  item: Omit<MessageStorageItem, 'id'>,
 ): Promise<{ id: string }> {
   return apiJsonFetch<{ id: string }>(
     `/api/threads/${threadId}/messages/${encodeURIComponent(messageId)}`,

@@ -20,7 +20,7 @@ from ag_ui.core import (
     TextMessageStartEvent,
 )
 from ag_ui.encoder import EventEncoder
-from dspy import LMAuthError, LMRateLimitError
+from dspy import LMAuthError, LMInvalidRequestError, LMRateLimitError
 
 from app.agent.approval import approved_tool_names
 from app.agent.engine import (
@@ -44,9 +44,9 @@ from app.contracts.domain import (
     ToolFailed,
 )
 from app.contracts.error_codes import public_error
+from app.kernel.run_input import history_from_agui_messages, last_user_text
 from app.persistence.run_persistence import RunPersistence
 from app.services.metrics import MetricsRegistry
-from app.services.run_input import history_from_agui_messages, last_user_text
 
 logger = logging.getLogger(__name__)
 _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
@@ -556,6 +556,8 @@ class LiveDSPyCoordinator:
             if terminal_emitted or terminal_settled:
                 raise
             code, message = _code_for_exception(exc)
+            if code == "provider_request_rejected":
+                message = f"{message} Run ID: {run_id}."
             failure = AgentRunResult(
                 status="failed",
                 answer=None,
@@ -672,6 +674,8 @@ def _code_for_exception(exc: Exception) -> tuple[str, str]:
         or "429" in text
     ):
         return public_error("rate_limited")
+    if any(isinstance(item, LMInvalidRequestError) for item in leaves):
+        return public_error("provider_request_rejected")
     return public_error("internal_error")
 
 

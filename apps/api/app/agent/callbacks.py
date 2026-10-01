@@ -23,7 +23,7 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
-from app.services.content_safety import scrub_public_text
+from app.kernel.content_safety import scrub_public_text
 
 
 class AgUiRunCallback(BaseCallback):  # type: ignore[misc]

@@ -1,6 +1,8 @@
+import { queryClient } from '@/lib/query-client'
+import { agentCapabilitiesOptions } from '@/features/agent-runtime/agent-capabilities'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, vi, afterEach, describe, expect, it } from 'vitest'
 
 import {
   AssistantRuntimeProvider,
@@ -24,6 +26,10 @@ import {
   ComposerAttachments,
 } from '@/components/assistant-ui/attachment'
 import { Thread } from '@/components/assistant-ui/thread'
+import { mockViewport } from './setup'
+import { setApiKey, clearApiKey } from '@/features/providers/openrouter-auth'
+import { setActiveProviderId } from '@/features/providers/providers-store'
+import { act } from '@testing-library/react'
 import { PROVIDERS_STORAGE_KEY } from '@/features/providers/providers-store'
 
 const noOpAdapter: ChatModelAdapter = {
@@ -43,8 +49,13 @@ const workspaceContext: ComposerWorkspaceContext = {
   threadId: 'thread_a',
 }
 
-function RuntimeComposer() {
-  const runtime = useLocalRuntime(noOpAdapter)
+function RuntimeComposer({ withHistory = false }: { withHistory?: boolean }) {
+  const runtime = useLocalRuntime(noOpAdapter, {
+    initialMessages: withHistory ? [
+      { role: 'user', content: 'Original question' },
+      { role: 'assistant', content: 'Fixture answer' },
+    ] : undefined,
+  })
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ComposerPreferencesProvider>
@@ -89,7 +100,13 @@ function AttachmentRuntimeComposer({
   )
 }
 
+beforeEach(() => {
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine' })
+})
+
 afterEach(() => {
+  queryClient.clear()
+  vi.restoreAllMocks()
   cleanup()
   // The composer reads providers and keys from localStorage; clear it so each
   // test starts from the shipped defaults instead of the previous test's state.
@@ -97,6 +114,26 @@ afterEach(() => {
 })
 
 describe('composer preferences', () => {
+  it.each([false, true])('blocks sends and keyboard submission until provider setup is complete (mobile=%s)', async (mobile) => {
+    mockViewport({mobile})
+    localStorage.clear()
+    const user = userEvent.setup()
+    render(<RuntimeComposer />)
+    const input = screen.getByRole('textbox', {name: 'Message input'})
+    await user.type(input, 'Readiness test')
+    expect(screen.getByRole('button', {name: 'Send message'})).toBeDisabled()
+    await user.keyboard('{Enter}')
+    expect(input).toHaveValue('Readiness test\n')
+    act(() => {
+      setApiKey('test-key')
+      setActiveProviderId('openrouter')
+    })
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Send message'})).toBeEnabled())
+    act(() => clearApiKey())
+    await waitFor(() => expect(screen.getByRole('button', {name: 'Send message'})).toBeDisabled())
+    mockViewport()
+  })
+
   it.each([
     ['openrouter', 'openrouter', 'OpenRouter', 'openai/gpt-4o-mini', 'GPT-4o mini (OpenAI)'],
     ['opencode-zen', 'opencode_zen', 'OpenCode Zen', 'muse-spark-1.3-contributor-free', 'Muse Spark 1.3 (Contributor Free)'],
@@ -126,7 +163,6 @@ describe('composer preferences', () => {
     expect(defaultOption).toHaveAttribute('aria-checked', 'true')
 
     // Switching routes through the default option must leave custom mode off.
-    await user.click(screen.getByRole('menuitemradio', { name: /Server default model/ }))
     await user.click(defaultOption)
     expect(trigger).toHaveTextContent(`${providerName} default model`)
     expect(localStorage.getItem(`${storagePrefix}_custom_model_enabled`)).toBe('false')
@@ -181,16 +217,16 @@ describe('composer preferences', () => {
 
     const getModelTrigger = () =>
       screen.getByRole('button', { name: 'Model and reasoning preferences' })
-    expect(getModelTrigger()).toHaveTextContent('Server default model')
+    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
 
     await user.click(getModelTrigger())
     expect(await screen.findByText('Model')).toBeInTheDocument()
     expect(screen.queryByText(/^Provider$/)).not.toBeInTheDocument()
     expect(
-      await screen.findByRole('menuitemradio', {
+      screen.queryByRole('menuitemradio', {
         name: /server default model.*server configuration/i,
       }),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('menuitemradio', {
         name: /GPT-4o mini \(OpenAI\).*openai\/gpt-4o-mini.*via OpenRouter/i,
@@ -290,14 +326,14 @@ describe('composer preferences', () => {
     const trigger = screen.getByRole('button', {
       name: 'Model and reasoning preferences',
     })
-    expect(trigger).toHaveTextContent('Server default model')
+    expect(trigger).toHaveTextContent('OpenRouter needs setup')
 
     expect(trigger).toHaveAttribute('data-unconfigured', 'true')
 
     const user = userEvent.setup()
     await user.click(trigger)
     expect(
-      await screen.findByText(/OpenRouter has no API key yet/i),
+      await screen.findByText(/^OpenRouter needs setup\./i),
     ).toBeInTheDocument()
     // Unconfigured OpenRouter models do not appear; only functional models appear
     expect(
@@ -306,12 +342,12 @@ describe('composer preferences', () => {
       }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('menuitemradio', {
+      screen.queryByRole('menuitemradio', {
         name: /Server default model/i,
       }),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
 
-    // The composer names the fallback and keeps the stored choice, so a key
+    // The composer keeps the stored choice, so a key
     // added later resumes the provider the user picked.
     const stored = JSON.parse(
       localStorage.getItem(PROVIDERS_STORAGE_KEY) ?? '{}',
@@ -360,7 +396,7 @@ describe('composer preferences', () => {
     expect(
       await screen.findByRole('radio', { name: /^Low/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    expect(getModelTrigger()).toHaveTextContent('Server default model')
+    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
   })
 })
 
@@ -580,4 +616,46 @@ describe('ComposerTriggerPopovers', () => {
     render(<BareComposer />)
     expect(screen.getByRole('textbox', { name: 'Message input' })).toBeInTheDocument()
   })
+})
+
+
+it('allows credential-free fixture submission and indicates fixture mode', async () => {
+  localStorage.clear()
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' })
+  render(<RuntimeComposer />)
+  const input = screen.getByRole('textbox', { name: 'Message input' })
+  await userEvent.type(input, 'Fixture question')
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Model and reasoning preferences' })).toHaveTextContent('Fixture mode')
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(input).toHaveValue(''))
+})
+
+it('disables submission while capabilities are loading and when lookup fails', async () => {
+  queryClient.clear()
+  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('API unavailable'))
+  render(<RuntimeComposer />)
+  await userEvent.type(screen.getByRole('textbox', { name: 'Message input' }), 'Waiting question')
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('title', expect.stringContaining('Cannot connect')))
+})
+
+
+it('uses run readiness for edited-message Update and Enter submission', async () => {
+  localStorage.clear()
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' })
+  render(<RuntimeComposer withHistory />)
+  await userEvent.hover(screen.getByText('Original question'))
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+  const edited = document.querySelector<HTMLTextAreaElement>('#edited-message-input')!
+  expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled()
+  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine' }) })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled())
+  await userEvent.clear(edited)
+  await userEvent.type(edited, 'Changed question{Enter}')
+  expect(document.querySelector('#edited-message-input')).toBeInTheDocument()
+  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' }) })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled())
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(document.querySelector('#edited-message-input')).not.toBeInTheDocument())
 })

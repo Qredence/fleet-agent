@@ -59,14 +59,14 @@ return stack traces and raw provider data in public payloads.
 
 ## Contract changes
 
-Edit `packages/contracts/agent-workspace-state.schema.json` first. Then
+Edit the schema or constant list in `packages/contracts/` first. Then
 regenerate the generated models:
 
 ```bash
-# TypeScript model
+# TypeScript models (agent workspace state + thread bootstrap)
 pnpm --filter web contracts:sync
 
-# Python model
+# Python models — one command per schema
 cd apps/api
 uv run datamodel-codegen \
   --input ../../packages/contracts/agent-workspace-state.schema.json \
@@ -78,7 +78,24 @@ uv run datamodel-codegen \
   --use-title-as-name \
   --disable-timestamp \
   --formatters ruff-check ruff-format
+
+uv run datamodel-codegen \
+  --input ../../packages/contracts/thread-bootstrap.schema.json \
+  --input-file-type jsonschema \
+  --output app/contracts/thread_bootstrap.py \
+  --output-model-type pydantic_v2.BaseModel \
+  --target-python-version 3.13 \
+  --use-union-operator \
+  --use-title-as-name \
+  --disable-timestamp \
+  --formatters ruff-check ruff-format
 ```
+
+The constant lists (`error-codes.json`, `termination-reasons.json`,
+`provider.json`) are consumed directly at runtime or pinned by contract
+tests (`apps/api/tests/test_contract_constants.py`,
+`apps/web/tests/contract-constants.test.ts`) — do not copy their contents
+into application code.
 
 Breaking changes require a new `schemaVersion`. Keep older schema files and
 make unsupported versions fail clearly rather than silently misparsing them.
@@ -101,14 +118,13 @@ Run the relevant checks before opening a pull request. The complete CI-equivalen
 set is:
 
 ```bash
-pnpm --filter web lint
+# One command for all linters/type checks (web + API)
+pnpm lint:all
+
 pnpm --filter web test
 pnpm --filter web build
 
 cd apps/api
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy app
 uv run pytest
 ```
 

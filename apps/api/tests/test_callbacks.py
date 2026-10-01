@@ -159,8 +159,8 @@ async def test_callback_respects_cancel_token():
         return "result"
 
     class CancellingLM(ScriptedLM):
-        def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-            response = super().forward(prompt=prompt, messages=messages, **kwargs)
+        def __call__(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
+            response = super().__call__(prompt=prompt, messages=messages, **kwargs)
             cancel_token.cancel()
             return response
 

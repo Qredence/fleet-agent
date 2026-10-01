@@ -5,14 +5,17 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.artifacts import artifact_to_out
 from app.api.deps import LOCAL_OWNER, get_sessions, require_project, require_thread
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.error_codes import ERROR_MESSAGES
+from app.contracts.termination_reasons import TERMINATION_REASONS
+from app.contracts.thread_bootstrap import ThreadBootstrap, ThreadOut
+from app.kernel.content_safety import scrub_json_strings
+from app.kernel.history_safety import MessageWrite, sanitize_message_content
 from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     ArtifactsRepository,
@@ -20,8 +23,7 @@ from app.persistence.repositories import (
     SourcesRepository,
     ThreadsRepository,
 )
-from app.services.content_safety import scrub_json_strings
-from app.services.history_safety import MessageWrite, sanitize_message_content
+from app.persistence.serializers import artifact_to_out, thread_to_out
 
 router = APIRouter(prefix="/api", tags=["threads"])
 logger = logging.getLogger(__name__)
@@ -33,23 +35,9 @@ _MAX_SOURCE_EXCERPT_CHARS = 300
 _SAFE_RUN_STATUSES = frozenset(
     {"queued", "running", "completed", "failed", "cancelled", "interrupted"}
 )
-_SAFE_TERMINATION_REASONS = frozenset(
-    {
-        "submit",
-        "forced_submit",
-        "max_iters",
-        "empty_tool_calls",
-        "parse_error",
-        "context_window_exceeded",
-        "failed",
-        "timeout",
-        "cancelled",
-        "server_restart",
-        "approval_required",
-        "approval_expired",
-        "approval_invalid",
-    }
-)
+# The canonical public reasons live in packages/contracts/termination-reasons.json;
+# anything else persisted in the database is stripped before it reaches a client.
+_SAFE_TERMINATION_REASONS = frozenset(TERMINATION_REASONS)
 
 
 def _cap_excerpt(value: str | None) -> str | None:
@@ -118,44 +106,12 @@ def _safe_latest_run_payload(run: Run | None) -> dict[str, Any] | None:
     }
 
 
-class ThreadOut(BaseModel):
-    id: str
-    projectId: str
-    title: str
-    status: str
-    lastRunId: str | None
-    createdAt: str
-    updatedAt: str
-
-
 class ThreadCreate(BaseModel):
     title: str = "New conversation"
 
 
 class ThreadPatch(BaseModel):
     title: str
-
-
-class BootstrapOut(BaseModel):
-    schemaVersion: int = 1
-    thread: ThreadOut
-    messageRepository: dict[str, Any]
-    # Kept temporarily for older clients; new clients use messageRepository.
-    messages: list[dict[str, Any]] = Field(default_factory=list)
-    agentState: dict[str, Any] | None
-    latestRun: dict[str, Any] | None
-
-
-def thread_to_out(thread: Thread) -> ThreadOut:
-    return ThreadOut(
-        id=thread.id,
-        projectId=thread.project_id,
-        title=thread.title,
-        status=thread.status,
-        lastRunId=thread.last_run_id,
-        createdAt=thread.created_at.isoformat(),
-        updatedAt=thread.updated_at.isoformat(),
-    )
 
 
 @router.get("/projects/{project_id}/threads")
@@ -182,11 +138,11 @@ async def create_thread(
     return thread_to_out(thread)
 
 
-@router.get("/threads/{thread_id}/bootstrap")
+@router.get("/threads/{thread_id}/bootstrap", response_model_exclude_unset=True)
 async def thread_bootstrap(
     thread_id: str,
     sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
-) -> BootstrapOut:
+) -> ThreadBootstrap:
     """Everything the client needs to restore a thread after reload/switch."""
     data = await ThreadsRepository(sessions).get_bootstrap_data(
         thread_id, owner_id=LOCAL_OWNER
@@ -200,7 +156,8 @@ async def thread_bootstrap(
         "headId": thread.active_head_message_id,
         "messages": storage,
     }
-    return BootstrapOut(
+    return ThreadBootstrap(
+        schemaVersion=1,
         thread=thread_to_out(thread),
         messageRepository=repository,
         messages=[sanitize_message_content(row.message_json) for row in message_rows],

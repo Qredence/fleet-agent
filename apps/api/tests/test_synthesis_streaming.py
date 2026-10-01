@@ -110,8 +110,8 @@ async def test_routed_program_streams_synthesis_tokens() -> None:
     assert final.history is not None
 
 
-async def test_non_streaming_lm_falls_back_to_settled_fields() -> None:
-    """A gateway that cannot stream still gets the full run, just unstreamed."""
+async def test_materialized_response_reaches_settled_fields() -> None:
+    """A canonical engine can stream a materialized response in one delta."""
     from tests.helpers.scripted_lm import ScriptedLM
 
     engine = _routed_engine(_stream_steps(), lm_cls=ScriptedLM)
@@ -123,7 +123,7 @@ async def test_non_streaming_lm_falls_back_to_settled_fields() -> None:
         )
     ]
 
-    assert [update.kind for update in updates] == ["final_fields", "result"]
+    assert [update.kind for update in updates][-2:] == ["final_fields", "result"]
     assert updates[-1].result is not None
     assert updates[-1].result.status == "completed"
 

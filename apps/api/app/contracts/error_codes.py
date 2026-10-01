@@ -1,36 +1,24 @@
-"""Stable public error codes (plan.md Phase 11).
+"""Stable public error codes.
 
 Clients only ever see these codes + safe messages — never stack traces,
-provider payloads, or internal exception strings.
+provider payloads, or internal exception strings. The mapping lives in
+``packages/contracts/error-codes.json`` and is loaded at import so both
+sides of the wire share one source.
 """
 
-ERROR_MESSAGES = {
-    "agent_timeout": "The agent did not finish in time. Please try again.",
-    "agent_no_output": (
-        "The agent finished without producing a final answer. "
-        "Please try rephrasing your request."
-    ),
-    "agent_parse_error": "The agent's response could not be parsed. Please try again.",
-    "agent_context_limit": (
-        "The conversation is too long for the model. Please start a new thread."
-    ),
-    "tool_timeout": "A tool call timed out.",
-    "tool_failed": "A tool call failed.",
-    "tool_unauthorized": "A tool was not permitted to perform that action.",
-    "rate_limited": "The system is busy right now. Please retry in a moment.",
-    "run_cancelled": "The run was cancelled.",
-    "provider_override_invalid": "The selected provider settings are invalid.",
-    "provider_unauthorized": (
-        "The language model rejected the configured API key. "
-        "Check the provider credentials and base URL."
-    ),
-    "approval_expired": "The approval request is no longer available.",
-    "approval_invalid": "The approval response is invalid.",
-    "internal_error": "The agent run failed.",
-}
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Final, cast
+
+from app.contracts.paths import load_contract_json
+
+ERROR_MESSAGES: Final[Mapping[str, str]] = cast(
+    "Mapping[str, str]", load_contract_json("error-codes.json")
+)
 
 
 def public_error(code: str | None, fallback: str = "internal_error") -> tuple[str, str]:
     """(code, safe message) — unknown codes degrade to internal_error."""
-    resolved = code if code in ERROR_MESSAGES else fallback
+    resolved = code if code is not None and code in ERROR_MESSAGES else fallback
     return resolved, ERROR_MESSAGES[resolved]

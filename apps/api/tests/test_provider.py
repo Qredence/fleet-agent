@@ -4,7 +4,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.agent.factory import _build_adapter, _build_lm
-from app.agent.openai_compatible import OpenAICompatibleLM
+from app.agent.gateway import GatewayEngine, close_lm
 from app.agent.provider import (
     OPENROUTER_API_BASE_URL,
     ProviderOverride,
@@ -28,19 +28,9 @@ def _resolve_publicly(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
-def test_legacy_openrouter_headers_map_onto_the_canonical_endpoint() -> None:
-    override = parse_provider_override(
-        {
-            "x-oPeNrOuTeR-kEy": "  sk-or-browser  ",
-            "X-OPENROUTER-MODEL": "anthropic/claude-3.5-sonnet",
-        }
-    )
-
-    assert override == ProviderOverride(
-        api_key="sk-or-browser",
-        model="anthropic/claude-3.5-sonnet",
-        api_base=OPENROUTER_API_BASE_URL,
-    )
+def test_legacy_openrouter_headers_require_migration() -> None:
+    with pytest.raises(ProviderOverrideError, match="use X-LLM"):
+        parse_provider_override({"X-OpenRouter-Key": "test-key"})
 
 
 def test_generic_headers_describe_a_custom_provider(
@@ -165,155 +155,71 @@ def test_private_base_urls_are_rejected_unless_explicitly_allowed(
     assert override.api_base == base_url
 
 
-def test_override_builds_a_run_scoped_lm_with_fixed_openrouter_routing() -> None:
+def test_override_has_run_scoped_native_routing() -> None:
     settings = Settings(
         llm_model="server/model",
-        llm_base_url="https://private-gateway.example/v1",
+        llm_base_url="https://server.example/v1",
         llm_api_key=SecretStr("server-secret"),
-        openrouter_http_referer="https://fleet.example",
     )
-
-    browser_lm = _build_lm(
-        settings,
-        ProviderOverride(
-            api_key="sk-or-browser",
-            model="vendor/model",
-            api_base=OPENROUTER_API_BASE_URL,
-        ),
+    override = ProviderOverride(
+        api_key="browser-key", model="vendor/model", api_base=OPENROUTER_API_BASE_URL
     )
-    server_lm = _build_lm(settings)
-
-    assert isinstance(browser_lm, OpenAICompatibleLM)
-    assert browser_lm.api_key == "sk-or-browser"
-    assert browser_lm.model == "vendor/model"
-    assert browser_lm.api_base == OPENROUTER_API_BASE_URL
-    assert browser_lm.use_developer_role is False
-    assert browser_lm._extra_headers == {
-        "HTTP-Referer": "https://fleet.example",
-        "X-Title": "Fleet Agent",
-    }
-    assert isinstance(server_lm, OpenAICompatibleLM)
-    assert server_lm.api_key == "server-secret"
-    assert server_lm.model == "server/model"
-    assert server_lm.api_base == "https://private-gateway.example/v1"
-    assert "sk-or-browser" not in repr(browser_lm)
+    lm = _build_lm(settings, override)
+    server = _build_lm(settings)
+    try:
+        assert isinstance(lm.engine, GatewayEngine)
+        assert lm.engine is not server.engine
+        assert lm.model == "fleet-gateway/vendor/model"
+        assert server.model == "fleet-gateway/server/model"
+        assert "browser-key" not in repr(lm)
+        assert "browser-key" not in repr(override)
+        assert "browser-key" not in override.model_dump_json()
+    finally:
+        close_lm(lm)
+        close_lm(server)
 
 
-def test_override_formats_flow_into_lm_and_adapter() -> None:
-    settings = Settings(llm_model="server/model")
-
-    json_lm = _build_lm(
-        settings,
-        ProviderOverride(
-            api_key="sk-browser",
-            api_base="https://gateway.example/v1",
-            response_format="json_tool_calls",
-            messages_format="developer_role",
-        ),
-    )
-    json_adapter = _build_adapter(
-        settings,
-        ProviderOverride(
-            api_key="sk-browser",
-            api_base="https://gateway.example/v1",
-            response_format="json_tool_calls",
-            messages_format="developer_role",
-        ),
-    )
-    native_adapter = _build_adapter(
-        settings,
-        ProviderOverride(
-            api_key="sk-browser",
-            api_base="https://gateway.example/v1",
-            response_format="native_function_calling",
-        ),
-    )
-
-    assert json_lm.use_developer_role is True
-    assert json_lm.supports_function_calling is False
-    assert json_adapter.use_native_function_calling is False
-    assert native_adapter.use_native_function_calling is True
-
-
-def test_override_without_pinned_format_inherits_the_server_selection() -> None:
-    # The operator disabled native function calling for a gateway that rejects
-    # tool_choice + response_format; an unpinned override must not re-enable it.
+@pytest.mark.parametrize(
+    "mode,expected",
+    [(None, False), ("json_tool_calls", False), ("native_function_calling", True)],
+)
+def test_response_selection_applies_to_lm_and_adapter(mode, expected) -> None:
     settings = Settings(llm_model="server/model", llm_native_function_calling=False)
-
-    lm = _build_lm(
-        settings,
-        ProviderOverride(api_key="sk-browser", api_base="https://gateway.example/v1"),
+    override = ProviderOverride(
+        api_key="browser-key",
+        api_base="https://gateway.example/v1",
+        response_format=mode,
     )
-    adapter = _build_adapter(
-        settings,
-        ProviderOverride(api_key="sk-browser", api_base="https://gateway.example/v1"),
+    lm = _build_lm(settings, override)
+    try:
+        assert lm.supports_function_calling is expected
+        assert (
+            _build_adapter(settings, override).use_native_function_calling is expected
+        )
+    finally:
+        close_lm(lm)
+
+
+def test_explicit_native_header_overrides_server_selection(monkeypatch):
+    _resolve_publicly(monkeypatch)
+    override = parse_provider_override(
+        {
+            "X-LLM-Key": "test-key",
+            "X-LLM-Base-Url": "https://gateway.example/v1",
+            "X-LLM-Response-Format": "native_function_calling",
+        }
     )
-
-    assert lm.supports_function_calling is False
-    assert adapter.use_native_function_calling is False
-
-    # ...but an explicit browser pin still wins over the server default.
-    pinned = _build_lm(
-        settings,
-        ProviderOverride(
-            api_key="sk-browser",
-            api_base="https://gateway.example/v1",
-            response_format="native_function_calling",
-        ),
-    )
-    assert pinned.supports_function_calling is True
+    assert override.response_format == "native_function_calling"
+    assert _build_adapter(
+        Settings(llm_native_function_calling=False), override
+    ).use_native_function_calling
 
 
-def test_override_without_custom_model_keeps_server_model() -> None:
-    settings = Settings(llm_model="server/model", llm_api_key=None)
-
-    lm = _build_lm(
-        settings,
-        ProviderOverride(api_key="sk-or-browser", api_base=OPENROUTER_API_BASE_URL),
-    )
-
-    assert lm.model == "server/model"
-    assert lm.api_base == OPENROUTER_API_BASE_URL
-
-
-def test_modal_env_trio_is_the_default_provider() -> None:
-    settings = Settings(
-        llm_model="openai/gpt-4o-mini",
-        llm_api_key=SecretStr("server-secret"),
-        modal_model_id="openai/gpt-4o",
-        modal_base_url="https://fleet-proxy.modal.run/v1",
-        modal_api_key=SecretStr("modal-secret"),
-    )
-
-    lm = _build_lm(settings)
-
-    assert isinstance(lm, OpenAICompatibleLM)
-    assert lm.model == "openai/gpt-4o"
-    assert lm.api_key == "modal-secret"
-    assert lm.api_base == "https://fleet-proxy.modal.run/v1"
-    # The OpenAI-compatible client strips the LiteLLM-style routing prefix.
-    assert lm._gateway_model_id == "gpt-4o"
-
-    override_lm = _build_lm(
-        settings,
-        ProviderOverride(
-            api_key="sk-browser",
-            model="vendor/model",
-            api_base="https://gateway.example/v1",
-        ),
-    )
-    assert override_lm.model == "vendor/model"
-    assert override_lm.api_key == "sk-browser"
-
-
-def test_settings_reads_unprefixed_modal_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MODAL_MODEL_ID", "openai/gpt-4o")
-    monkeypatch.setenv("MODAL_BASE_URL", "https://fleet-proxy.modal.run/v1")
-    monkeypatch.setenv("MODAL_API_KEY", "modal-secret")
-
+def test_settings_ignores_legacy_provider_environment(monkeypatch):
+    monkeypatch.setenv("MODAL_MODEL_ID", "legacy/model")
+    monkeypatch.setenv("MODAL_API_KEY", "legacy-key")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "legacy-token")
+    monkeypatch.setenv("FLEET_AGENT_LLM_MODEL", "canonical/model")
     settings = Settings()
-
-    assert settings.modal_model_id == "openai/gpt-4o"
-    assert settings.modal_base_url == "https://fleet-proxy.modal.run/v1"
-    assert settings.modal_api_key is not None
-    assert settings.modal_api_key.get_secret_value() == "modal-secret"
+    assert settings.llm_model == "canonical/model"
+    assert settings.llm_api_key is None

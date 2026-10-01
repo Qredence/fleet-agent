@@ -15,8 +15,8 @@ from app.contracts.domain import (
     ArtifactResult,
     ArtifactStarted,
 )
-from app.services.artifact_storage import ArtifactStorage, sanitize_artifact_name
-from app.services.content_safety import scrub_public_text
+from app.kernel.content_safety import scrub_public_text
+from app.kernel.storage import ArtifactStorage, sanitize_artifact_name
 
 _DOWNLOAD_PREFIX = "/api/artifacts"
 

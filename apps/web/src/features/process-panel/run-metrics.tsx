@@ -1,5 +1,7 @@
 import { AlertTriangleIcon, CheckIcon, InfoIcon } from 'lucide-react'
 
+import errorCodes from '@fleet-agent/contracts/error-codes.json'
+
 import { formatDuration } from './status-chip'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
@@ -27,10 +29,11 @@ export function RunMetricsLine({ metrics }: { metrics: RunMetrics }) {
 }
 
 /**
- * Human labels for DSPy / engine termination reasons. Keep in sync with the
- * public reasons the API allows through (threads._SAFE_TERMINATION_REASONS).
+ * Human labels for public termination reasons. The canonical reason list is
+ * packages/contracts/termination-reasons.json; a contract test keeps these
+ * keys in sync.
  */
-const TERMINATION_LABELS: Record<string, string> = {
+export const TERMINATION_LABELS: Record<string, string> = {
   submit: 'Completed normally',
   // The routed program ends by synthesizing the answer from evidence rather
   // than by calling submit, so this is its normal completion too.
@@ -50,29 +53,10 @@ const TERMINATION_LABELS: Record<string, string> = {
 }
 
 /**
- * Presentation copy for public error codes. Mirrors
- * apps/api/app/contracts/error_codes.py — clients only ever see these codes.
+ * Presentation copy for public error codes, straight from the shared
+ * contract. Clients only ever see these codes.
  */
-const ERROR_CODE_LABELS: Record<string, string> = {
-  agent_timeout: 'The agent did not finish in time. Please try again.',
-  agent_no_output:
-    'The agent finished without producing a final answer. Please try rephrasing your request.',
-  agent_parse_error:
-    "The agent's response could not be parsed. Please try again.",
-  agent_context_limit:
-    'The conversation is too long for the model. Please start a new thread.',
-  tool_timeout: 'A tool call timed out.',
-  tool_failed: 'A tool call failed.',
-  tool_unauthorized: 'A tool was not permitted to perform that action.',
-  rate_limited: 'The system is busy right now. Please retry in a moment.',
-  run_cancelled: 'The run was cancelled.',
-  provider_override_invalid: 'The selected provider settings are invalid.',
-  provider_unauthorized:
-    'The language model rejected the configured API key. Check the provider credentials and base URL.',
-  approval_expired: 'The approval request is no longer available.',
-  approval_invalid: 'The approval response is invalid.',
-  internal_error: 'The agent run failed.',
-}
+const ERROR_CODE_LABELS = errorCodes as Record<string, string>
 
 /** Reasons that describe a run that finished as intended, not a problem. */
 const NORMAL_TERMINATIONS = new Set(['submit', 'synthesis'])

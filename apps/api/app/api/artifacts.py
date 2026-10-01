@@ -5,30 +5,15 @@ storage keys. Access is scoped: the artifact's thread must belong to the
 (local) owner; downloads force attachment disposition + nosniff.
 """
 
-from typing import Any
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from app.kernel.storage import PathTraversalError
 from app.persistence.repositories import ArtifactsRepository
-from app.services.artifact_storage import PathTraversalError
 
 router = APIRouter(prefix="/api", tags=["artifacts"])
 
 _SAFE_MEDIA_TYPES = {"text/markdown", "text/plain", "application/json", "text/csv"}
-
-
-def artifact_to_out(artifact: Any) -> dict[str, Any]:
-    return {
-        "id": artifact.id,
-        "name": artifact.name,
-        "mediaType": artifact.media_type,
-        "sizeBytes": artifact.size_bytes,
-        "status": artifact.status,
-        "downloadUrl": f"/api/artifacts/{artifact.id}"
-        if artifact.status == "ready"
-        else None,
-    }
 
 
 @router.get("/artifacts/{artifact_id}")

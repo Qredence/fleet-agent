@@ -38,7 +38,7 @@ export function CustomProviderCard({
               )}
             </div>
             <CardDescription className="font-mono text-[11px] truncate">
-              {profile.modelId || 'server default model'}
+              {profile.modelId || 'provider default model'}
             </CardDescription>
             <div className="font-mono text-[11px] text-muted-foreground truncate">
               {profile.baseUrl}

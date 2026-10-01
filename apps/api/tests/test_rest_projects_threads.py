@@ -1,11 +1,60 @@
 """REST coverage for projects/threads (DB-backed)."""
 
+import json
+from pathlib import Path
+
+import pytest
 from httpx import ASGITransport, AsyncClient
+from jsonschema import Draft202012Validator
 
 from app.main import create_app
+from app.persistence.repositories import MessagesRepository
 from tests.conftest import requires_db
 
 pytestmark = requires_db
+
+
+@pytest.mark.parametrize("run_config", [None, {}, {"model": "test-model"}])
+async def test_bootstrap_message_run_config_matches_shared_schema(
+    db_sessions, run_config
+):
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        project = await post_project(client)
+        thread = (
+            await client.post(f"/api/projects/{project['id']}/threads", json={})
+        ).json()
+        await MessagesRepository(db_sessions).append(
+            thread_id=thread["id"],
+            role="user",
+            message_json={"id": "m-test", "role": "user", "content": []},
+            message_id="m-test",
+            run_config_json=run_config,
+        )
+        response = await client.get(f"/api/threads/{thread['id']}/bootstrap")
+
+    assert response.status_code == 200
+    payload = response.json()
+    schema_path = (
+        Path(__file__).resolve().parents[3]
+        / "packages/contracts/thread-bootstrap.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(payload)
+    entry = payload["messageRepository"]["messages"][0]
+    if run_config is None:
+        assert "runConfig" not in entry
+    else:
+        assert entry["runConfig"] == run_config
+    assert payload["agentState"] is None
+    assert payload["latestRun"] is None
+    assert payload["thread"]["lastRunId"] is None
+    assert payload["messageRepository"]["headId"] is None
+    assert entry["parentId"] is None
 
 
 async def post_project(client: AsyncClient, name: str = "Demo") -> dict:
@@ -128,3 +177,34 @@ async def test_project_rename_delete_unknown_project_404(db_sessions):
         deleted = await client.delete("/api/projects/nope")
     assert response.status_code == 404
     assert deleted.status_code == 404
+
+
+async def test_bootstrap_passes_an_unexpected_message_format_through(db_sessions):
+    """A persisted format outside the known values must not 500 the bootstrap.
+
+    The wire type is a plain string and the repository passes stored values
+    through untouched; the browser validator is the gate that rejects unknown
+    formats before decoding.
+    """
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        project = await post_project(client)
+        thread = (
+            await client.post(
+                f"/api/projects/{project['id']}/threads", json={"title": "Legacy"}
+            )
+        ).json()
+        await MessagesRepository(db_sessions).append(
+            thread_id=thread["id"],
+            role="assistant",
+            message_json={"id": "m-legacy", "role": "assistant", "content": []},
+            message_id="m-legacy",
+            format="legacy/v9",
+        )
+        response = await client.get(f"/api/threads/{thread['id']}/bootstrap")
+    assert response.status_code == 200
+    entries = response.json()["messageRepository"]["messages"]
+    assert [entry["format"] for entry in entries] == ["legacy/v9"]

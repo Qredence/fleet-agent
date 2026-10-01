@@ -1,13 +1,6 @@
-/**
- * API origin, normalized without a trailing slash because every caller appends
- * a path that already starts with `/`. Operators paste origins with and
- * without the slash — including Amp's own `PUBLIC_URL` — and `//api/projects`
- * is not a path any server or proxy recognizes.
- */
-export const API_BASE_URL: string = (
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-).replace(/\/+$/, '')
-export const API_KEY: string | undefined = import.meta.env.VITE_API_KEY || undefined
+/** HTTP client for the Fleet API. Origin and key come from `lib/env`. */
+
+import { API_BASE_URL, API_KEY } from '@/lib/env'
 
 export class ApiError extends Error {
   readonly status: number

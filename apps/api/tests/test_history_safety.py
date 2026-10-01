@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.threads import _safe_bootstrap_agent_state
-from app.services.history_safety import MessageWrite, sanitize_message_content
+from app.kernel.history_safety import MessageWrite, sanitize_message_content
 
 
 def _message(content: dict) -> dict:

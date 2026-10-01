@@ -8,7 +8,7 @@ Two modes:
 * **Seeded** (``--seeded``): provider-free thin eval — coerce edge fixtures
   plus a ScriptedLM ``Predict`` pass over the canonical set. Runs fully on
   local SSD; no live API.
-* **Score** (when a provider is configured via the same ``MODAL_*`` /
+* **Score** (when a provider is configured via the same
   ``FLEET_AGENT_LLM_*`` settings the server uses): route every example with
   the production ``ToolRoutingSignature`` predictor under the production LM
   builder, score it with the least-privilege metric, and print a per-route
@@ -64,9 +64,7 @@ def _resolve_lm() -> dspy.BaseLM | None:
 
     settings = get_settings()
     has_credentials = (
-        settings.modal_model_id is not None
-        or settings.llm_api_key is not None
-        or settings.llm_base_url is not None
+        settings.llm_api_key is not None or settings.llm_base_url is not None
     )
     if not has_credentials:
         return None
@@ -247,7 +245,7 @@ def _run_routing(
     lm = _resolve_lm()
     if lm is None:
         print(
-            "no provider configured (MODAL_* or FLEET_AGENT_LLM_*); "
+            "no provider configured (FLEET_AGENT_LLM_*); "
             "dataset validated without scoring"
         )
         if not register_dataset:

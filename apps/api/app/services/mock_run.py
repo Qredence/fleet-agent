@@ -6,28 +6,18 @@ apps/api/tests keep them coherent with the AgentWorkspaceState schema.
 """
 
 import json
-from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 
 from ag_ui.core import BaseEvent, Event, RunAgentInput, StateSnapshotEvent
 from pydantic import TypeAdapter
 
 from app.contracts.agent_state import AgentWorkspaceState
-from app.services.run_input import last_user_text
+from app.contracts.paths import CONTRACTS_DIR
+from app.contracts.replay import TimedEvent
+from app.kernel.run_input import last_user_text
 
-_FIXTURES_DIR = (
-    Path(__file__).resolve().parents[4] / "packages" / "contracts" / "fixtures"
-)
+_FIXTURES_DIR = CONTRACTS_DIR / "fixtures"
 _EVENT_ADAPTER: TypeAdapter[BaseEvent] = TypeAdapter(Event)
-
-
-@dataclass(frozen=True)
-class TimedEvent:
-    """One fixture line: emit `event` `at_ms` after the stream starts."""
-
-    at_ms: int
-    event: BaseEvent
 
 
 @lru_cache(maxsize=8)

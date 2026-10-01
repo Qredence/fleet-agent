@@ -120,10 +120,12 @@ server retains the model history needed for continuation.
 ## Repository map
 
 ```text
-apps/web/          React 19 + Vite workspace and browser tests
-apps/api/          FastAPI API, DSPy engine, AG-UI bridge, persistence, migrations
-packages/contracts Public agent-state schema and deterministic fixtures
-compose.yaml       Local PostgreSQL service
+apps/web/            React 19 + Vite workspace and browser tests
+apps/api/            FastAPI API, DSPy engine, AG-UI bridge, persistence, offline evals
+packages/contracts/  Public protocol contracts (JSON Schema, constants, fixtures)
+configs/             Prime Intellect eval/GEPA/training matrices (external CLI configs)
+scripts/             End-to-end fixture and engine checks
+compose.yaml         Local PostgreSQL service
 ```
 
 ## Requirements
@@ -188,7 +190,7 @@ portal's own origin. Same-origin requests need no CORS entry.
 
 ## Agent modes and configuration
 
-The API defaults to deterministic fixture mode:
+The API defaults to engine mode; fixture mode is an explicit local/CI choice:
 
 - `fixtures` replays canonical streams from `packages/contracts/fixtures` and
   does not need an LLM provider key.
@@ -202,12 +204,6 @@ FLEET_AGENT_LLM_MODEL=openai/gpt-4o-mini
 FLEET_AGENT_LLM_API_KEY=replace-me
 # Optional OpenAI-compatible endpoint:
 # FLEET_AGENT_LLM_BASE_URL=https://your-provider.example/v1
-# Local default provider (takes precedence over FLEET_AGENT_LLM_* when the
-# model id is set; browser provider profiles still take precedence). Model ids
-# are sent to custom gateways verbatim, so bare gateway ids work as-is:
-# MODAL_API_KEY=replace-me
-# MODAL_BASE_URL=https://fleet-proxy.modal.run/v1
-# MODAL_MODEL_ID=zai-org/GLM-5.3-Flash
 # Optional web tools:
 # FLEET_AGENT_TAVILY_API_KEY=replace-me
 ```
@@ -220,9 +216,16 @@ format, messages format). Profiles stay in the browser and are sent per run as
 `X-LLM-*` headers on the agent endpoint only; the server validates base URLs
 (http/https, no private hosts unless `FLEET_AGENT_LLM_ALLOW_PRIVATE_BASE_URLS`
 is enabled for local LLM servers) and never logs keys. OpenRouter remains a
-one-click OAuth preset. Provider resolution per run: browser profile, then the
-`MODAL_API_KEY` / `MODAL_BASE_URL` / `MODAL_MODEL_ID` trio (when the model id
-is set), then `FLEET_AGENT_LLM_*`.
+one-click OAuth preset. Provider resolution per run: browser profile, then
+`FLEET_AGENT_LLM_*`. Hosted providers use native DSPy `engine="lm15"`; custom
+base URLs use a run-owned native gateway router. See
+[the upgrade and migration notes](docs/backend-dependency-upgrade.md).
+
+The browser reads the authenticated `/api/agent/capabilities` endpoint before
+runs. Fixture mode works without provider setup and sends no provider headers;
+engine mode requires an explicit configured browser profile. Capability lookup
+failures block submission. Diagnostics and request ceilings apply to both hosted
+native providers and custom gateways.
 
 API settings load from `apps/api/.env`; environment variables override that
 file. The checked-in example contains the complete list. Common settings are:
@@ -233,10 +236,9 @@ file. The checked-in example contains the complete list. Common settings are:
 | `FLEET_AGENT_ROUTER_STATE_PATH` | Promoted router artifact from `python -m evals.optimize`. Unset keeps the baseline routing contract. |
 | `FLEET_AGENT_CORS_ORIGINS` | JSON array of exact allowed browser origins. |
 | `FLEET_AGENT_DATABASE_URL` | PostgreSQL connection URL. |
-| `FLEET_AGENT_LLM_MODEL` | Model identifier. With `FLEET_AGENT_LLM_BASE_URL` set it is sent to the gateway verbatim; without a base URL it follows DSPy/LiteLLM hosted-provider routing (`openai/gpt-4o-mini`). |
+| `FLEET_AGENT_LLM_MODEL` | Model identifier. With `FLEET_AGENT_LLM_BASE_URL` set it is sent to the gateway verbatim; without a base URL it follows native DSPy hosted-provider routing (`openai/gpt-4o-mini`). |
 | `FLEET_AGENT_LLM_BASE_URL` | Optional OpenAI-compatible provider endpoint. |
 | `FLEET_AGENT_LLM_API_KEY` | Provider credential; never log it. |
-| `MODAL_API_KEY`, `MODAL_BASE_URL`, `MODAL_MODEL_ID` | Local default provider trio; takes precedence over `FLEET_AGENT_LLM_*` when the model id is set. |
 | `FLEET_AGENT_LLM_ALLOW_PRIVATE_BASE_URLS` | Allows browser provider profiles to target local LLM servers (off by default). |
 | `FLEET_AGENT_TAVILY_API_KEY` | Enables bounded web search and page fetch tools. |
 | `FLEET_AGENT_WORKSPACE_ROOT` | Explicit filesystem root for workspace tools; development defaults to the repository root. |

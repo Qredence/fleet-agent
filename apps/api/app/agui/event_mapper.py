@@ -14,37 +14,16 @@ from ag_ui.core import (
 )
 
 from app.agent.instrumented import truncate_result
-from app.agui.trace_reducer import JsonPatchOp, TraceReducer
+from app.agui.trace_reducer import TraceReducer
+from app.agui.types import AnyDomainEvent, JsonPatchOp
 from app.contracts.domain import (
-    ArtifactFailed,
     ArtifactReady,
-    ArtifactStarted,
     FinalFieldsReady,
     InlineDataEvent,
-    SourceDiscovered,
-    StepCompleted,
-    StepFailed,
-    StepStarted,
     SynthesisTokenDelta,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
-)
-
-AnyDomainEvent = (
-    InlineDataEvent
-    | ToolStarted
-    | ToolCompleted
-    | ToolFailed
-    | SourceDiscovered
-    | StepStarted
-    | StepCompleted
-    | StepFailed
-    | ArtifactStarted
-    | ArtifactReady
-    | ArtifactFailed
-    | FinalFieldsReady
-    | SynthesisTokenDelta
 )
 
 _TEXT_CHUNK_SIZE = 24

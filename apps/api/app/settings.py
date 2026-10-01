@@ -20,8 +20,6 @@ class Settings(BaseSettings):
         env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
-        # Provider default fields use validation_alias (MODAL_*), so allow
-        # constructing Settings(modal_model_id=...) by field name in tests.
         populate_by_name=True,
     )
 
@@ -34,7 +32,7 @@ class Settings(BaseSettings):
 
     llm_model: str = Field(
         default="openai/gpt-4o-mini",
-        description="LiteLLM model identifier for the DSPy engine.",
+        description="Native DSPy model identifier for the DSPy engine.",
     )
     llm_base_url: str | None = Field(
         default=None,
@@ -48,6 +46,9 @@ class Settings(BaseSettings):
         default=None,
         description="Provider API key. Never logged or returned by the API.",
     )
+    provider_diagnostics_enabled: bool = False
+    provider_request_limit: int | None = Field(default=None, ge=1, le=32)
+
     llm_max_iters: int = Field(
         default=6,
         ge=1,
@@ -79,32 +80,6 @@ class Settings(BaseSettings):
             "URLs, e.g. a local LLM server. Off by default: the browser must "
             "not be able to direct the server at internal addresses."
         ),
-    )
-    modal_api_key: SecretStr | None = Field(
-        default=None,
-        description=(
-            "Default provider API key for local runs (reads MODAL_API_KEY). "
-            "Server-side default when the browser sends no provider override; "
-            "never logged or returned by the API."
-        ),
-        validation_alias="MODAL_API_KEY",
-    )
-    modal_base_url: str | None = Field(
-        default=None,
-        description=(
-            "Default OpenAI-compatible endpoint base URL (reads MODAL_BASE_URL), "
-            "e.g. a Modal proxy gateway."
-        ),
-        validation_alias="MODAL_BASE_URL",
-    )
-    modal_model_id: str | None = Field(
-        default=None,
-        description=(
-            "Default model identifier (reads MODAL_MODEL_ID), sent to the "
-            "gateway verbatim. When set, the MODAL_* trio takes precedence "
-            "over FLEET_AGENT_LLM_* as the server-side default provider."
-        ),
-        validation_alias="MODAL_MODEL_ID",
     )
     openrouter_http_referer: str | None = Field(
         default=None,

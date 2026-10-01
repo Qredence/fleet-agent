@@ -24,6 +24,7 @@ from app.contracts.domain import (
     ArtifactStarted,
     SourceDiscovered,
 )
+from app.kernel.run_input import extract_message_text
 from app.persistence.branch import nearest_anchor
 from app.persistence.models import DspyHistory, Message, Run, Thread
 from app.persistence.repositories import (
@@ -35,9 +36,12 @@ from app.persistence.repositories import (
     RunStatesRepository,
     SourcesRepository,
 )
-from app.services.run_input import extract_message_text
 
-AnyDomainEvent = ArtifactStarted | ArtifactReady | ArtifactFailed | SourceDiscovered
+# The subset of domain events this layer persists (the full union lives in
+# app.agui.types; tool/step events are reduced into state instead).
+PersistedDomainEvent = (
+    ArtifactStarted | ArtifactReady | ArtifactFailed | SourceDiscovered
+)
 
 logger = logging.getLogger(__name__)
 HISTORY_SCHEMA_VERSION = 1
@@ -510,7 +514,7 @@ class RunPersistence:
         )
 
     async def record_domain_event(
-        self, event: AnyDomainEvent, *, thread_id: str, run_id: str
+        self, event: PersistedDomainEvent, *, thread_id: str, run_id: str
     ) -> None:
         """Persist sources/artifacts as they are discovered mid-run."""
 

@@ -80,6 +80,29 @@ async def _false() -> bool:
     return False
 
 
+async def test_provider_rejection_terminal_is_safe_and_identifies_run():
+    from ag_ui.core import RunAgentInput
+
+    def rejected_builder(bus, *, thread_id, **kwargs):
+        del bus, thread_id, kwargs
+        raise dspy.LMInvalidRequestError("private provider payload user_seeded")
+
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip())
+        async for chunk in LiveDSPyCoordinator().stream(
+            input_data=RunAgentInput.model_validate(run_input(run="fixture-rejected")),
+            engine_builder=rejected_builder,
+            accept="text/event-stream",
+            is_disconnected=lambda: _false(),
+        )
+    ]
+    terminal = [e for e in events if e["type"] == "RUN_ERROR"]
+    assert len(terminal) == 1
+    assert terminal[0]["code"] == "provider_request_rejected"
+    assert "Run ID: fixture-rejected." in terminal[0]["message"]
+    assert "private provider" not in json.dumps(events)
+
+
 def apply_state(events: list[dict]) -> dict:
     import jsonpatch
 

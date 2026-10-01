@@ -12,9 +12,12 @@ import asyncio
 import logging
 import re
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Literal, Protocol
 
+import anyio
 import dspy
 from dspy.streaming.messages import StreamResponse
 from dspy.utils.callback import BaseCallback
@@ -23,7 +26,7 @@ from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 from app.agent.event_bus import RunEventBus
 from app.agent.provider import ProviderOverride
 from app.agent.synthesis_stream import synthesis_stream_listeners
-from app.services.content_safety import (
+from app.kernel.content_safety import (
     StreamingScrubber,
     scrub_public_lines,
     scrub_public_text,
@@ -274,6 +277,20 @@ def _map_result(prediction: dspy.Prediction) -> AgentRunResult:
     )
 
 
+class _ThreadedProgram(dspy.Module):  # type: ignore[misc]
+    """Expose predictors while keeping cancellation outside the worker lifetime."""
+
+    def __init__(self, program: DspyProgram) -> None:
+        super().__init__()
+        self.program = program
+
+    async def acall(self, **kwargs: Any) -> dspy.Prediction:
+        with anyio.CancelScope(shield=True):
+            return await anyio.to_thread.run_sync(
+                partial(self.program, **kwargs), abandon_on_cancel=False
+            )
+
+
 class DspyAgentEngine:
     """Runs an application-owned DSPy program under a scoped DSPy context."""
 
@@ -299,7 +316,9 @@ class DspyAgentEngine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
-        return await asyncio.to_thread(self._run_sync, user_request, history, context)
+        return await anyio.to_thread.run_sync(
+            self._run_sync, user_request, history, context, abandon_on_cancel=False
+        )
 
     async def stream(
         self,
@@ -317,10 +336,17 @@ class DspyAgentEngine:
         accessing ``program.react.tools['submit']``: the AG-UI contract stays
         unchanged while the DSPy program remains a black box to the runtime.
         """
-        program = self._program_factory()
+        diagnostics = getattr(getattr(self._lm, "engine", None), "diagnostics", None)
+        if diagnostics is not None:
+            diagnostics.run_id = context.run_id
+        try:
+            program = self._program_factory()
+        except BaseException:
+            self._close_resources()
+            raise
         stream_fields = getattr(program, "synthesis_stream_fields", None)
         if not stream_fields:
-            result = await asyncio.to_thread(
+            result = await anyio.to_thread.run_sync(
                 self._run_sync_with_program,
                 program,
                 user_request,
@@ -336,10 +362,12 @@ class DspyAgentEngine:
             yield AgentStreamUpdate(kind="result", result=result)
             return
 
-        scrubbers = {field_name: StreamingScrubber() for field_name in stream_fields}
-        _install_forced_submit_compat(program)
-        callbacks = compose_callbacks(program, self._callbacks)
         try:
+            scrubbers = {
+                field_name: StreamingScrubber() for field_name in stream_fields
+            }
+            _install_forced_submit_compat(program)
+            callbacks = compose_callbacks(program, self._callbacks)
             prediction: dspy.Prediction | None = None
             try:
                 with dspy.context(
@@ -349,31 +377,35 @@ class DspyAgentEngine:
                     track_usage=True,
                 ):
                     streamer = dspy.streamify(
-                        program,
+                        _ThreadedProgram(program),
+                        is_async_program=True,
                         stream_listeners=synthesis_stream_listeners(stream_fields),
                         include_final_prediction_in_output_stream=True,
                     )
-                    async for value in streamer(
-                        user_request=user_request, history=history
-                    ):
-                        if isinstance(value, dspy.Prediction):
-                            prediction = value
-                        elif isinstance(value, StreamResponse):
-                            scrubber = scrubbers.get(value.signature_field_name)
-                            if scrubber is None:
-                                continue
-                            safe_delta = scrubber.push(value.chunk or "")
-                            if safe_delta:
-                                yield AgentStreamUpdate(
-                                    kind="token",
-                                    stream_field=value.signature_field_name,
-                                    delta=safe_delta,
-                                )
-            except (
-                ValueError,
-                AdapterParseError,
-                ContextWindowExceededError,
-            ) as exc:
+                    async with aclosing(
+                        streamer(user_request=user_request, history=history)
+                    ) as stream:
+                        async for value in stream:
+                            if isinstance(value, dspy.Prediction):
+                                prediction = value
+                            elif isinstance(value, StreamResponse):
+                                scrubber = scrubbers.get(value.signature_field_name)
+                                if scrubber is None:
+                                    continue
+                                safe_delta = scrubber.push(value.chunk or "")
+                                if safe_delta:
+                                    yield AgentStreamUpdate(
+                                        kind="token",
+                                        stream_field=value.signature_field_name,
+                                        delta=safe_delta,
+                                    )
+            except BaseException as exc:
+                # streamify can surface a worker's error while its task group
+                # unwinds cancellation. The worker has finished at this point;
+                # preserve cancellation before mapping any provider failure.
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise asyncio.CancelledError from None
                 mapped = _map_react_raise(exc)
                 if mapped is None:
                     raise
@@ -391,11 +423,7 @@ class DspyAgentEngine:
                     raise RuntimeError("streaming program ended without a prediction")
                 result = _map_result(prediction)
         finally:
-            if self._cleanup is not None:
-                try:
-                    self._cleanup()
-                except Exception:
-                    logger.exception("agent run resource cleanup failed")
+            self._close_resources()
 
         if result.answer is not None or result.process_summary is not None:
             yield AgentStreamUpdate(
@@ -420,6 +448,9 @@ class DspyAgentEngine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
+        diagnostics = getattr(getattr(self._lm, "engine", None), "diagnostics", None)
+        if diagnostics is not None:
+            diagnostics.run_id = context.run_id
         try:
             program = program or self._program_factory()
             _install_forced_submit_compat(program)
@@ -446,8 +477,12 @@ class DspyAgentEngine:
                     return mapped
             return _map_result(prediction)
         finally:
-            if self._cleanup is not None:
-                try:
-                    self._cleanup()
-                except Exception:
-                    logger.exception("agent run resource cleanup failed")
+            self._close_resources()
+
+    def _close_resources(self) -> None:
+        cleanup, self._cleanup = self._cleanup, None
+        if cleanup is not None:
+            try:
+                cleanup()
+            except Exception:
+                logger.exception("agent run resource cleanup failed")

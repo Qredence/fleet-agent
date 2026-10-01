@@ -16,6 +16,7 @@ from typing import Any
 
 from app.agent.engine import AgentRunResult
 from app.agent.instrumented import preview
+from app.agui.types import JsonPatchOp
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
@@ -28,9 +29,7 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
-from app.services.source_identity import canonical_source_key
-
-JsonPatchOp = dict[str, Any]
+from app.kernel.identity import canonical_source_key
 
 
 def _utc_now() -> str:
@@ -466,7 +465,7 @@ class TraceReducer:
         # is unambiguous, but disambiguate two distinct canonical documents
         # that happen to reuse an id in one thread.
         if any(source.get("id") == source_id for source in self.state["sources"]):
-            from app.services.source_identity import disambiguated_source_id
+            from app.kernel.identity import disambiguated_source_id
 
             source_id = disambiguated_source_id(source_id, key)
         entry = {

@@ -1,4 +1,4 @@
-# Fleet Agent DSPy architecture (DSPy 3.3.1)
+# Fleet Agent DSPy architecture (DSPy 3.4.0)
 
 ## Goal
 
@@ -41,16 +41,16 @@ FleetAgent(dspy.Module)
             dspy.streamify + StreamListener (ChatAdapter)
 ```
 
-## RLM availability in 3.3.1
+## RLM availability in 3.4.0
 
-DSPy 3.3.1 exposes `RLM` at the package root as `dspy.RLM`; the implementation
+DSPy 3.4.0 exposes `RLM` at the package root as `dspy.RLM`; the implementation
 is also available at `dspy/predict/rlm.py` for explicit imports. Fleet Agent's
 code does not depend on RLM — the routed `FleetAgent` uses `ReActV2` only — but
 these notes keep older RLM examples aligned with the pinned DSPy version.
 
 ## Why keep ReActV2
 
-DSPy 3.3.1 marks `ReActV2` experimental, but it is the relevant 3.3 agent
+DSPy 3.4.0 marks `ReActV2` experimental, but it is the relevant agent
 primitive for Fleet Agent because it uses structured `dspy.History`, explicit
 `dspy.Tool` objects, `dspy.ToolCalls`, native function calling, and a typed
 `submit` tool for final outputs.
@@ -188,7 +188,7 @@ it.
 
 ## Async and MCP boundary
 
-DSPy 3.3.1 `ReActV2` executes tools synchronously. `dspy.Tool.from_mcp_tool`
+DSPy 3.4.0 `ReActV2` executes tools synchronously. `dspy.Tool.from_mcp_tool`
 creates async tools, so MCP tools must not be inserted into this program by
 turning on implicit async-to-sync conversion. Under FastAPI's running event
 loop that conversion can fail and it violates the current synchronous contract.
@@ -214,7 +214,7 @@ The runtime owns:
 - cleanup
 - mapping `dspy.Prediction` to `AgentRunResult`
 
-The runtime no longer mutates `agent.tools["submit"].func`. DSPy 3.3.1 does not
+The runtime no longer mutates `agent.tools["submit"].func`. DSPy 3.4.0 does not
 publish that as an extension point. The default program now does true token
 streaming on the public DSPy path (`dspy.streamify` + `StreamListener`); see
 the next section.
@@ -225,13 +225,12 @@ the next section.
 `StreamListener`s bound to the synthesis predictor's public output fields
 (`answer`, `process_summary`). The pieces:
 
-- `OpenAICompatibleLM.forward` watches `dspy_settings.send_stream`. When a
-  listener-targeted predict opens a stream, the gateway request is sent with
-  `stream: true`, each content delta is wrapped as a litellm-shaped chunk
-  carrying the caller's `predict_id` and pushed through
-  `sync_send_to_stream`, and the full completion is rebuilt from the
-  accumulated content so the adapter's parse path is unchanged. Streamed
-  responses are never served from the DSPy cache.
+- `dspy.LM` uses a native `lm15` engine. A run-owned gateway router declares
+  endpoint, credentials and wire policy; DSPy converts canonical responses and
+  stream events for its adapters/listeners. Application code does not assemble
+  provider SDK responses or LiteLLM chunks. Caching is disabled per run.
+- The async program wrapper waits for its thread to unwind on cancellation,
+  timeout or disconnect before closing the native LM/router and web clients.
 - Synthesis runs under a scoped `dspy.context(adapter=ChatAdapter())`. The
   JSON adapter leaks its section boilerplate into streamed fields; ChatAdapter
   reconstructs fields exactly from token deltas.
@@ -319,7 +318,7 @@ not run yet - a boot whose database was unreachable, which now degrades to a war
 
 ## Secret scrubbing (batch and streaming)
 
-`app/services/content_safety.py` masks high-precision credential patterns
+`app/kernel/content_safety.py` masks high-precision credential patterns
 (provider keys, AWS/Google/GitHub/Slack tokens, JWTs, Bearer headers, PEM
 blocks, explicit credential assignments) at every boundary where free text
 crosses to the browser or persistent public state: final result fields, tool
@@ -356,7 +355,7 @@ or a deletion that needs the shell because no delete tool exists).
 
 The metric scores least privilege: exact route 1.0, over-selection 0.35,
 under-selection 0.0 (the run cannot succeed). `routing_metric` returns the
-score/feedback prediction that satisfies dspy 3.3.1's GEPA metric contract, so
+score/feedback prediction that satisfies dspy 3.4.0's GEPA metric contract, so
 `compile_gepa_candidate` can optimize the router offline; `routing_score` is
 its numeric projection for `dspy.Evaluate`.
 
@@ -374,7 +373,7 @@ Run it without any provider (CI mode - dataset structure only):
 cd apps/api && uv run python -m evals.run --suite routing --validate
 ```
 
-With provider credentials configured (`MODAL_*` or `FLEET_AGENT_LLM_*`), the
+With provider credentials configured (`FLEET_AGENT_LLM_*`), the
 same command scores every example through the production router predictor and
 prints a per-route miss breakdown, exiting nonzero below `--min-accuracy`
 (default 0.9). GEPA compilation stays an explicit, separate offline step.

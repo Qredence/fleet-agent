@@ -102,9 +102,7 @@ def create_app() -> FastAPI:
             "Accept",
             "Content-Type",
             "X-API-Key",
-            "X-OpenRouter-Key",
-            "X-OpenRouter-Model",
-            # BYOK provider overrides parsed by app/api/provider.py and sent
+            # BYOK provider overrides parsed by app/agent/provider.py and sent
             # by the web client on every browser-owned provider run.
             "X-LLM-Key",
             "X-LLM-Base-Url",

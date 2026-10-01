@@ -11,20 +11,18 @@ import fnmatch
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 import tempfile
-import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import dspy
 
 from app.agent.instrumented import preview
 from app.agent.tooling import create_dspy_tool
+from app.agent.tools.process import GREP_MATCHER_SCRIPT, read_bounded_process_output
 
 _BLOCKED_DIRS = frozenset(
     {
@@ -70,41 +68,6 @@ _GREP_TIMEOUT_SECONDS = 10
 # reachable from model-controlled shell commands. Keep the allowlist minimal
 # and deterministic; tools outside it fail with "command not found".
 _BASH_PATH_ALLOWLIST = "/usr/bin:/bin:/usr/local/bin"
-
-# Fixed matcher run with ``sys.executable -I -c``: the model-controlled
-# pattern is matched inside a short-lived process group so a pathological
-# regular expression is killed by the timeout instead of pinning an engine
-# worker thread forever (CPython cannot interrupt a running ``re.search``).
-_GREP_MATCHER_SCRIPT = r"""
-import json
-import re
-import sys
-
-payload = json.loads(sys.stdin.read())
-expression = re.compile(payload["pattern"], payload["flags"])
-limit = payload["limit"]
-size_cap = payload["size_cap"]
-written = 0
-for path, relative in payload["files"]:
-    try:
-        with open(path, "rb") as stream:
-            raw = stream.read()
-    except OSError:
-        continue
-    if len(raw) > size_cap or b"\x00" in raw:
-        continue
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        continue
-    for number, line in enumerate(text.splitlines(), start=1):
-        if expression.search(line) is not None:
-            print(f"{relative}:{number}: {line}")
-            written += 1
-            if written >= limit:
-                sys.exit(0)
-sys.exit(0)
-"""
 
 
 @dataclass(frozen=True)
@@ -206,8 +169,8 @@ class WorkspaceTools:
         """Search UTF-8 workspace text files for matching lines.
 
         Matching runs in a process-isolated helper (see
-        ``_GREP_MATCHER_SCRIPT``) so the configured time budget is enforced
-        even against catastrophic-backtracking patterns.
+        ``process.GREP_MATCHER_SCRIPT``) so the configured time budget is
+        enforced even against catastrophic-backtracking patterns.
         """
         if not pattern or len(pattern) > _MAX_PATTERN_CHARS:
             raise ValueError("invalid grep pattern")
@@ -247,7 +210,7 @@ class WorkspaceTools:
             }
         ).encode("utf-8")
         process = subprocess.Popen(
-            [sys.executable, "-I", "-c", _GREP_MATCHER_SCRIPT],
+            [sys.executable, "-I", "-c", GREP_MATCHER_SCRIPT],
             cwd=self._root,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -263,7 +226,7 @@ class WorkspaceTools:
             # The helper died before consuming its input; fall through to
             # the bounded reader, which reaps it and returns its output.
             pass
-        stdout, _stderr, _truncated, timed_out = _read_bounded_process_output(
+        stdout, _stderr, _truncated, timed_out = read_bounded_process_output(
             process,
             max_bytes=self._policy.max_output_chars,
             timeout=_GREP_TIMEOUT_SECONDS,
@@ -382,7 +345,7 @@ class WorkspaceTools:
             stderr=subprocess.PIPE,
             start_new_session=True,
         )
-        stdout, stderr, truncated, timed_out = _read_bounded_process_output(
+        stdout, stderr, truncated, timed_out = read_bounded_process_output(
             process, max_bytes=self._policy.max_output_chars, timeout=timeout
         )
         if timed_out:
@@ -576,102 +539,3 @@ class WorkspaceTools:
     def _require_bash(self) -> None:
         if not self._policy.allow_bash:
             raise PermissionError("workspace bash tool is disabled")
-
-
-def _read_bounded_process_output(
-    process: subprocess.Popen[bytes], *, max_bytes: int, timeout: int
-) -> tuple[bytes, bytes, bool, bool]:
-    """Read both pipes with a hard cap and reap the process after termination."""
-
-    if process.stdout is None or process.stderr is None:
-        raise RuntimeError("workspace command pipes were not created")
-
-    try:
-        process_group_id = os.getpgid(process.pid)
-    except ProcessLookupError:
-        process_group_id = process.pid
-
-    lock = threading.Lock()
-    kill_lock = threading.Lock()
-    stdout = bytearray()
-    stderr = bytearray()
-    total = 0
-    truncated = False
-    killed = False
-
-    def kill_group_once() -> None:
-        nonlocal killed
-        with kill_lock:
-            if killed:
-                return
-            killed = True
-            try:
-                os.killpg(process_group_id, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-
-    def read_stream(stream: Any, target: bytearray) -> None:
-        nonlocal total, truncated
-        try:
-            while True:
-                chunk = stream.read(4096)
-                if not chunk:
-                    return
-                should_kill = False
-                with lock:
-                    remaining = max(0, max_bytes - total)
-                    if remaining:
-                        target.extend(chunk[:remaining])
-                        total += min(len(chunk), remaining)
-                    if len(chunk) > remaining or total >= max_bytes:
-                        truncated = True
-                        should_kill = True
-                if should_kill:
-                    # Continue draining until EOF after killing so the other
-                    # reader cannot block the parent on a full pipe.
-                    kill_group_once()
-        except (OSError, ValueError):
-            # Closing a pipe after the process group is killed is expected.
-            return
-        finally:
-            stream.close()
-
-    readers = [
-        threading.Thread(
-            target=read_stream, args=(process.stdout, stdout), daemon=True
-        ),
-        threading.Thread(
-            target=read_stream, args=(process.stderr, stderr), daemon=True
-        ),
-    ]
-    for reader in readers:
-        reader.start()
-
-    timed_out = False
-    try:
-        try:
-            process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            kill_group_once()
-    finally:
-        if process.poll() is None:
-            kill_group_once()
-        # A child that inherited stdout/stderr can keep a reader alive after
-        # bash exits. Give normal commands a short grace period, then close
-        # those pipes and terminate the process group so this call cannot
-        # retain an unbounded reader or orphan a descendant.
-        for reader in readers:
-            reader.join(timeout=1.0)
-        if any(reader.is_alive() for reader in readers):
-            kill_group_once()
-            for stream in (process.stdout, process.stderr):
-                try:
-                    stream.close()
-                except OSError:
-                    pass
-            for reader in readers:
-                reader.join(timeout=1.0)
-        process.wait()
-
-    return bytes(stdout), bytes(stderr), truncated, timed_out

@@ -20,6 +20,7 @@ from app.agent.provider import ProviderOverrideError, parse_provider_override
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.agui.run_coordinator import RunCoordinator
 from app.api.deps import get_sessions
+from app.contracts.agent_capabilities import AgentCapabilities
 from app.contracts.error_codes import ERROR_MESSAGES
 from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.persistence.run_persistence import (
@@ -74,6 +75,13 @@ _SSE_HEADERS = {
 
 def get_engine_builder(request: Request) -> EngineBuilder:
     return cast(EngineBuilder, request.app.state.engine_builder)
+
+
+@router.get("/agent/capabilities", response_model=AgentCapabilities)
+async def agent_capabilities(request: Request) -> AgentCapabilities:
+    """Report the active run mode without disclosing provider configuration."""
+    settings: Settings = request.app.state.settings
+    return AgentCapabilities(agent_mode=settings.agent_mode)
 
 
 @router.post("/agent")

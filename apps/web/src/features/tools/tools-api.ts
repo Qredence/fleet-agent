@@ -11,9 +11,9 @@ export interface ToolCatalogEntry {
     | 'workspace_write'
     | 'shell'
   read_only: boolean
-  idempotent: boolean
+  idempotent?: boolean
   parallelizable: boolean
-  timeout_seconds: number
+  timeout_seconds?: number
   requires_approval: boolean
 }
 

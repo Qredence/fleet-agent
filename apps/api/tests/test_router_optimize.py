@@ -13,7 +13,6 @@ from pathlib import Path
 
 import dspy
 import pytest
-from dspy.utils.dummies import DummyLM
 
 from app.agent.program import FleetAgent
 from app.agent.routing import (
@@ -28,7 +27,7 @@ from app.agent.tooling import create_dspy_tool
 from app.agent.tools import search_docs
 from evals.agent_tool_routing import ROUTING_EXAMPLES
 from evals.optimize import RouterProgram, _report, main, split_examples
-from tests.helpers.scripted_lm import _scripted_completion
+from tests.helpers.scripted_lm import ScriptedEngine
 
 # --- the split --------------------------------------------------------------
 
@@ -145,7 +144,7 @@ def test_fleet_agent_uses_promoted_instructions_when_given_them() -> None:
 # --- the gate, the artifact, and promotion ----------------------------------
 
 
-class _PromptAwareLM(DummyLM):
+class _PromptAwareLM(dspy.LM):
     """Routes correctly only when the router carries the optimized rules.
 
     The router's instructions are part of the prompt, so a prompt that lacks the
@@ -154,18 +153,7 @@ class _PromptAwareLM(DummyLM):
     """
 
     def __init__(self) -> None:
-        super().__init__([{"route": "direct"}] * 400)
-
-    def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-        del kwargs
-        text = str(prompt or "") + str(messages or "")
-        if "OPTIMIZED ROUTER RULES" in text:
-            route = self._expected(text)
-        else:
-            # No promoted rules: answer with the least-privileged profile every
-            # time, which is wrong for every example that needs more capability.
-            route = "direct"
-        return _scripted_completion([], json.dumps({"route": route}))
+        super().__init__("fixture", engine=RuleEngine(), cache=False)
 
     @staticmethod
     def _expected(text: str) -> str:
@@ -396,3 +384,19 @@ def test_provider_failure_exits_cleanly_and_is_logged(
     assert "optimization failed" in capsys.readouterr().err
     assert logged.get("outcome") == "error"
     assert not (tmp_path / "artifacts").exists()
+
+
+class RuleEngine(ScriptedEngine):
+    def __init__(self):
+        super().__init__([])
+
+    def complete(self, request):
+        text = str(request.system or "") + str([m.text for m in request.messages])
+        route = (
+            _PromptAwareLM._expected(text)
+            if "OPTIMIZED ROUTER RULES" in text
+            else "direct"
+        )
+        return ScriptedEngine([{"content": json.dumps({"route": route})}]).complete(
+            request
+        )

@@ -1,0 +1,10 @@
+{
+  "openRouter": {
+    "apiBaseUrl": "https://openrouter.ai/api/v1"
+  },
+  "openCodeZen": {
+    "apiBaseUrl": "https://opencode.ai/zen/v1"
+  },
+  "responseFormats": ["native_function_calling", "json_tool_calls"],
+  "messagesFormats": ["system_role", "developer_role"]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentCapabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_mode"
+  ],
+  "properties": {
+    "agent_mode": {
+      "type": "string",
+      "enum": [
+        "fixtures",
+        "engine"
+      ]
+    }
+  }
+}

@@ -9,25 +9,30 @@
  * typed messages).
  */
 
+import providerContract from '@fleet-agent/contracts/provider.json'
+
 import {
   getApiKey as getOpenRouterApiKey,
+  onAuthChange as onOpenRouterAuthChange,
   getSelectedModel as getOpenRouterSelectedModel,
   isCustomModelEnabled as isOpenRouterCustomModelEnabled,
 } from '@/features/providers/openrouter-auth'
 import {
   getApiKey as getOpenCodeZenApiKey,
+  onAuthChange as onOpenCodeZenAuthChange,
   getSelectedModel as getOpenCodeZenSelectedModel,
   isCustomModelEnabled as isOpenCodeZenCustomModelEnabled,
 } from '@/features/providers/opencode-zen-auth'
 
 export const PROVIDERS_STORAGE_KEY = 'fleet_providers_v1'
 export const OPENROUTER_PROFILE_ID = 'openrouter'
-export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+export const OPENROUTER_BASE_URL = providerContract.openRouter.apiBaseUrl
 export const OPENCODE_ZEN_PROFILE_ID = 'opencode-zen'
-export const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1'
-export const SERVER_DEFAULT_ID = 'server'
+export const OPENCODE_ZEN_BASE_URL = providerContract.openCodeZen.apiBaseUrl
 
 export type ChatCompletionFormat = 'openai-chat-completions'
+// These unions are static TypeScript types; a contract test keeps them in sync
+// with the canonical lists in packages/contracts/provider.json.
 export type ResponseFormat = 'native_function_calling' | 'json_tool_calls'
 export type MessagesFormat = 'system_role' | 'developer_role'
 
@@ -47,8 +52,8 @@ export interface ProviderProfile {
 export interface ProviderStore {
   version: 1
   profiles: ProviderProfile[]
-  /** SERVER_DEFAULT_ID, OPENROUTER_PROFILE_ID, or a custom profile id. */
-  activeProviderId: string
+  /** Explicit browser selection; null means setup is required. */
+  activeProviderId: string | null
 }
 
 type ProvidersListener = () => void
@@ -57,8 +62,12 @@ const listeners = new Set<ProvidersListener>()
 /** Subscribes to provider selection/profile changes in this tab and others. */
 export const onProvidersChange = (fn: ProvidersListener): (() => void) => {
   listeners.add(fn)
+  const unsubscribeOpenRouter = onOpenRouterAuthChange(fn)
+  const unsubscribeOpenCodeZen = onOpenCodeZenAuthChange(fn)
   return () => {
     listeners.delete(fn)
+    unsubscribeOpenRouter()
+    unsubscribeOpenCodeZen()
   }
 }
 
@@ -74,7 +83,7 @@ const notify = () => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
-    if (event.key === PROVIDERS_STORAGE_KEY) {
+    if (event.key === null || event.key === PROVIDERS_STORAGE_KEY) {
       notify()
     }
   })
@@ -101,19 +110,17 @@ const openCodeZenProfile = (): ProviderProfile => ({
 const defaultStore = (): ProviderStore => ({
   version: 1,
   profiles: [openRouterProfile(), openCodeZenProfile()],
-  activeProviderId:
-    typeof window !== 'undefined' && getOpenRouterApiKey()
-      ? OPENROUTER_PROFILE_ID
-      : SERVER_DEFAULT_ID,
+  activeProviderId: null,
 })
 
-const isValidStore = (value: unknown): value is ProviderStore => {
+type StoredProviderStore = Omit<ProviderStore, 'activeProviderId'> & { activeProviderId?: unknown }
+
+const isValidStore = (value: unknown): value is StoredProviderStore => {
   if (typeof value !== 'object' || value === null) return false
   const store = value as Partial<ProviderStore>
   return (
     store.version === 1 &&
     Array.isArray(store.profiles) &&
-    typeof store.activeProviderId === 'string' &&
     store.profiles.every(
       (profile) =>
         typeof profile === 'object' &&
@@ -129,7 +136,7 @@ const isValidStore = (value: unknown): value is ProviderStore => {
   )
 }
 
-/** Loads the provider store, migrating legacy OpenRouter storage on first use. */
+/** Loads profiles and normalizes legacy or invalid selections without discarding credentials. */
 export function loadProviderStore(): ProviderStore {
   if (typeof window === 'undefined') return defaultStore()
   try {
@@ -140,7 +147,28 @@ export function loadProviderStore(): ProviderStore {
       return store
     }
     const parsed: unknown = JSON.parse(raw)
-    if (isValidStore(parsed)) return parsed
+    if (isValidStore(parsed)) {
+      const validIds = new Set([
+        OPENROUTER_PROFILE_ID,
+        OPENCODE_ZEN_PROFILE_ID,
+        ...parsed.profiles.map((profile) => profile.id),
+      ])
+      const activeProviderId =
+        typeof parsed.activeProviderId === 'string' &&
+        parsed.activeProviderId !== 'server' &&
+        validIds.has(parsed.activeProviderId)
+          ? parsed.activeProviderId
+          : null
+      const store: ProviderStore = { ...parsed, activeProviderId }
+      if (activeProviderId !== parsed.activeProviderId) {
+        try {
+          localStorage.setItem(PROVIDERS_STORAGE_KEY, JSON.stringify(store))
+        } catch {
+          // Keep the normalized profiles usable even when storage is read-only.
+        }
+      }
+      return store
+    }
   } catch {
     // Corrupt storage falls through to a fresh store
   }
@@ -170,27 +198,55 @@ export function getProfiles(): ProviderProfile[] {
   return profiles
 }
 
-export function getActiveProviderId(): string {
-  const store = loadProviderStore()
-  const ids = new Set(getProfiles().map((profile) => profile.id))
-  ids.add(SERVER_DEFAULT_ID)
-  return ids.has(store.activeProviderId)
-    ? store.activeProviderId
-    : SERVER_DEFAULT_ID
+export function getActiveProviderId(): string | null {
+  return loadProviderStore().activeProviderId
 }
 
 export function getActiveProfile(): ProviderProfile | null {
-  const activeId = getActiveProviderId()
-  if (activeId === SERVER_DEFAULT_ID) return null
-  return getProfiles().find((profile) => profile.id === activeId) ?? null
+  return getProfiles().find((profile) => profile.id === getActiveProviderId()) ?? null
 }
 
-export function setActiveProviderId(id: string): void {
+export function setActiveProviderId(id: string | null): void {
   const store = loadProviderStore()
-  const ids = new Set(getProfiles().map((profile) => profile.id))
-  ids.add(SERVER_DEFAULT_ID)
-  if (!ids.has(id)) return
+  if (id !== null && !getProfiles().some((profile) => profile.id === id)) return
   saveProviderStore({ ...store, activeProviderId: id })
+}
+
+export interface ProviderReadiness {
+  ready: boolean
+  message: string
+}
+
+/** Shared readiness for selectors, composers, and every browser agent POST. */
+export function getProviderReadiness(
+  id: string | null = getActiveProviderId(),
+): ProviderReadiness {
+  const profile = getProfiles().find((entry) => entry.id === id)
+  if (!profile) {
+    return {
+      ready: false,
+      message: 'Choose a provider in Settings → Providers before sending a message.',
+    }
+  }
+  const key = profile.id === OPENROUTER_PROFILE_ID
+    ? getOpenRouterApiKey()
+    : profile.id === OPENCODE_ZEN_PROFILE_ID
+      ? getOpenCodeZenApiKey()
+      : profile.apiKey
+  if (!key?.trim() || !profile.baseUrl?.trim()) {
+    return {
+      ready: false,
+      message: `${profile.name} needs setup. Add an API key and endpoint in Settings → Providers.`,
+    }
+  }
+  return { ready: true, message: '' }
+}
+
+export class ProviderNotReadyError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProviderNotReadyError'
+  }
 }
 
 /**
@@ -251,7 +307,7 @@ function buildPresetProfile(
 }
 
 /**
- * Removes a custom profile; deleting the active one falls back to server.
+ * Removes a custom profile; deleting the active one clears selection.
  * Built-in preset profiles (OpenRouter, OpenCode Zen) cannot be removed:
  * they are owned by the registry and re-appear in `getProfiles()` when
  * missing, so removing them is a no-op.
@@ -261,18 +317,19 @@ export function removeProfile(id: string): void {
   const store = loadProviderStore()
   const profiles = store.profiles.filter((profile) => profile.id !== id)
   const activeProviderId =
-    store.activeProviderId === id ? SERVER_DEFAULT_ID : store.activeProviderId
+    store.activeProviderId === id ? null : store.activeProviderId
   saveProviderStore({ ...store, profiles, activeProviderId })
 }
 
 /** Agent-POST-only provider headers for the active profile. */
 export function getAgentProviderHeaders(): Record<string, string> {
-  const profile = getActiveProfile()
-  if (profile === null) return {}
+  const readiness = getProviderReadiness()
+  if (!readiness.ready) throw new ProviderNotReadyError(readiness.message)
+  const profile = getActiveProfile()!
 
   if (profile.id === OPENROUTER_PROFILE_ID) {
     const key = getOpenRouterApiKey()
-    if (!key) return {}
+    if (!key) throw new ProviderNotReadyError(getProviderReadiness().message)
     const headers: Record<string, string> = {
       'X-LLM-Key': key,
       'X-LLM-Base-Url': OPENROUTER_BASE_URL,
@@ -288,7 +345,7 @@ export function getAgentProviderHeaders(): Record<string, string> {
 
   if (profile.id === OPENCODE_ZEN_PROFILE_ID) {
     const key = getOpenCodeZenApiKey()
-    if (!key) return {}
+    if (!key) throw new ProviderNotReadyError(getProviderReadiness().message)
     const headers: Record<string, string> = {
       'X-LLM-Key': key,
       'X-LLM-Base-Url': OPENCODE_ZEN_BASE_URL,
@@ -302,10 +359,9 @@ export function getAgentProviderHeaders(): Record<string, string> {
     return headers
   }
 
-  if (!profile.apiKey?.trim() || !profile.baseUrl?.trim()) return {}
   const headers: Record<string, string> = {
-    'X-LLM-Key': profile.apiKey.trim(),
-    'X-LLM-Base-Url': profile.baseUrl.trim(),
+    'X-LLM-Key': profile.apiKey!.trim(),
+    'X-LLM-Base-Url': profile.baseUrl!.trim(),
     'X-LLM-Response-Format': profile.responseFormat,
     'X-LLM-Messages-Format': profile.messagesFormat,
   }

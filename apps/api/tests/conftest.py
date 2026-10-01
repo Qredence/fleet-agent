@@ -1,36 +1,42 @@
 """Shared fixtures for DB-backed tests.
 
-Tests NEVER touch the dev database (fleet_agent_test only), and NEVER inherit
-the developer's .env (redirected to /dev/null before any app module loads).
-The test database is created once via:
+Tests NEVER touch the dev database (fleet_agent_test or a disposable suffix),
+and NEVER inherit the developer's .env (redirected to /dev/null before
+any app module loads).
+Set FLEET_AGENT_TEST_DATABASE_URL before pytest to use a disposable database.
+The default test database can be created once via:
   docker compose exec -T postgres psql -U fleet -d postgres \
     -c "CREATE DATABASE fleet_agent_test;"
 """
 
 import os
+from urllib.parse import urlsplit
 
 _LLM_LIVE_KEYS = (
     "FLEET_AGENT_LLM_MODEL",
     "FLEET_AGENT_LLM_BASE_URL",
     "FLEET_AGENT_LLM_API_KEY",
 )
-# Ambient local provider defaults (Settings reads these unprefixed) must not
-# leak from the developer's shell into the test suite.
-_MODAL_AMBIENT_KEYS = (
-    "MODAL_API_KEY",
-    "MODAL_BASE_URL",
-    "MODAL_MODEL_ID",
-)
 # mlflow.set_tracking_uri()/set_experiment() EXPORT MLFLOW_TRACKING_URI and
 # MLFLOW_EXPERIMENT_ID into os.environ ("so subprocesses inherit them"), and
 # resolve_tracking_uri() reads the environment first. Without this purge, the
 # first test that resolves a store repoints every later test at a deleted tmp db.
 _MLFLOW_AMBIENT_PREFIX = "MLFLOW_"
-_TEST_DB_URL = "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test"
+_TEST_DB_URL = os.environ.get(
+    "FLEET_AGENT_TEST_DATABASE_URL",
+    "postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test",
+)
+_TEST_DB_NAME = urlsplit(_TEST_DB_URL).path.lstrip("/")
+if urlsplit(_TEST_DB_URL).scheme != "postgresql+asyncpg" or not (
+    _TEST_DB_NAME == "fleet_agent_test" or _TEST_DB_NAME.startswith("fleet_agent_test_")
+):
+    raise RuntimeError(
+        "FLEET_AGENT_TEST_DATABASE_URL must name a fleet_agent_test database"
+    )
 
 
 def purge_ambient_settings_env() -> None:
-    """Remove ambient FLEET_AGENT_*/MODAL_* from os.environ so Settings
+    """Remove ambient FLEET_AGENT_* from os.environ so Settings
     defaults dominate. RUN_ENGINE_LIVE_TEST=1 keeps LLM credentials (live
     provider smoke only)."""
     keep_llm = bool(os.environ.get("RUN_ENGINE_LIVE_TEST"))
@@ -40,9 +46,6 @@ def purge_ambient_settings_env() -> None:
         if keep_llm and key in _LLM_LIVE_KEYS:
             continue
         os.environ.pop(key, None)
-    if not keep_llm:
-        for key in _MODAL_AMBIENT_KEYS:
-            os.environ.pop(key, None)
     for key in [k for k in os.environ if k.startswith(_MLFLOW_AMBIENT_PREFIX)]:
         os.environ.pop(key, None)
     os.environ["FLEET_AGENT_ENV_FILE"] = "/dev/null"
@@ -65,7 +68,7 @@ from app.settings import Settings, get_settings  # noqa: E402
 get_settings.cache_clear()
 
 _SETTINGS = Settings(
-    database_url="postgresql+asyncpg://fleet:fleet@localhost:5432/fleet_agent_test"  # type: ignore[arg-type]
+    database_url=_TEST_DB_URL  # type: ignore[arg-type]
 )
 
 

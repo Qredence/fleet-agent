@@ -6,7 +6,7 @@ from pydantic import SecretStr
 from app.agent.engine import DspyAgentEngine
 from app.agent.event_bus import RunEventBus
 from app.agent.factory import build_dspy_engine, make_engine_builder
-from app.agent.openai_compatible import OpenAICompatibleLM
+from app.agent.gateway import GatewayEngine, close_lm
 from app.services.artifact_storage import LocalArtifactStorage
 from app.settings import Settings
 
@@ -61,20 +61,19 @@ def test_api_key_never_appears_in_reprs():
     assert "sk-test-123" not in repr(engine)
 
 
-def test_custom_base_url_uses_the_openai_compatible_client():
+def test_custom_base_url_uses_the_native_gateway():
     engine = build_dspy_engine(make_settings(llm_base_url="http://localhost:4000/v1"))  # type: ignore[arg-type]
-    assert isinstance(engine._lm, OpenAICompatibleLM)
-    assert engine._lm.api_base == "http://localhost:4000/v1"
+    assert isinstance(engine._lm.engine, GatewayEngine)
     # Model ids reach custom gateways verbatim, with no LiteLLM prefixing.
-    assert engine._lm._gateway_model_id == "test-model"
+    assert engine._lm.model == "fleet-gateway/openai/test-model"
 
 
-def test_hosted_models_without_a_base_url_keep_litellm_routing():
+def test_hosted_models_without_a_base_url_use_native_routing():
     import dspy
 
     engine = build_dspy_engine(make_settings())
     assert isinstance(engine._lm, dspy.LM)
-    assert not isinstance(engine._lm, OpenAICompatibleLM)
+    assert engine._lm.engine == "lm15"
     assert engine._lm.kwargs.get("api_base") is None
 
 
@@ -111,46 +110,23 @@ def test_base_url_defaults_to_none():
 
 
 @pytest.mark.parametrize(
-    "api_base",
-    [
-        "https://example.gcp.databricks.com/ai-gateway/openai/v1",
-        "https://DATABRICKS.COM./ai-gateway/openai/v1",
-    ],
+    "configured_key", [None, "dtn_literal_key", "dapi_literal_key"]
 )
-def test_databricks_gateway_replaces_daytona_key_with_workspace_token(
-    monkeypatch, api_base
-):
+def test_gateway_credentials_are_never_substituted(monkeypatch, configured_key):
+
     from app.agent.factory import _build_lm
 
-    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-workspace-token")
-    settings = make_settings(
-        llm_base_url=api_base,
-        llm_api_key=SecretStr("dtn_not_a_workspace_token"),
-        modal_model_id=None,
+    monkeypatch.setenv("DATABRICKS_TOKEN", "unrelated-token")
+    lm = _build_lm(
+        make_settings(
+            llm_base_url="https://workspace.databricks.com/v1",
+            llm_api_key=SecretStr(configured_key) if configured_key else None,
+        )
     )
-    lm = _build_lm(settings, None)
-    assert isinstance(lm, OpenAICompatibleLM)
-    assert lm.api_key == "dapi-workspace-token"
-
-
-@pytest.mark.parametrize(
-    "api_base",
-    [
-        "http://localhost:4000/v1",
-        "https://example.com/databricks.com/ai-gateway/openai/v1",
-        "https://databricks.com.evil.example/ai-gateway/openai/v1",
-        "https://databricks.com@evil.example/ai-gateway/openai/v1",
-    ],
-)
-def test_databricks_lookalikes_keep_configured_key(monkeypatch, api_base):
-    from app.agent.factory import _build_lm
-
-    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-workspace-token")
-    settings = make_settings(
-        llm_base_url=api_base,
-        llm_api_key=SecretStr("dtn_keep_this_key"),
-        modal_model_id=None,
-    )
-    lm = _build_lm(settings, None)
-    assert isinstance(lm, OpenAICompatibleLM)
-    assert lm.api_key == "dtn_keep_this_key"
+    try:
+        assert lm.engine.config.api_keys == (
+            {"fleet-gateway": configured_key} if configured_key else {}
+        )
+        assert lm.engine.config.env == {}
+    finally:
+        close_lm(lm)

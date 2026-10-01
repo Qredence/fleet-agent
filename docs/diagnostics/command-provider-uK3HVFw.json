@@ -1,0 +1,313 @@
+{
+  "run_id": "uK3HVFw",
+  "thread_id": "thread_ffb848aaea26",
+  "status": "failed",
+  "public_error_code": "provider_request_rejected",
+  "provider_requests": 4,
+  "synthetic_requests": 6,
+  "total_requests": 10,
+  "provider_request_id": null,
+  "records": [
+    {
+      "run_id": "uK3HVFw",
+      "stage": "routing",
+      "call_index": 1,
+      "status": 200,
+      "request_id": null,
+      "structure": {
+        "parameters": [
+          "messages",
+          "model",
+          "response_format",
+          "temperature"
+        ],
+        "roles": [
+          "system",
+          "user"
+        ],
+        "messages": [
+          {
+            "role": "system",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          }
+        ],
+        "tool_count": 0,
+        "response_format": "json_schema",
+        "schema_fields": [
+          "route"
+        ],
+        "stream": false
+      },
+      "rejection": {}
+    },
+    {
+      "run_id": "uK3HVFw",
+      "stage": "evidence_gathering",
+      "call_index": 2,
+      "status": 200,
+      "request_id": null,
+      "structure": {
+        "parameters": [
+          "messages",
+          "model",
+          "response_format",
+          "temperature",
+          "tools"
+        ],
+        "roles": [
+          "system",
+          "user"
+        ],
+        "messages": [
+          {
+            "role": "system",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          }
+        ],
+        "tool_count": 7,
+        "response_format": "json_schema",
+        "schema_fields": [
+          "next_thought"
+        ],
+        "stream": false
+      },
+      "rejection": {}
+    },
+    {
+      "run_id": "uK3HVFw",
+      "stage": "evidence_gathering",
+      "call_index": 3,
+      "status": 200,
+      "request_id": null,
+      "structure": {
+        "parameters": [
+          "messages",
+          "model",
+          "response_format",
+          "temperature",
+          "tools"
+        ],
+        "roles": [
+          "system",
+          "user",
+          "assistant",
+          "tool",
+          "tool",
+          "user"
+        ],
+        "messages": [
+          {
+            "role": "system",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "assistant",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": true,
+            "reasoning_nonempty": true,
+            "call_count": 2,
+            "call_ids": [
+              "085e0ef22f97",
+              "cca110e15eed"
+            ],
+            "result_id": null
+          },
+          {
+            "role": "tool",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": "085e0ef22f97"
+          },
+          {
+            "role": "tool",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": "cca110e15eed"
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          }
+        ],
+        "tool_count": 7,
+        "response_format": "json_schema",
+        "schema_fields": [
+          "next_thought"
+        ],
+        "stream": false
+      },
+      "rejection": {}
+    },
+    {
+      "run_id": "uK3HVFw",
+      "stage": "evidence_gathering",
+      "call_index": 4,
+      "status": 400,
+      "request_id": null,
+      "structure": {
+        "parameters": [
+          "messages",
+          "model",
+          "response_format",
+          "temperature",
+          "tool_choice",
+          "tools"
+        ],
+        "roles": [
+          "system",
+          "user",
+          "assistant",
+          "tool",
+          "tool",
+          "user"
+        ],
+        "messages": [
+          {
+            "role": "system",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          },
+          {
+            "role": "assistant",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": true,
+            "reasoning_nonempty": true,
+            "call_count": 2,
+            "call_ids": [
+              "085e0ef22f97",
+              "cca110e15eed"
+            ],
+            "result_id": null
+          },
+          {
+            "role": "tool",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": "085e0ef22f97"
+          },
+          {
+            "role": "tool",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": "cca110e15eed"
+          },
+          {
+            "role": "user",
+            "content_type": "str",
+            "content_present": true,
+            "reasoning_present": false,
+            "reasoning_nonempty": false,
+            "call_count": 0,
+            "call_ids": [],
+            "result_id": null
+          }
+        ],
+        "tool_count": 7,
+        "response_format": "json_schema",
+        "schema_fields": [
+          "next_thought"
+        ],
+        "stream": false
+      },
+      "rejection": {
+        "envelope": "json",
+        "bytes": 1151,
+        "truncated": false,
+        "details": [
+          "{[quoted]:{[quoted]:[quoted],[quoted]:[quoted],[quoted]:{[quoted]:[quoted],[quoted]:400,[quoted]:[quoted],[quoted]:[quoted],[quoted]:false,[quoted]:[quoted]}},[quoted]:{[quoted]:{[quoted]:{[quoted]:[quoted],[quoted]:[quoted],[quoted]:[],[quoted]:[quoted],[quoted]:1,[quoted]:[{[quoted]:[quoted],[quot"
+        ],
+        "codes": [
+          "invalid_request_error"
+        ],
+        "locations": []
+      }
+    }
+  ]
+}

@@ -9,107 +9,100 @@ A step is either:
   dict                — {"calls": [...], "content": "..."} to also set content
                         (needed to reach empty_tool_calls: content parses the
                         next_thought field while tool_calls stays empty)
-  Exception           — raised from forward()
+  Exception           — raised from complete()
 """
 
 import json
 from typing import Any, cast
 
-from dspy.utils.dummies import DummyLM, dotdict
-
-# The synthesis predictor runs under ChatAdapter (exact stream boundaries),
-# so a scripted synthesis step must answer in ChatAdapter sections.
-_SYNTHESIS_SECTION_ORDER = (
-    "answer",
-    "process_summary",
-    "key_decisions",
-    "caveats",
+import dspy
+from dspy.lm15 import (
+    Message,
+    Response,
+    StreamDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
+    TextDelta,
+    TextPart,
+    ToolCallPart,
+    Usage,
+    response_to_events,
 )
 
+_SYNTHESIS_SECTION_ORDER = ("answer", "process_summary", "key_decisions", "caveats")
 
-class ScriptedLM(DummyLM):
+
+class ScriptedEngine:
+    """Deterministic canonical engine, including native stream events."""
+
+    supports_function_calling = True
+    supports_response_schema = True
+    supports_reasoning = False
+    supported_params = {"tools", "tool_choice", "response_format", "temperature"}
+
     def __init__(self, steps: list[Any]):
-        super().__init__([{"answer": "unused"}])
         self._steps = iter(steps)
 
-    def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-        calls, content = self._next_step()
-        return _scripted_completion(calls, content)
-
-    def _next_step(self) -> tuple[list[Any], str]:
-        """Advance to the next step, returning (tool_calls, content)."""
+    def complete(self, request):
         step = next(self._steps, [])
         if isinstance(step, Exception):
             raise step
-        if isinstance(step, dict):
-            return step.get("calls", []), step.get("content", "")
-        return step, json.dumps({"next_thought": "working"})
+        calls = step.get("calls", []) if isinstance(step, dict) else step
+        content = (
+            step.get("content", "")
+            if isinstance(step, dict)
+            else json.dumps({"next_thought": "working"})
+        )
+        parts = tuple(
+            ToolCallPart(id=f"call_{i}", name=c["name"], input=c["args"])
+            for i, c in enumerate(calls)
+        )
+        return Response(
+            id="scripted",
+            model="scripted",
+            message=Message(role="assistant", parts=(TextPart(content), *parts)),
+            finish_reason="tool_call" if calls else "stop",
+            usage=Usage(input_tokens=10, output_tokens=5, total_tokens=15),
+        )
+
+    def stream(self, request):
+        return response_to_events(self.complete(request))
+
+    def close(self):
+        pass
+
+
+class StreamingScriptedEngine(ScriptedEngine):
+    def stream(self, request):
+        response = self.complete(request)
+        yield StreamStartEvent(id=response.id, model=response.model)
+        for event in response_to_events(response):
+            if isinstance(event, StreamDeltaEvent) and isinstance(
+                event.delta, TextDelta
+            ):
+                text = event.delta.text
+                for i in range(0, len(text), 5):
+                    yield StreamDeltaEvent(
+                        TextDelta(text[i : i + 5], part_index=event.delta.part_index)
+                    )
+            elif isinstance(event, StreamDeltaEvent):
+                yield event
+        yield StreamEndEvent(finish_reason=response.finish_reason, usage=response.usage)
+
+    def close(self):
+        pass
+
+
+class ScriptedLM(dspy.LM):
+    def __init__(self, steps: list[Any], *, engine_type=ScriptedEngine):
+        super().__init__("scripted", engine=engine_type(steps), cache=False)
 
 
 class StreamingScriptedLM(ScriptedLM):
-    """ScriptedLM that honors dspy's send_stream with litellm-shaped chunks.
+    """DSPy selects native streaming when listeners exist."""
 
-    When the caller's predict is a stream-listener target (dspy sets
-    ``settings.send_stream``), the scripted content is chunked into
-    ``ModelResponseStream`` deltas carrying the caller's predict_id — the same
-    contract dspy's litellm path produces — so StreamListener boundaries fire
-    exactly as they would against a live streaming gateway.
-    """
-
-    _CHUNK_CHARS = 5
-
-    def forward(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-        from dspy.dsp.utils.settings import settings as dspy_settings
-        from dspy.streaming.messages import sync_send_to_stream
-        from litellm import ModelResponseStream
-        from litellm.types.utils import Delta, StreamingChoices
-
-        calls, content = self._next_step()
-
-        stream = dspy_settings.send_stream
-        caller_predict_id = (
-            id(dspy_settings.caller_predict) if dspy_settings.caller_predict else None
-        )
-        if stream is not None:
-            for i in range(0, len(content), self._CHUNK_CHARS):
-                chunk = ModelResponseStream(
-                    id="chatcmpl-scripted",
-                    object="chat.completion.chunk",
-                    created=0,
-                    model="scripted",
-                    choices=[
-                        StreamingChoices(
-                            index=0,
-                            delta=Delta(
-                                role="assistant",
-                                content=content[i : i + self._CHUNK_CHARS],
-                            ),
-                            finish_reason=None,
-                        )
-                    ],
-                )
-                if caller_predict_id:
-                    chunk.predict_id = caller_predict_id
-                sync_send_to_stream(stream, chunk)
-
-        return _scripted_completion(calls, content)
-
-
-def _scripted_completion(calls: list[Any], content: str) -> dotdict:
-    tool_calls = [
-        dotdict(
-            id=f"call_{i}",
-            type="function",
-            function=dotdict(name=call["name"], arguments=json.dumps(call["args"])),
-        )
-        for i, call in enumerate(calls)
-    ]
-    message = dotdict(content=content, tool_calls=tool_calls or None)
-    return dotdict(
-        choices=[dotdict(message=message, finish_reason="tool_calls")],
-        usage=dotdict(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        model="scripted",
-    )
+    def __init__(self, steps: list[Any]):
+        super().__init__(steps, engine_type=StreamingScriptedEngine)
 
 
 def submit_call(

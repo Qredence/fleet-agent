@@ -1,0 +1,104 @@
+# Repo maintenance chores.
+#
+#   mise tasks          list everything below
+#   mise run clean      safe cache sweep
+#
+# Deliberately has no [tools] section — this file only adds commands and does not
+# pin or change your Node/Python toolchain. Run `mise run toolchains:pin` to opt in.
+
+[tasks.clean]
+description = "Remove regenerable caches and build output (no data loss)"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+before=$(du -sk . | cut -f1)
+
+find . -type d -name __pycache__ \
+  -not -path "*/node_modules/*" -not -path "*/.venv/*" \
+  -prune -exec rm -rf {} +
+rm -rf .pytest_cache .ruff_cache .mypy_cache \
+       apps/api/.pytest_cache apps/api/.ruff_cache apps/api/.mypy_cache \
+       apps/web/dist apps/web/coverage packages/contracts/dist
+
+after=$(du -sk . | cut -f1)
+echo "clean: reclaimed $(( (before - after) / 1024 )) MB of caches"
+"""
+
+[tasks."clean:orphans"]
+description = "Reclaim the orphaned root .venv (~388MB) that nothing depends on"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+# Root uv.lock declares zero dependencies, but .venv held 213 stale packages.
+# Verified against uv.lock before this task was added; uv recreates it on demand
+# for `uv run --with ...` invocations from the repo root.
+rm -rf .venv
+echo "clean:orphans: removed root .venv (~388M)"
+"""
+
+[tasks."clean:evidence"]
+description = "Delete QA/MLflow evidence bundles — destroys history, opt in deliberately"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+echo "About to delete QA evidence and MLflow run history:"
+du -sh qa-results .artifacts apps/api/mlruns 2>/dev/null || true
+read -r -p "Continue? [y/N] " reply
+[[ "$reply" == "y" ]] || { echo "aborted"; exit 1; }
+rm -rf qa-results .artifacts apps/api/mlruns
+echo "clean:evidence: removed evidence bundles"
+"""
+
+[tasks.nuke]
+description = "Reset local environments: venvs + node_modules. Requires CONFIRM=yes"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${CONFIRM:-}" != "yes" ]]; then
+  echo "refusing: this removes every local dependency tree and virtualenv." >&2
+  echo "run: CONFIRM=yes mise run nuke" >&2
+  exit 1
+fi
+echo "nuke: removing node_modules and venvs (database volume untouched)"
+rm -rf node_modules apps/web/node_modules .venv apps/api/.venv
+echo "nuke: done — restore with 'pnpm install --frozen-lockfile'"
+echo "            and 'uv sync --directory apps/api --locked --all-groups'"
+"""
+
+[tasks."docker:reset"]
+description = "Destroy the postgres volume — irreversible, erases database contents"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${CONFIRM:-}" != "yes" ]]; then
+  echo "refusing: 'docker compose down -v' destroys fleet-agent_postgres-data irreversibly." >&2
+  echo "run: CONFIRM=yes mise run docker:reset" >&2
+  exit 1
+fi
+docker compose down -v
+echo "docker:reset: postgres volume destroyed"
+"""
+
+[tasks."toolchains:pin"]
+description = "Opt in: write [tools] pins matching CI (node 24.19.0, python 3.13, pnpm 11.15.1)"
+dir = "{{config_root}}"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+echo "Add this to mise.toml manually if you want version pinning:"
+cat <<'EOF'
+
+[tools]
+node = "24.19.0"
+pnpm = "11.15.1"
+python = "3.13"
+
+EOF
+echo "CI pins cimg/node:24.19.0 and cimg/python:3.13; pnpm@11.15.1 appears in both"
+echo "package.json (packageManager) and .circleci/config.yml."
+"""

@@ -36,6 +36,7 @@ import {
   ReasoningEffort,
   type ReasoningEffortLevel,
 } from "@/components/assistant-ui/reasoning-effort";
+import { useRunReadiness } from "@/features/agent-runtime/agent-capabilities";
 import { useProviders } from "@/features/providers/use-providers";
 import { useOpenCodeZenAuth } from "@/features/providers/use-opencode-zen-auth";
 import { useOpenRouterAuth } from "@/features/providers/use-openrouter-auth";
@@ -46,7 +47,7 @@ import { POPULAR_OPENROUTER_MODELS } from "@/features/providers/openrouter-auth"
 import {
   OPENCODE_ZEN_PROFILE_ID,
   OPENROUTER_PROFILE_ID,
-  SERVER_DEFAULT_ID,
+  getProviderReadiness,
 } from "@/features/providers/providers-store";
 import {
   ComposerPrimitive,
@@ -372,35 +373,26 @@ const DEFAULT_MODEL_KEY = "__default__";
 export const ComposerModelPicker: FC = () => {
   const { preferences, setEffort } = useComposerPreferences();
   const [open, setOpen] = useState(false);
-  const { profiles, activeProviderId, setActiveProviderId } = useProviders();
+  const { profiles, activeProviderId, setActiveProviderId, readiness } = useProviders();
   const {
-    apiKey: openRouterApiKey,
     selectedModel: openRouterModel,
     customModelEnabled: openRouterCustomModelEnabled,
     setSelectedModel: setOpenRouterModel,
     setCustomModelEnabled: setOpenRouterCustomModelEnabled,
   } = useOpenRouterAuth();
   const {
-    apiKey: openCodeZenApiKey,
     selectedModel: openCodeZenModel,
     customModelEnabled: openCodeZenCustomModelEnabled,
     setSelectedModel: setOpenCodeZenModel,
     setCustomModelEnabled: setOpenCodeZenCustomModelEnabled,
   } = useOpenCodeZenAuth();
 
+  const runReadiness = useRunReadiness();
   const activeProfile = profiles.find((entry) => entry.id === activeProviderId);
-  const openRouterReady = Boolean(openRouterApiKey?.trim());
-  const openCodeZenReady = Boolean(openCodeZenApiKey?.trim());
+  const openRouterReady = getProviderReadiness(OPENROUTER_PROFILE_ID).ready;
+  const openCodeZenReady = getProviderReadiness(OPENCODE_ZEN_PROFILE_ID).ready;
   const modelOptions = useMemo<ComposerModelOption[]>(() => {
-    const options: ComposerModelOption[] = [
-      {
-        key: SERVER_DEFAULT_ID,
-        label: "Server default model",
-        description: "Server configuration",
-        providerId: SERVER_DEFAULT_ID,
-        ready: true,
-      },
-    ];
+    const options: ComposerModelOption[] = [];
 
     if (openRouterReady) {
       if (!openRouterCustomModelEnabled) {
@@ -481,7 +473,7 @@ export const ComposerModelPicker: FC = () => {
       ) {
         continue;
       }
-      const routeReady = Boolean(profile.apiKey?.trim() && profile.baseUrl?.trim());
+      const routeReady = getProviderReadiness(profile.id).ready;
       if (!routeReady) continue;
 
       const modelId = profile.modelId?.trim();
@@ -522,9 +514,9 @@ export const ComposerModelPicker: FC = () => {
   ]);
 
   const activeModelKey = (() => {
-    if (activeProviderId === SERVER_DEFAULT_ID) return SERVER_DEFAULT_ID;
+    if (!readiness.ready) return "";
     if (activeProviderId === OPENROUTER_PROFILE_ID) {
-      if (!openRouterReady) return SERVER_DEFAULT_ID;
+      if (!openRouterReady) return "";
       if (!openRouterCustomModelEnabled) {
         return modelOptionKey(OPENROUTER_PROFILE_ID, DEFAULT_MODEL_KEY);
       }
@@ -534,10 +526,10 @@ export const ComposerModelPicker: FC = () => {
           entry.key === modelOptionKey(activeProviderId, targetModel) &&
           entry.ready,
       );
-      return option?.key ?? modelOptions.find((e) => e.providerId === OPENROUTER_PROFILE_ID)?.key ?? SERVER_DEFAULT_ID;
+      return option?.key ?? modelOptions.find((e) => e.providerId === OPENROUTER_PROFILE_ID)?.key ?? "";
     }
     if (activeProviderId === OPENCODE_ZEN_PROFILE_ID) {
-      if (!openCodeZenReady) return SERVER_DEFAULT_ID;
+      if (!openCodeZenReady) return "";
       if (!openCodeZenCustomModelEnabled) {
         return modelOptionKey(OPENCODE_ZEN_PROFILE_ID, DEFAULT_MODEL_KEY);
       }
@@ -547,49 +539,23 @@ export const ComposerModelPicker: FC = () => {
           entry.key === modelOptionKey(activeProviderId, targetModel) &&
           entry.ready,
       );
-      return option?.key ?? modelOptions.find((e) => e.providerId === OPENCODE_ZEN_PROFILE_ID)?.key ?? SERVER_DEFAULT_ID;
+      return option?.key ?? modelOptions.find((e) => e.providerId === OPENCODE_ZEN_PROFILE_ID)?.key ?? "";
     }
-    const routeReady = Boolean(
-      activeProfile?.apiKey?.trim() && activeProfile.baseUrl?.trim(),
-    );
-    if (!routeReady) return SERVER_DEFAULT_ID;
+    if (!activeProfile) return "";
     const modelId = activeProfile?.modelId?.trim();
     const option = modelOptions.find(
       (entry) =>
         entry.key ===
-          modelOptionKey(activeProviderId, modelId || DEFAULT_MODEL_KEY) &&
+          modelOptionKey(activeProfile.id, modelId || DEFAULT_MODEL_KEY) &&
         entry.ready,
     );
-    return option?.key ?? SERVER_DEFAULT_ID;
+    return option?.key ?? "";
   })();
 
   const activeModelOption = modelOptions.find((option) => option.key === activeModelKey);
-  const activeModelLabel = activeModelOption?.label ?? "Server default model";
+  const activeModelLabel = runReadiness.fixtures ? "Fixture mode" : activeModelOption?.label ?? (activeProviderId ? `${activeProfile?.name ?? "Provider"} needs setup` : "Choose a provider");
 
-  // The selected route and the effective route diverge when the stored
-  // provider has no usable credentials: the run sends no provider headers, so
-  // it falls back to the server model. Name that state instead of silently
-  // presenting the fallback as the user's own selection.
-  const unconfiguredRoute = (() => {
-    if (activeProviderId === SERVER_DEFAULT_ID) return null;
-    if (activeProviderId === OPENROUTER_PROFILE_ID) {
-      return openRouterReady
-        ? null
-        : { name: "OpenRouter", detail: "has no API key" };
-    }
-    if (activeProviderId === OPENCODE_ZEN_PROFILE_ID) {
-      return openCodeZenReady
-        ? null
-        : { name: "OpenCode Zen", detail: "has no API key" };
-    }
-    if (!activeProfile) return null;
-    const ready = Boolean(
-      activeProfile.apiKey?.trim() && activeProfile.baseUrl?.trim(),
-    );
-    return ready
-      ? null
-      : { name: activeProfile.name, detail: "has no usable key or base URL" };
-  })();
+  const unconfiguredRoute = !runReadiness.ready;
 
   const handleModelChange = (key: string) => {
     const option = modelOptions.find((entry) => entry.key === key);
@@ -628,11 +594,11 @@ export const ComposerModelPicker: FC = () => {
             ref={triggerRef}
             model={triggerLabel}
             open={open}
-            unconfigured={unconfiguredRoute !== null}
+            unconfigured={unconfiguredRoute}
             aria-label="Model and reasoning preferences"
             title={
               unconfiguredRoute
-                ? `${unconfiguredRoute.name} needs setup · runs use the ${triggerLabel}`
+                ? runReadiness.message
                 : undefined
             }
             className="h-7 max-w-[15rem] px-2 text-xs max-sm:max-w-[8rem]"
@@ -656,9 +622,7 @@ export const ComposerModelPicker: FC = () => {
             <p className="mx-2 mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-2 py-1.5 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
               <CircleAlertIcon aria-hidden className="mt-0.5 size-3 shrink-0" />
               <span>
-                {unconfiguredRoute.name} {unconfiguredRoute.detail} yet, so
-                runs use the {triggerLabel}. Finish its setup in Settings →
-                Providers &amp; Models.
+                {runReadiness.message}
               </span>
             </p>
           )}

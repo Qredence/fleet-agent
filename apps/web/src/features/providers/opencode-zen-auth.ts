@@ -7,7 +7,13 @@
  * localStorage; the value is sent to the Fleet Agent `/api/agent` endpoint as
  * the generic `X-LLM-Key` + `X-LLM-Base-Url` + `X-LLM-Model` headers together
  * with the active provider profile, and is never logged server-side.
+ *
+ * The localStorage-backed state is shared with the other BYOK providers
+ * through `local-storage-auth`; this module owns the OpenCode Zen storage
+ * keys, catalog, and defaults.
  */
+
+import { createLocalStorageAuth } from '@/features/providers/local-storage-auth'
 
 export const STORAGE_KEY = 'opencode_zen_api_key'
 export const MODEL_STORAGE_KEY = 'opencode_zen_selected_model'
@@ -41,128 +47,52 @@ export const POPULAR_OPENCODE_ZEN_MODELS = [
   { id: 'qwen3.6-plus', label: 'Qwen 3.6 Plus' },
 ] as const
 
-type AuthListener = () => void
-const listeners = new Set<AuthListener>()
+const auth = createLocalStorageAuth({
+  storageKey: STORAGE_KEY,
+  modelStorageKey: MODEL_STORAGE_KEY,
+  customModelEnabledKey: CUSTOM_MODEL_ENABLED_KEY,
+  defaultModel: DEFAULT_OPENCODE_ZEN_MODEL,
+})
 
 /**
  * Subscribes to auth and settings changes in this tab and across tabs.
  */
-export const onAuthChange = (fn: AuthListener): (() => void) => {
-  listeners.add(fn)
-  return () => {
-    listeners.delete(fn)
-  }
-}
-
-const notify = () => {
-  listeners.forEach((fn) => {
-    try {
-      fn()
-    } catch {
-      // Ignore listener errors
-    }
-  })
-}
-
-// Cross-tab sync: other tabs update when the key or model changes.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (
-      event.key === STORAGE_KEY ||
-      event.key === MODEL_STORAGE_KEY ||
-      event.key === CUSTOM_MODEL_ENABLED_KEY
-    ) {
-      notify()
-    }
-  })
-}
+export const onAuthChange = (fn: () => void): (() => void) => auth.onAuthChange(fn)
 
 /**
  * Returns the stored OpenCode Zen API key, or null if not configured.
  */
-export const getApiKey = (): string | null => {
-  if (typeof window === 'undefined') return null
-  try {
-    return localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
+export const getApiKey = (): string | null => auth.getApiKey()
 
 /**
  * Stores the OpenCode Zen API key in localStorage and notifies subscribers.
  */
-export const setApiKey = (key: string): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, key.trim())
-    notify()
-  } catch {
-    // Ignore storage write failures
-  }
-}
+export const setApiKey = (key: string): void => auth.setApiKey(key)
 
 /**
  * Clears the stored OpenCode Zen API key and notifies subscribers.
  */
-export const clearApiKey = (): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-    notify()
-  } catch {
-    // Ignore storage remove failures
-  }
-}
+export const clearApiKey = (): void => auth.clearApiKey()
 
 /**
  * Returns the selected model override, defaulting to the curator-picked
  * `muse-spark-1.3-contributor-free` model.
  */
-export const getSelectedModel = (): string => {
-  if (typeof window === 'undefined') return DEFAULT_OPENCODE_ZEN_MODEL
-  try {
-    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_OPENCODE_ZEN_MODEL
-  } catch {
-    return DEFAULT_OPENCODE_ZEN_MODEL
-  }
-}
+export const getSelectedModel = (): string => auth.getSelectedModel()
 
 /**
  * Stores the selected model override and notifies subscribers.
  */
-export const setSelectedModel = (model: string): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(MODEL_STORAGE_KEY, model.trim())
-    notify()
-  } catch {
-    // Ignore
-  }
-}
+export const setSelectedModel = (model: string): void => auth.setSelectedModel(model)
 
 /**
  * Returns true when the custom model override should be sent on the wire.
  * When false, the server-side default model is used.
  */
-export const isCustomModelEnabled = (): boolean => {
-  if (typeof window === 'undefined') return false
-  try {
-    return localStorage.getItem(CUSTOM_MODEL_ENABLED_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
+export const isCustomModelEnabled = (): boolean => auth.isCustomModelEnabled()
 
 /**
  * Enables or disables the custom model override.
  */
-export const setCustomModelEnabled = (enabled: boolean): void => {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(CUSTOM_MODEL_ENABLED_KEY, enabled ? 'true' : 'false')
-    notify()
-  } catch {
-    // Ignore
-  }
-}
+export const setCustomModelEnabled = (enabled: boolean): void =>
+  auth.setCustomModelEnabled(enabled)

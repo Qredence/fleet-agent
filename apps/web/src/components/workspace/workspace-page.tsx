@@ -32,7 +32,7 @@ export function WorkspacePage({
               {notice && <p className="mt-1 text-xs text-muted-foreground">{notice}</p>}
             </div>
           </div>
-          {action && <div className="shrink-0 sm:ml-4">{action}</div>}
+          {action && <div className="shrink-0 sm:ms-4">{action}</div>}
         </header>
         {children}
       </div>
