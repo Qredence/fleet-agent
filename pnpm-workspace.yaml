@@ -15,5 +15,7 @@ minimumReleaseAgeExclude:
   - hono@4.13.5
   - undici@7.29.1
   - ip-address@10.5.1
+  - brace-expansion@5.0.10 || 5.0.11 || 5.0.12
+  - dompurify@3.4.16
 patchedDependencies:
   '@assistant-ui/react-ag-ui': patches/@assistant-ui__react-ag-ui.patch
