@@ -55,7 +55,7 @@ apps/api/mlruns/
 .factory/
 .remember/
 # Lab generated artifacts
-/AGENTS.md
+
 /CLAUDE.md
 /CLAUDE.local.md
 /.prime/
