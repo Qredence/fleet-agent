@@ -63,7 +63,7 @@
         },
         "terminationReason": {
           "type": "string",
-          "description": "DSPy ReActV2 termination reason, e.g. submit, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded."
+          "description": "Why the run stopped: submit, synthesis, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded, failed, timeout, cancelled, or server_restart."
         },
         "errorCode": {
           "type": "string",

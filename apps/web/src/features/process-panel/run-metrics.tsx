@@ -46,9 +46,6 @@ export const TERMINATION_LABELS: Record<string, string> = {
   timeout: 'Stopped: the agent run timed out',
   cancelled: 'Run cancelled',
   server_restart: 'Stopped: the server restarted during the run',
-  approval_required: 'Waiting for approval',
-  approval_expired: 'Approval expired',
-  approval_invalid: 'Approval could not be applied',
   failed: 'Run failed',
 }
 
@@ -62,15 +59,10 @@ const ERROR_CODE_LABELS = errorCodes as Record<string, string>
 const NORMAL_TERMINATIONS = new Set(['submit', 'synthesis'])
 
 /**
- * Soft endings: the run produced something usable, or is waiting on the user.
+ * Soft endings: the run produced something usable but incomplete.
  * Shown as amber caution, never a red alert — unless an errorCode is also set.
  */
-const CAUTION_TERMINATIONS = new Set([
-  'forced_submit',
-  'approval_required',
-  'approval_expired',
-  'approval_invalid',
-])
+const CAUTION_TERMINATIONS = new Set(['forced_submit'])
 
 /** Quiet endings: intentional stop with no failure chrome. */
 const QUIET_TERMINATIONS = new Set(['cancelled'])

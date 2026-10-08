@@ -30,7 +30,7 @@ class Run(BaseModel):
     activeStepId: str | None = None
     terminationReason: str | None = Field(
         None,
-        description="DSPy ReActV2 termination reason, e.g. submit, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded.",
+        description="Why the run stopped: submit, synthesis, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded, failed, timeout, cancelled, or server_restart.",
     )
     errorCode: str | None = Field(
         None, description="Stable public error code. Never a raw exception string."
