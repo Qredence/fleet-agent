@@ -5,9 +5,9 @@
 Fleet Agent should be a real DSPy program, not a FastAPI service that happens
 to instantiate a DSPy class inside a closure. The application now separates:
 
-1. **Declarative definition** - `app/agent/agents/fleet_agent.yaml` plus Markdown
-   prompts; `app/agent/spec/` compiles them into real `dspy.Signature` classes and
-   a real `dspy.Module` tree
+1. **Prompt authoring** - Markdown prompt files (`app/agent/agents/prompts/*.md`);
+   `app/agent/signature.py` turns their bodies plus the shared policy into
+   one `dspy.Signature` class per node
 2. **DSPy program** - `FleetAgent(dspy.Module)`: routed evidence loops + streamed synthesis
 3. **Tool authoring and policy** - one `TOOL_SPECS` table in `tool_registry.py`, and
    `create_dspy_tool` for schema validation
@@ -26,17 +26,18 @@ DspyAgentEngine
 FleetAgent(dspy.Module)
       |
       +-- router: dspy.Predict over the routing contract
-      |     plus the conditional that dispatches on its answer, in Python: the
-      |     spec layer wires by field name and has no switch
+      |     plus the conditional that dispatches on its answer, in Python:
+      |     routing is control flow, not field wiring
       |
-      +-- evidence_agents: dict[ToolRoute, spec React node]
+      +-- evidence_agents: dict[ToolRoute, dspy.ReActV2]
       |     one per non-empty capability profile (research, artifact,
-      |     workspace_read, workspace_write, workspace_shell); built from the
-      |     spec, holding only that profile's tools, never submitting an answer.
-      |     `direct` has no profile tools, so it goes straight to synthesis
-      |     rather than spending a call on a loop with nothing to gather.
+      |     workspace_read, workspace_write, workspace_shell); built from
+      |     prompts/evidence.md, holding only that profile's tools, never
+      |     submitting an answer for the user. `direct` has no profile tools,
+      |     so it goes straight to synthesis rather than spending a call on
+      |     a loop with nothing to gather.
       |
-      +-- synthesizer: spec Predict node
+      +-- synthesizer: dspy.Predict over prompts/synthesize.md
             streams answer + process_summary tokens through
             dspy.streamify + StreamListener (ChatAdapter)
 ```

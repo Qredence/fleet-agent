@@ -13,49 +13,33 @@ from __future__ import annotations
 
 import dspy
 
-from app.agent.signature import AGENTS_DIR
-from app.agent.spec import (
-    FieldSpec,
-    SignatureSpec,
-    build_signature,
-    read_markdown,
-)
+from app.agent.signature import build_signature
 
-_AGENT_SPEC = SignatureSpec(
-    name="AgentSignature",
-    inputs=[
-        FieldSpec(name="user_request", type="str", description="The user's request.")
-    ],
-    outputs=[
-        FieldSpec(
-            name="answer", type="str", description="Direct final answer to the user."
+AgentSignature: type[dspy.Signature] = build_signature(
+    {
+        "user_request": (str, dspy.InputField(desc="The user's request.")),
+        "answer": (
+            str,
+            dspy.OutputField(desc="Direct final answer to the user."),
         ),
-        FieldSpec(
-            name="process_summary",
-            type="str",
-            description="Concise user-facing summary of the approach taken.",
+        "process_summary": (
+            str,
+            dspy.OutputField(desc="Concise user-facing summary of the approach taken."),
         ),
-        FieldSpec(
-            name="key_decisions",
-            type="list[str]",
-            description="Important decisions made during the process.",
+        "key_decisions": (
+            list[str],
+            dspy.OutputField(desc="Important decisions made during the process."),
         ),
-        FieldSpec(
-            name="caveats",
-            type="list[str]",
-            description="Remaining uncertainty, limitations, or risks.",
+        "caveats": (
+            list[str],
+            dspy.OutputField(desc="Remaining uncertainty, limitations, or risks."),
         ),
-    ],
-    instructions=(
+    },
+    (
         "Resolve the user's request using available tools when necessary.\n\n"
         "Produce a direct final answer and a concise, user-safe account of the\n"
         "approach and decisions. Do not expose hidden reasoning."
     ),
+    signature_name="AgentSignature",
     inherit_policy=True,
-)
-
-AgentSignature: type[dspy.Signature] = build_signature(
-    _AGENT_SPEC,
-    policy=read_markdown(AGENTS_DIR / "prompts" / "policy.md")[1],
-    base=AGENTS_DIR,
 )

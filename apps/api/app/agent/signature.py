@@ -1,91 +1,145 @@
-"""Task contracts for the DSPy engine, authored as Markdown + YAML.
+"""Task contracts for the DSPy engine, authored as Markdown.
 
 Prompt text lives in ``app/agent/agents/prompts/*.md`` so a reviewer reads prose
-instead of a docstring. An optimizer that wants to tune these prompts targets the
-same files a reviewer edits: the spec layer's ``dump_state``/``apply_state`` pair
-manages per-node write-back, while ``evals/optimize.py`` promotes router
-instructions as an artifact the factory reads at startup.
+instead of a docstring. ``build_signature`` turns one Markdown body (with the
+shared ``policy.md`` appended) and typed fields into a signature class of its
+own; the two nodes the program needs are plain ``dspy.ReActV2`` /
+``dspy.Predict`` over those classes.
 
-Only the parts the spec layer can express are declared there. What it cannot
-express still lives in Python, with the reason named:
+Only the parts the spec layer could not express are left in Python, with the
+reason named:
 
 * ``ToolRoutingSignature`` (``routing.py``) is a conditional: choosing one of six
-  least-privilege profiles is control flow, and the spec's closed module-type set
-  deliberately has no ``switch``.
-* The evidence loop is assembled in ``program.py`` rather than as a spec
-  ``sequential`` node, because the synthesis step needs ``evidence_json``, which
-  is computed from the loop's ``dspy.History`` rather than produced as a declared
-  field. The spec expresses wiring by field name, never field math.
+  least-privilege profiles is control flow.
+* The evidence loop is assembled in ``program.py``, because the synthesis step
+  needs ``evidence_json``, which is computed from the loop's ``dspy.History``
+  rather than produced as a declared field — wiring by field name, never field
+  math.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
+from typing import cast
 
 import dspy
 
-from app.agent.routing import ToolRoute
-from app.agent.spec import (
-    AgentSpec,
-    ToolRegistry,
-    build_program,
-    load_spec,
-)
-
 AGENTS_DIR = Path(__file__).resolve().parent / "agents"
-SPEC_PATH = AGENTS_DIR / "fleet_agent.yaml"
+PROMPTS_DIR = AGENTS_DIR / "prompts"
 
 # The synthesis predictor's public text fields. The engine streams exactly these
 # with dspy.streamify listeners.
 SYNTHESIS_STREAM_FIELDS = ("answer", "process_summary")
 
 
+def prompt_body(name: str) -> str:
+    """Body text of one Markdown prompt file, stripped."""
+    path = PROMPTS_DIR / name
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ValueError(f"prompt file {name} is empty")
+    return text
+
+
 @lru_cache(maxsize=1)
-def synthesis_spec() -> AgentSpec:
-    """The declarative agent definition, validated once per process."""
-    return load_spec(SPEC_PATH)
+def _policy_text() -> str:
+    return prompt_body("policy.md")
+
+
+def build_signature(
+    fields: Mapping[str, tuple[object, dspy.Field]],
+    instructions: str,
+    *,
+    signature_name: str,
+    inherit_policy: bool = False,
+) -> type[dspy.Signature]:
+    """One signature class of its own: typed fields over instruction text.
+
+    The Markdown body is the instruction text and reaches the model verbatim
+    apart from DSPy's own ``inspect.cleandoc`` normalisation. ``inherit_policy``
+    appends the shared tool-use policy, exactly as the old declarative loader
+    did for its ``inherit_policy`` flags. A fresh class keeps
+    ``Signature.instructions`` out of other programs: it lives on the class
+    itself.
+    """
+    if inherit_policy:
+        instructions = f"{instructions}\n\n{_policy_text()}"
+    if not instructions.strip():
+        raise ValueError(f"signature {signature_name!r} has no instruction text")
+    return cast(
+        "type[dspy.Signature]",
+        dspy.make_signature(
+            dict(fields), instructions=instructions, signature_name=signature_name
+        ),
+    )
+
+
+@lru_cache(maxsize=1)
+def _evidence_signature() -> type[dspy.Signature]:
+    """The evidence loop's contract; no output fields by design."""
+    return build_signature(
+        {
+            "user_request": (str, dspy.InputField(desc="The user's request.")),
+        },
+        prompt_body("evidence.md"),
+        signature_name="Evidence",
+        inherit_policy=True,
+    )
+
+
+@lru_cache(maxsize=1)
+def _synthesis_signature() -> type[dspy.Signature]:
+    """The synthesis predictor's contract over the gathered evidence."""
+    return build_signature(
+        {
+            "user_request": (str, dspy.InputField(desc="The user's request.")),
+            "evidence_json": (
+                str,
+                dspy.InputField(desc="Bounded successful and failed evidence."),
+            ),
+            "history": (
+                dspy.History,
+                dspy.InputField(desc="Prior conversation turns."),
+            ),
+            "answer": (
+                str,
+                dspy.OutputField(desc="Direct final answer to the user."),
+            ),
+            "process_summary": (
+                str,
+                dspy.OutputField(desc="Concise user-safe process summary."),
+            ),
+            "key_decisions": (
+                list[str],
+                dspy.OutputField(desc="Important decisions made."),
+            ),
+            "caveats": (
+                list[str],
+                dspy.OutputField(desc="Remaining uncertainty or limitations."),
+            ),
+        },
+        prompt_body("synthesize.md"),
+        signature_name="Synthesis",
+        inherit_policy=True,
+    )
 
 
 @lru_cache(maxsize=1)
 def build_synthesizer() -> dspy.Module:
-    """Build the declared synthesis node: one ``predict`` over Markdown text.
+    """Build the synthesis node: one ``Predict`` over the Markdown text."""
+    return dspy.Predict(_synthesis_signature())
 
-    Only this node is built from the spec: the evidence loop is a separate node
-    because the program computes ``evidence_json`` between them, and building
-    both here would resolve the gather node's tools for no reason.
+
+def build_gatherer(tools: Sequence[dspy.Tool], max_iters: int) -> dspy.Module:
+    """Build the evidence loop: one ``ReActV2`` over the Markdown contract.
+
+    The run's least-privilege profile supplies the tools, so a route still
+    cannot reach a tool outside its profile. ``max_iters`` binds here -
+    not at a per-node default - because the program owns the operator's loop
+    bound. Fresh instances per call because tools carry run-scoped state (an
+    event bus, a thread id); the signature class itself is shared, which is
+    safe now that no optimizer writes back into it.
     """
-    spec = synthesis_spec().model_copy(deep=True)
-    spec.root = "synthesize"
-    spec.modules = {"synthesize": spec.modules["synthesize"]}
-    return build_program(spec)
-
-
-def build_gatherer(
-    route: ToolRoute, tools: Sequence[dspy.Tool], max_iters: int
-) -> dspy.Module:
-    """Build the declared evidence loop for one capability profile.
-
-    The spec owns the node and its prompt; the run's least-privilege profile
-    supplies the tools, so a route still cannot reach a tool outside its profile.
-    ``max_iters`` binds here - not at the YAML default - because the program, not
-    the spec, owns the operator's loop bound. Built fresh per run because tools
-    carry run-scoped state (an event bus, a thread id), and per route because
-    ``Signature.instructions`` lives on the class - sharing one class would alias
-    every route's optimizer write-back.
-    """
-    spec = synthesis_spec().model_copy(deep=True)
-    names = [str(tool.name) for tool in tools]
-    spec.root = "gather"
-    spec.modules = {
-        "gather": spec.modules["gather"].model_copy(
-            update={"tools": names, "max_iters": max_iters}
-        )
-    }
-    return build_program(
-        spec,
-        tools=ToolRegistry(
-            {name: tool for name, tool in zip(names, tools, strict=True)}
-        ),
-    )
+    return dspy.ReActV2(_evidence_signature(), tools=list(tools), max_iters=max_iters)

@@ -62,18 +62,18 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             route: tuple(str(tool.name) for tool in tools)
             for route, tools in profiles.items()
         }
-        # Built from app/agent/agents/fleet_agent.yaml: one react node per
-        # least-privilege profile, each carrying that profile's tools only.
+        # prompts/evidence.md builds one ReActV2 node per least-privilege
+        # profile, each carrying that profile's tools only.
         #
         # A profile with no tools has nothing to gather - ``direct`` answers from
         # the model's own knowledge - so it gets no loop at all rather than an LM
         # call that can only decide to stop.
         self.evidence_agents = {
-            route: build_gatherer(route, tools, max_iters=max_iters)
+            route: build_gatherer(tools, max_iters=max_iters)
             for route, tools in profiles.items()
             if tools
         }
-        # Built from app/agent/agents/fleet_agent.yaml + prompts/synthesize.md.
+        # Built from prompts/synthesize.md over the gathered evidence.
         self.synthesizer = build_synthesizer()
         self.synthesis_stream_fields = SYNTHESIS_STREAM_FIELDS
 
