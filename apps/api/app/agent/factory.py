@@ -11,7 +11,7 @@ from app.agent.approval import offered_tool_names
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import AgentEngine, DspyAgentEngine, EngineBuilder
 from app.agent.event_bus import RunEventBus
-from app.agent.gateway import GatewayEngine, HostedEngine, ProviderConfig, close_lm
+from app.agent.gateway import GatewayEngine, ProviderConfig, close_lm
 from app.agent.program import FleetAgent
 from app.agent.provider import (
     OPENROUTER_API_BASE_URL,
@@ -28,7 +28,7 @@ from app.agent.tool_registry import (
     workspace_root_available,
 )
 from app.agent.tooling import ToolSource
-from app.agent.tools import get_current_time, search_docs
+from app.agent.tools import get_current_time
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from app.agent.tools.web import WebToolBundle, build_web_tool_bundle
@@ -48,13 +48,11 @@ def _build_lm(settings: Settings, override: ProviderOverride | None = None) -> d
         api_key=override.api_key if override else settings.llm_api_key,
         base_url=override.api_base if override else settings.llm_base_url,
         native_function_calling=_native_function_calling(settings, override),
-        diagnostics_enabled=settings.provider_diagnostics_enabled,
-        request_limit=settings.provider_request_limit,
         developer_role=bool(override and override.messages_format == "developer_role"),
     )
-    if config.base_url is None and not (
-        config.diagnostics_enabled or config.request_limit is not None
-    ):
+    if config.base_url is None:
+        # A hosted provider needs no custom engine: DSPy's bundled native lm15
+        # router speaks to it; unsupported mappings raise rather than switch.
         return dspy.LM(
             config.model,
             engine="lm15",
@@ -64,31 +62,21 @@ def _build_lm(settings: Settings, override: ProviderOverride | None = None) -> d
         )
     headers: tuple[tuple[str, str], ...] = ()
     if (
-        config.base_url is not None
-        and config.base_url.rstrip("/") == OPENROUTER_API_BASE_URL
+        config.base_url.rstrip("/") == OPENROUTER_API_BASE_URL
         and settings.openrouter_http_referer
     ):
         headers = (
             ("HTTP-Referer", settings.openrouter_http_referer),
             ("X-Title", OPENROUTER_APP_TITLE),
         )
-    engine = (
-        HostedEngine(config)
-        if config.base_url is None
-        else GatewayEngine(config, headers=headers)
-    )
+    engine = GatewayEngine(config, headers=headers)
     try:
-        lm = dspy.LM(
-            config.model
-            if config.base_url is None
-            else f"fleet-gateway/{config.model}",
+        return dspy.LM(
+            f"fleet-gateway/{config.model}",
             engine=engine,
             temperature=settings.llm_temperature,
             cache=False,
         )
-        if config.request_limit is not None:
-            lm.num_retries = 0
-        return lm
     except BaseException:
         engine.close()
         raise
@@ -185,7 +173,7 @@ def build_dspy_engine(settings: Settings) -> AgentEngine:
         lm = _build_lm(settings)
         resources.callback(close_lm, lm)
         adapter = _build_adapter(settings)
-        registry = _build_tool_registry([search_docs, get_current_time])
+        registry = _build_tool_registry([SearchDocsTool(), get_current_time])
         profiles = build_tool_profiles(registry)
 
         def program_factory() -> FleetAgent:

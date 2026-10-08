@@ -289,9 +289,6 @@ class DspyAgentEngine:
         accessing ``program.react.tools['submit']``: the AG-UI contract stays
         unchanged while the DSPy program remains a black box to the runtime.
         """
-        diagnostics = getattr(getattr(self._lm, "engine", None), "diagnostics", None)
-        if diagnostics is not None:
-            diagnostics.run_id = context.run_id
         try:
             program = self._program_factory()
         except BaseException:
@@ -401,9 +398,6 @@ class DspyAgentEngine:
         history: Any | None,
         context: AgentRunContext,
     ) -> AgentRunResult:
-        diagnostics = getattr(getattr(self._lm, "engine", None), "diagnostics", None)
-        if diagnostics is not None:
-            diagnostics.run_id = context.run_id
         try:
             program = program or self._program_factory()
             captured = _capture_history(history)

@@ -67,17 +67,6 @@ class SearchDocsTool:
         return "\n".join(parts)[:_MAX_RESULT_CHARS]
 
 
-_search_docs_default = SearchDocsTool()
-
-
-def search_docs(query: str) -> str:
-    """Search the bundled documentation corpus for a short query.
-
-    Returns up to three brief excerpts (title plus text), best matches first.
-    """
-    return _search_docs_default(query)
-
-
 def get_current_time() -> str:
     """Return the current UTC date and time in ISO 8601 format."""
     return datetime.now(UTC).isoformat(timespec="seconds")

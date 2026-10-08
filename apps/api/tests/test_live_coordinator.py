@@ -9,7 +9,8 @@ import dspy
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import DspyAgentEngine
 from app.agent.event_bus import RunEventBus
-from app.agent.tools import search_docs
+from app.agent.tools import get_current_time
+from app.agent.tools.docs import SearchDocsTool
 from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.contracts.domain import SourceResult
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
@@ -17,7 +18,7 @@ from tests.helpers.signatures import AgentSignature
 
 
 def scripted_builder(steps, tools=None, max_iters=4):
-    base_tools = tools if tools is not None else [search_docs]
+    base_tools = tools if tools is not None else [SearchDocsTool()]
 
     def build(
         bus: RunEventBus,
@@ -318,7 +319,6 @@ async def test_web_search_and_sources_are_transcript_custom_events():
 
 
 async def test_every_tool_event_carries_matching_ids():
-    from app.agent.tools import get_current_time
 
     steps = [
         [
@@ -327,7 +327,7 @@ async def test_every_tool_event_carries_matching_ids():
         ],
         [submit_call()],
     ]
-    events = await collect(steps, tools=[search_docs, get_current_time])
+    events = await collect(steps, tools=[SearchDocsTool(), get_current_time])
     starts = [e for e in events if e["type"] == "TOOL_CALL_START"]
     results = {e["toolCallId"] for e in events if e["type"] == "TOOL_CALL_RESULT"}
     assert len(starts) == 2

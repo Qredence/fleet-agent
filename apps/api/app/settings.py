@@ -46,8 +46,6 @@ class Settings(BaseSettings):
         default=None,
         description="Provider API key. Never logged or returned by the API.",
     )
-    provider_diagnostics_enabled: bool = False
-    provider_request_limit: int | None = Field(default=None, ge=1, le=32)
 
     llm_max_iters: int = Field(
         default=6,

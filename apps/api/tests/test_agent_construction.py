@@ -9,7 +9,9 @@ identity rules of the build seam.
 
 import dspy
 import pytest
+from dspy.clients.engines import LM15Engine
 
+from app.agent import gateway
 from app.agent.program import FleetAgent
 from app.agent.signature import (
     build_gatherer,
@@ -19,6 +21,41 @@ from app.agent.signature import (
 )
 from app.agent.tooling import create_dspy_tool
 from app.agent.tools.docs import SearchDocsTool
+
+
+def test_dspy_native_surface_guard() -> None:
+    """The next DSPy bump must fail loudly in CI, not at runtime.
+
+    DSPy 3.4 documents ``dspy.lm15`` as the public types namespace and
+    ``LM15Engine`` (the bundled native router the BYOK engine subclasses) via
+    ``dspy.clients.engines`` — both while ``dspy==3.4.0`` is pinned and the
+    ``3.5`` migration deadline approaches. The private vendored transport the
+    diagnostics layer used is gone entirely: the gateway source must contain
+    none of it.
+    """
+    for symbol in (
+        "AccessPolicy",
+        "OpenAIChatCompat",
+        "ProviderDefinition",
+        "Request",
+        "Response",
+        "ResponseStream",
+        "RouterConfig",
+        "StreamDeltaEvent",
+        "StreamEndEvent",
+        "StreamErrorEvent",
+        "StreamStartEvent",
+        "ThinkingPart",
+        "ToolCallPart",
+    ):
+        assert hasattr(dspy.lm15, symbol), f"dspy.lm15.{symbol} moved"
+    assert issubclass(gateway.GatewayEngine, LM15Engine)
+
+    import inspect
+    from pathlib import Path
+
+    source = Path(inspect.getsourcefile(gateway)).read_text(encoding="utf-8")
+    assert "_vendor" not in source, "the gateway regained a private DSPy import"
 
 
 def _search_docs_tool() -> dspy.Tool:

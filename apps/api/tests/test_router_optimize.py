@@ -24,7 +24,7 @@ from app.agent.routing import (
 )
 from app.agent.tool_registry import TOOL_SPECS, ToolRegistry
 from app.agent.tooling import create_dspy_tool
-from app.agent.tools import search_docs
+from app.agent.tools.docs import SearchDocsTool
 from evals.agent_tool_routing import ROUTING_EXAMPLES
 from evals.optimize import RouterProgram, _report, main, split_examples
 from tests.helpers.scripted_lm import ScriptedEngine
@@ -124,7 +124,12 @@ def test_promoted_instructions_reach_the_router() -> None:
 
 def _profiles():
     registry = ToolRegistry(
-        [(create_dspy_tool(search_docs, name="search_docs"), TOOL_SPECS["search_docs"])]
+        [
+            (
+                create_dspy_tool(SearchDocsTool(), name="search_docs"),
+                TOOL_SPECS["search_docs"],
+            )
+        ]
     )
     return {"research": registry.dspy_tools(), "direct": []}
 
