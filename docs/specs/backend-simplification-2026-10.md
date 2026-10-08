@@ -146,6 +146,9 @@ cd apps/api && uv run python -m evals.run --suite routing --seeded     # offline
 
 - BEFORE (main @ `01463d1`), `FleetAgent(tool_profiles={"research": [get_current_time tool]})`:
   `named_predictors()` → `['router', "evidence_agents['research'].react", 'synthesizer']`
+- AFTER (post-C2, `SearchDocsTool()` profile) — **byte-identical**:
+  `['router', "evidence_agents['research'].react", 'synthesizer']` (the `.react` path
+  is ReActV2's internal predictor attribute, not a spec-node name).
 - Empty profile (`{"research": []}`): `['router', 'synthesizer']` (tool-free routes get no
   loop — unchanged by this work).
 - Offline `dspy.LM("openai/gpt-4o-mini", engine="lm15", cache=False, api_key=..., temperature=0.2)`
@@ -183,6 +186,29 @@ provider is a *"declare the provider"* job and *"Each `dspy.LM` binds the regist
 present when it is constructed and keeps them for its whole life"*; anything else is
 *"Write an engine. It owns its whole connection."* GatewayEngine stays the latter.
 
-## Appendix C — line-delta ledger (filled in Phase D)
+## Appendix C — line-delta and validation ledger (recorded 2026-10-08)
 
-To be recorded: `git diff --stat` summary per Phase C commit.
+- Cumulative `git diff --shortstat 01463d1..HEAD`: **39 files changed, 575
+  insertions(+), 3636 deletions(−)** — net ≈ −3,061 lines.
+- Commits: `3eee08d` (forced-submit boundary, −88/+235 with spec), `f815f9c`
+  (spec layer → direct construction, 15 files, −2,576/+243), `eeb8b6b`
+  (diagnostics/gateway/factory, −952/+91), `0596d8f` (pyyaml direct decl),
+  contracts trim committed alongside C4.
+- Validation at HEAD:
+  - `uv sync` no changes; `ruff check`/`ruff format --check`/`mypy app` clean;
+    `deptry .` clean.
+  - `pytest -q` → **516 passed, 1 skipped, 1 warning** (baseline 610: −62 spec
+    tests, −13 provider-diagnostics tests, −16 gateway diagnostics/HostedEngine
+    tests, −1 dead callback-branch test; +8 construction/guard tests).
+  - `evals.run --suite routing --validate` → `45 examples validated`, exit 0;
+    `--seeded` → coerce `25 cases ok`, seeded router mean **1.000** (27/27,
+    "all seeded routes exact (Predict + coerce held)").
+  - Boot smoke (CI script parity): `/health` 200, `/ready` 200, `/metrics` 401
+    without key / 200 with key; MLflow tracing store initialized; server
+    stopped afterwards.
+  - DSPy surface guard: `dspy.lm15` symbol tuple pinned; no `dspy._vendor`
+    import remains in the gateway.
+- Cross-reference: `docs/backend-dspy-review-2026-10-07.md` findings F1 (P1,
+  shim) and F4 (P1, diagnostics/vendored seam) are addressed by this spec; F5
+  (router-degrade observability) and the remaining F4 residual (the pinned
+  `dspy.lm15`/`LM15Engine` surface) are guard-tested follow-ups.
