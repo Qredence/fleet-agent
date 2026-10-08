@@ -8,8 +8,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import dspy
-from dspy.utils.exceptions import AdapterParseError
+from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 
+from app.agent.engine import _reason_from_react_exc
 from app.agent.evidence import DEFAULT_MAX_CHARS, bounded_json
 from app.agent.routing import ROUTES, ToolRoute, coerce_route, routing_signature
 from app.agent.signature import (
@@ -105,7 +106,28 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         # gathered, so the incoming history is used as-is.
         evidence_history = incoming_history
         if gatherer is not None:
-            evidence = gatherer(user_request=user_request, history=incoming_history)
+            # DSPy 3.4 ReActV2 makes one forced-submit LM call when the loop ends
+            # without ``submit``, and it raises when that call fails. ReActV2
+            # mutates the passed dspy.History in place, so the failed attempt's
+            # partial tool turns are already in incoming_history; mapping here -
+            # the one program boundary - keeps that history without any
+            # engine-side hook into DSPy internals.
+            try:
+                evidence = gatherer(user_request=user_request, history=incoming_history)
+            except (
+                ValueError,
+                AdapterParseError,
+                ContextWindowExceededError,
+            ) as exc:
+                reason = _reason_from_react_exc(exc) or "failed"
+                return dspy.Prediction(
+                    answer=None,
+                    process_summary=None,
+                    key_decisions=[],
+                    caveats=[],
+                    history=incoming_history,
+                    termination_reason=reason,
+                )
             evidence_history = getattr(evidence, "history", None)
 
         synthesis = self._synthesize(

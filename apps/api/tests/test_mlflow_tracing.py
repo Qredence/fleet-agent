@@ -124,22 +124,6 @@ def test_dspy_context_callbacks_replaces_rather_than_extends() -> None:
         assert dspy.settings.callbacks == [outer]
 
 
-def test_application_tool_lifecycle_program_keeps_dspy_callbacks() -> None:
-    """A program owning its tool lifecycle still gets DSPy's callbacks."""
-
-    class _Existing(BaseCallback):
-        pass
-
-    class _OwnLifecycle(_TinyProgram):
-        application_tool_lifecycle = True
-
-    existing = _Existing()
-    with dspy.context(callbacks=[existing]):
-        composed = compose_callbacks(_OwnLifecycle(), [])
-
-    assert composed == [existing]
-
-
 async def test_engine_run_lands_a_trace(tracing_store: Path) -> None:
     """A real engine run must produce at least one trace in the tracing experiment."""
     import mlflow

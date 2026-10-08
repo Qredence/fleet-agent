@@ -109,12 +109,7 @@ def compose_callbacks(
     disabled tracing on every live run while leaving offline runs traced. Compose
     instead of replace.
     """
-    active = list(dspy.settings.callbacks)
-    if getattr(program, "application_tool_lifecycle", False):
-        # The program publishes its own tool lifecycle events; its callbacks are
-        # already wired, but DSPy's (and therefore MLflow's) must still run.
-        return active
-    return [*active, *engine_callbacks]
+    return [*list(dspy.settings.callbacks), *engine_callbacks]
 
 
 @dataclass(frozen=True)
@@ -160,7 +155,21 @@ def _reason_from_react_exc(exc: BaseException) -> str | None:
     return None
 
 
-def _map_react_raise(exc: BaseException) -> AgentRunResult | None:
+def _capture_history(history: Any) -> dspy.History:
+    """Return a ``dspy.History`` the program will mutate in place.
+
+    ReActV2's loop appends each turn to the ``dspy.History`` object it was
+    passed without ever copying it, so the engine keeps a handle it can read
+    when a failure escapes the program's own boundary handling — the same
+    partial history the old engine-side monkeypatch preserved, now through
+    DSPy's public semantics only.
+    """
+    return history if isinstance(history, dspy.History) else dspy.History(messages=[])
+
+
+def _map_react_raise(
+    exc: BaseException, captured: dspy.History | None = None
+) -> AgentRunResult | None:
     """Map a ReActV2 raise that escaped the program into a public failure."""
     reason = _reason_from_react_exc(exc)
     if reason is None:
@@ -171,64 +180,8 @@ def _map_react_raise(exc: BaseException) -> AgentRunResult | None:
         process_summary=None,
         termination_reason=reason,
         error_code=_REASON_TO_PUBLIC_CODE.get(reason, "agent_no_output"),
+        history=captured,
     )
-
-
-def _install_forced_submit_compat(program: Any) -> None:
-    """Restore Prediction-with-termination_reason when forced submit fails.
-
-    DSPy 3.4 ``ReActV2._forced_submit`` raises on failure; 3.3 returned a
-    Prediction. Wrapping at the engine boundary keeps ``_map_result`` as the
-    single mapper and preserves the in-loop history the raise would drop.
-    """
-    targets: list[Any] = []
-    stack: list[Any] = [program]
-    seen: set[int] = set()
-    while stack:
-        obj = stack.pop()
-        oid = id(obj)
-        if oid in seen:
-            continue
-        seen.add(oid)
-        if callable(getattr(obj, "_forced_submit", None)):
-            targets.append(obj)
-        for value in getattr(obj, "__dict__", {}).values():
-            if isinstance(value, dspy.Module):
-                stack.append(value)
-            elif isinstance(value, dict):
-                for item in value.values():
-                    if isinstance(item, dspy.Module):
-                        stack.append(item)
-
-    for obj in targets:
-        original = obj._forced_submit
-        if getattr(original, "_fleet_forced_submit_compat", False):
-            continue
-
-        def _compat(
-            history: Any,
-            pending_inputs: dict[str, Any],
-            break_reason: str,
-            turn_index: int,
-            *,
-            _original: Any = original,
-        ) -> dspy.Prediction:
-            try:
-                return _original(history, pending_inputs, break_reason, turn_index)
-            except (
-                ValueError,
-                AdapterParseError,
-                ContextWindowExceededError,
-            ) as exc:
-                reason = _reason_from_react_exc(exc) or break_reason
-                return dspy.Prediction(
-                    answer=None,
-                    history=history,
-                    termination_reason=reason,
-                )
-
-        _compat._fleet_forced_submit_compat = True  # type: ignore[attr-defined]
-        obj._forced_submit = _compat
 
 
 _FORCED_SUBMIT_CAVEAT = (
@@ -363,10 +316,10 @@ class DspyAgentEngine:
             return
 
         try:
+            captured = _capture_history(history)
             scrubbers = {
                 field_name: StreamingScrubber() for field_name in stream_fields
             }
-            _install_forced_submit_compat(program)
             callbacks = compose_callbacks(program, self._callbacks)
             prediction: dspy.Prediction | None = None
             try:
@@ -383,7 +336,7 @@ class DspyAgentEngine:
                         include_final_prediction_in_output_stream=True,
                     )
                     async with aclosing(
-                        streamer(user_request=user_request, history=history)
+                        streamer(user_request=user_request, history=captured)
                     ) as stream:
                         async for value in stream:
                             if isinstance(value, dspy.Prediction):
@@ -406,7 +359,7 @@ class DspyAgentEngine:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
                     raise asyncio.CancelledError from None
-                mapped = _map_react_raise(exc)
+                mapped = _map_react_raise(exc, captured)
                 if mapped is None:
                     raise
                 result = mapped
@@ -453,7 +406,7 @@ class DspyAgentEngine:
             diagnostics.run_id = context.run_id
         try:
             program = program or self._program_factory()
-            _install_forced_submit_compat(program)
+            captured = _capture_history(history)
             callbacks = compose_callbacks(program, self._callbacks)
             with dspy.context(
                 lm=self._lm,
@@ -465,13 +418,13 @@ class DspyAgentEngine:
                 # usage tracking, callbacks, caller-module context, and future
                 # optimizer/runtime hooks remain active.
                 try:
-                    prediction = program(user_request=user_request, history=history)
+                    prediction = program(user_request=user_request, history=captured)
                 except (
                     ValueError,
                     AdapterParseError,
                     ContextWindowExceededError,
                 ) as exc:
-                    mapped = _map_react_raise(exc)
+                    mapped = _map_react_raise(exc, captured)
                     if mapped is None:
                         raise
                     return mapped
