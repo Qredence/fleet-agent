@@ -9,6 +9,8 @@ the snapshot persisted for reload can never disagree.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,10 +31,43 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
-from app.kernel.identity import canonical_source_key
+from app.kernel.identity import canonical_source_key, disambiguated_source_id
 
 # One RFC 6902 JSON Patch operation, as carried by AG-UI STATE_DELTA events.
 JsonPatchOp = dict[str, Any]
+
+
+def _escape(token: str) -> str:
+    """JSON Pointer escaping (RFC 6901) for one object key."""
+    return token.replace("~", "~0").replace("/", "~1")
+
+
+def state_diff(before: Any, after: Any, *, path: str = "") -> list[JsonPatchOp]:
+    """Operations that turn ``before`` into ``after`` (RFC 6902).
+
+    Dicts diff key by key; lists and scalars are reported as one ``replace`` of
+    the new value. Whole-value list patches are deliberate: an incremental
+    ``add .../-`` is not idempotent, so a client that re-applies a delta would
+    duplicate an entry. The reducer mutates state and calls this once per event,
+    so the wire delta is derived from the same object that gets persisted
+    instead of being maintained a second time by hand.
+    """
+    if isinstance(before, dict) and isinstance(after, dict):
+        ops: list[JsonPatchOp] = []
+        for key, new_value in after.items():
+            child = f"{path}/{_escape(str(key))}"
+            if key in before:
+                ops += state_diff(before[key], new_value, path=child)
+            else:
+                ops.append({"op": "add", "path": child, "value": new_value})
+        for key in before:
+            if key not in after:
+                ops.append({"op": "remove", "path": f"{path}/{_escape(str(key))}"})
+        return ops
+    if before != after:
+        return [{"op": "replace", "path": path, "value": after}]
+    return []
+
 
 AnyDomainEvent = (
     InlineDataEvent
@@ -136,7 +171,7 @@ class TraceReducer:
     def begin(self) -> list[JsonPatchOp]:
         """RUN_STARTED + snapshot are emitted by the coordinator; this is the
         first delta: understanding starts."""
-        return self._start_step("step-understand")
+        return self._diff(lambda: self._start_step("step-understand"))
 
     # -- domain events ---------------------------------------------------------
 
@@ -153,30 +188,58 @@ class TraceReducer:
         | ArtifactReady
         | ArtifactFailed,
     ) -> list[JsonPatchOp]:
-        if isinstance(event, ToolStarted):
-            return self._tool_started(event)
-        if isinstance(event, StepStarted):
-            return self._step_started_event(event)
-        if isinstance(event, StepCompleted):
-            return self._step_completed_event(event)
-        if isinstance(event, StepFailed):
-            return self._step_failed_event(event)
-        if isinstance(event, (ToolCompleted, ToolFailed)):
-            return self._tool_settled(event)
-        if isinstance(event, SourceDiscovered):
-            return self._source_discovered(event)
-        if isinstance(event, ArtifactStarted):
-            return self._artifact_started(event)
-        if isinstance(event, ArtifactReady):
-            return self._artifact_ready(event)
-        return self._artifact_failed(event)
+        return self._diff(lambda: self._reduce(event))
 
-    def _tool_settled(self, event: ToolCompleted | ToolFailed) -> list[JsonPatchOp]:
+    def _reduce(
+        self,
+        event: ToolStarted
+        | ToolCompleted
+        | ToolFailed
+        | SourceDiscovered
+        | StepStarted
+        | StepCompleted
+        | StepFailed
+        | ArtifactStarted
+        | ArtifactReady
+        | ArtifactFailed,
+    ) -> None:
+        if isinstance(event, ToolStarted):
+            self._tool_started(event)
+        elif isinstance(event, StepStarted):
+            self._step_started_event(event)
+        elif isinstance(event, StepCompleted):
+            self._step_completed_event(event)
+        elif isinstance(event, StepFailed):
+            self._step_failed_event(event)
+        elif isinstance(event, ToolCompleted | ToolFailed):
+            self._tool_settled(event)
+        elif isinstance(event, SourceDiscovered):
+            self._source_discovered(event)
+        elif isinstance(event, ArtifactStarted):
+            self._artifact_started(event)
+        elif isinstance(event, ArtifactReady):
+            self._artifact_ready(event)
+        else:
+            self._artifact_failed(event)
+
+    def _diff(self, change: Callable[[], None]) -> list[JsonPatchOp]:
+        """Apply one state change and report it as JSON Patch operations.
+
+        Every mutator below writes state only; this is the single place that
+        turns a change into a wire delta, so a field can never be updated in
+        state but forgotten in the patch (or the other way round).
+        """
+        before = deepcopy(self.state)
+        change()
+        return state_diff(before, self.state)
+
+    # -- tool, step and run mutators -----------------------------------------
+
+    def _tool_settled(self, event: ToolCompleted | ToolFailed) -> None:
         idx = self._tool_index.get(event.tool_call_id)
         if idx is None:
-            return []
+            return
         tool = self.state["toolCalls"][idx]
-        ops: list[JsonPatchOp] = []
         tool["status"] = "completed" if isinstance(event, ToolCompleted) else "failed"
         tool["finishedAt"] = _utc_now()
         tool["durationMs"] = event.duration_ms
@@ -184,77 +247,54 @@ class TraceReducer:
             tool["outputPreview"] = preview(event.output_preview)
         else:
             tool["errorMessage"] = event.error_message
-        for key in (
-            "status",
-            "finishedAt",
-            "durationMs",
-            "outputPreview",
-            "errorMessage",
-        ):
-            if key in tool:
-                ops.append(
-                    {"op": "add", "path": f"/toolCalls/{idx}/{key}", "value": tool[key]}
-                )
-        return ops
 
-    def _tool_started(self, event: ToolStarted) -> list[JsonPatchOp]:
+    def _tool_started(self, event: ToolStarted) -> None:
         if event.tool_call_id in self._tool_index:
-            return []
-        ops: list[JsonPatchOp] = []
+            return
         if "step-research" not in self._step_index:
-            ops += self._complete_step("step-understand")
-            ops += self._add_step(
+            self._complete_step("step-understand")
+            self._add_step(
                 "step-research",
                 phase="research",
                 title="Researching with tools",
                 status="running",
             )
-            ops += self._start_step("step-research")
+            self._start_step("step-research")
         self._tool_index[event.tool_call_id] = len(self.state["toolCalls"])
-        now = _utc_now()
         self.state["toolCalls"].append(
             {
                 "id": event.tool_call_id,
                 "name": event.name,
                 "status": "running",
                 "inputPreview": preview(event.input_preview),
-                "startedAt": now,
+                "startedAt": _utc_now(),
             }
         )
-        ops.append(
-            {
-                "op": "add",
-                "path": "/toolCalls/-",
-                "value": self.state["toolCalls"][-1],
-            }
-        )
-        self._bump_tool_count(ops, length=len(self.state["toolCalls"]))
-        self._link_tool_to_step(ops, event.tool_call_id, event.step_id)
-        return ops
+        self._bump_tool_count(length=len(self.state["toolCalls"]))
+        self._link_tool_to_step(event.tool_call_id, event.step_id)
 
-    def _step_started_event(self, event: StepStarted) -> list[JsonPatchOp]:
-        ops: list[JsonPatchOp] = []
+    def _step_started_event(self, event: StepStarted) -> None:
         if event.step_id not in self._step_index:
             if event.phase == "planning" and "step-understand" in self._step_index:
-                ops += self._complete_step("step-understand")
-            ops += self._add_step(
+                self._complete_step("step-understand")
+            self._add_step(
                 event.step_id,
                 phase=event.phase,
                 title=event.title,
                 status="pending",
                 parent_id=event.parent_id,
             )
-        return ops + self._start_step(event.step_id)
+        self._start_step(event.step_id)
 
-    def _step_completed_event(self, event: StepCompleted) -> list[JsonPatchOp]:
+    def _step_completed_event(self, event: StepCompleted) -> None:
         if event.step_id not in self._step_index:
-            return []
-        return self._complete_step(event.step_id, public_summary=event.public_summary)
+            return
+        self._complete_step(event.step_id, public_summary=event.public_summary)
 
-    def _step_failed_event(self, event: StepFailed) -> list[JsonPatchOp]:
-        if event.step_id not in self._step_index:
-            return []
-        idx = self._step_index[event.step_id]
+    def _step_failed_event(self, event: StepFailed) -> None:
+        idx = self._step_index.get(event.step_id)
+        if idx is None:
+            return
         step = self.state["steps"][idx]
         step["status"] = "failed"
         step["finishedAt"] = _utc_now()
@@ -263,30 +303,18 @@ class TraceReducer:
             step["durationMs"] = int(
                 (time.monotonic() - self._step_started_monotonic[event.step_id]) * 1000
             )
-        return [
-            {"op": "add", "path": f"/steps/{idx}/{key}", "value": value}
-            for key, value in step.items()
-            if key in {"status", "finishedAt", "durationMs", "publicSummary"}
-        ]
 
     # -- completion ----------------------------------------------------------
 
     def live_synthesis_summary(self, summary: str) -> list[JsonPatchOp]:
-        """
-        Publish a model-written process summary while the run is in progress.
-
-        Parameters:
-            summary (str): Process summary to expose in the synthesis step.
-
-        Returns:
-            list[JsonPatchOp]: JSON Patch operations that create or update the synthesis
-                step; an empty list if the summary is empty.
-        """
+        """Publish a model-written process summary while the run is in progress."""
         if not summary:
             return []
-        ops: list[JsonPatchOp] = []
+        return self._diff(lambda: self._set_live_summary(summary))
+
+    def _set_live_summary(self, summary: str) -> None:
         if "step-synthesis" not in self._step_index:
-            ops += self._add_step(
+            self._add_step(
                 "step-synthesis",
                 phase="synthesis",
                 title="Preparing the response",
@@ -294,85 +322,45 @@ class TraceReducer:
             )
         idx = self._step_index["step-synthesis"]
         if self.state["steps"][idx].get("status") != "running":
-            ops += self._start_step("step-synthesis")
+            self._start_step("step-synthesis")
             idx = self._step_index["step-synthesis"]
         self.state["steps"][idx]["publicSummary"] = summary
-        ops.append(
-            {"op": "add", "path": f"/steps/{idx}/publicSummary", "value": summary}
-        )
-        return ops
 
     def complete_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
-        """
-        Complete the agent run and publish its final status, summary, metrics,
-            decisions, and caveats.
+        """Publish the final status, summary, metrics, decisions and caveats."""
+        return self._diff(lambda: self._finalize(result))
 
-        Parameters:
-            result (AgentRunResult): Final result data used to update the run state.
-
-        Returns:
-            list[JsonPatchOp]: JSON Patch operations describing the completed run.
-        """
-        ops: list[JsonPatchOp] = []
+    def _finalize(self, result: AgentRunResult) -> None:
         if "step-research" in self._step_index:
-            ops += self._complete_step("step-research")
+            self._complete_step("step-research")
         else:
-            ops += self._complete_step("step-understand")
-
+            self._complete_step("step-understand")
         if "step-synthesis" not in self._step_index:
-            ops += self._add_step(
+            self._add_step(
                 "step-synthesis",
                 phase="synthesis",
                 title="Preparing the response",
                 status="running",
             )
-            ops += self._start_step("step-synthesis")
-
+            self._start_step("step-synthesis")
         summary = result.process_summary or (
             "The agent finished without producing a final answer."
             if result.status == "failed"
             else "Composed the final answer."
         )
-        ops += self._complete_step("step-synthesis", public_summary=summary)
+        self._complete_step("step-synthesis", public_summary=summary)
 
         run = self.state["run"]
         run["status"] = "completed" if result.status == "completed" else "failed"
         run["finishedAt"] = _utc_now()
-        ops.append({"op": "add", "path": "/run/status", "value": run["status"]})
-        ops.append({"op": "add", "path": "/run/finishedAt", "value": run["finishedAt"]})
         if result.termination_reason:
             run["terminationReason"] = result.termination_reason
-            ops.append(
-                {
-                    "op": "add",
-                    "path": "/run/terminationReason",
-                    "value": result.termination_reason,
-                }
-            )
         if result.error_code:
             run["errorCode"] = result.error_code
-            ops.append(
-                {"op": "add", "path": "/run/errorCode", "value": result.error_code}
-            )
-
         if result.evidence_status:
             run["evidenceStatus"] = result.evidence_status
-            ops.append(
-                {
-                    "op": "add",
-                    "path": "/run/evidenceStatus",
-                    "value": result.evidence_status,
-                }
-            )
         if result.evidence_reason:
             run["evidenceStopReason"] = result.evidence_reason
-            ops.append(
-                {
-                    "op": "add",
-                    "path": "/run/evidenceStopReason",
-                    "value": result.evidence_reason,
-                }
-            )
 
         metrics = self.state["metrics"]
         usage_metric_names = (
@@ -385,33 +373,24 @@ class TraceReducer:
             if value is not None:
                 metrics[metric_name] = value
         metrics["durationMs"] = int((time.monotonic() - self._monotonic_start) * 1000)
-        for key, value in metrics.items():
-            if value is not None:
-                ops.append({"op": "add", "path": f"/metrics/{key}", "value": value})
 
         for i, decision in enumerate(result.key_decisions):
-            entry = {
-                "id": (
-                    f"decision-{self.run_id}-{i}"
-                    if self._run_scoped_decisions
-                    else f"decision-{i}"
-                ),
-                "title": decision,
-                "alternatives": [],
-                "status": "accepted",
-            }
-            self.state["decisions"].append(entry)
-            ops.append({"op": "add", "path": "/decisions/-", "value": entry})
+            self.state["decisions"].append(
+                {
+                    "id": (
+                        f"decision-{self.run_id}-{i}"
+                        if self._run_scoped_decisions
+                        else f"decision-{i}"
+                    ),
+                    "title": decision,
+                    "alternatives": [],
+                    "status": "accepted",
+                }
+            )
 
         if result.caveats:
             self.state["caveats"] = list(result.caveats)
-            ops.append({"op": "add", "path": "/caveats", "value": list(result.caveats)})
-
-        if "activeStepId" in run:
-            del run["activeStepId"]
-            ops.append({"op": "remove", "path": "/run/activeStepId"})
-
-        return ops
+        run.pop("activeStepId", None)
 
     def _add_step(
         self,
@@ -421,9 +400,9 @@ class TraceReducer:
         title: str,
         status: str,
         parent_id: str | None = None,
-    ) -> list[JsonPatchOp]:
+    ) -> None:
         self._step_index[step_id] = len(self.state["steps"])
-        step = {
+        step: dict[str, Any] = {
             "id": step_id,
             "phase": phase,
             "title": title,
@@ -435,28 +414,16 @@ class TraceReducer:
         if parent_id is not None:
             step["parentId"] = parent_id
         self.state["steps"].append(step)
-        return [{"op": "add", "path": "/steps/-", "value": step}]
 
-    def _start_step(self, step_id: str) -> list[JsonPatchOp]:
+    def _start_step(self, step_id: str) -> None:
         idx = self._step_index[step_id]
         step = self.state["steps"][idx]
         step["status"] = "running"
         step["startedAt"] = _utc_now()
         self._step_started_monotonic[step_id] = time.monotonic()
         self.state["run"]["activeStepId"] = step_id
-        return [
-            {"op": "replace", "path": f"/steps/{idx}/status", "value": "running"},
-            {
-                "op": "add",
-                "path": f"/steps/{idx}/startedAt",
-                "value": step["startedAt"],
-            },
-            {"op": "add", "path": "/run/activeStepId", "value": step_id},
-        ]
 
-    def _complete_step(
-        self, step_id: str, public_summary: str | None = None
-    ) -> list[JsonPatchOp]:
+    def _complete_step(self, step_id: str, public_summary: str | None = None) -> None:
         idx = self._step_index[step_id]
         step = self.state["steps"][idx]
         step["status"] = "completed"
@@ -467,143 +434,96 @@ class TraceReducer:
             )
         if public_summary:
             step["publicSummary"] = public_summary
-        return [
-            {"op": "add", "path": f"/steps/{idx}/{key}", "value": value}
-            for key, value in step.items()
-            if key in {"status", "finishedAt", "durationMs", "publicSummary"}
-        ]
 
-    def _bump_tool_count(self, ops: list[JsonPatchOp], *, length: int) -> None:
+    def _bump_tool_count(self, *, length: int) -> None:
         self.state["run"]["toolCallCount"] = length
         self.state["metrics"]["toolCallCount"] = length
-        ops.append({"op": "replace", "path": "/run/toolCallCount", "value": length})
-        ops.append({"op": "replace", "path": "/metrics/toolCallCount", "value": length})
 
-    def _link_tool_to_step(
-        self, ops: list[JsonPatchOp], tool_call_id: str, step_id: str | None
-    ) -> None:
+    def _link_tool_to_step(self, tool_call_id: str, step_id: str | None) -> None:
         target = step_id if step_id in self._step_index else "step-research"
         if target not in self._step_index:
             return
-        idx = self._step_index[target]
-        ids = self.state["steps"][idx]["toolCallIds"]
-        ids.append(tool_call_id)
-        ops.append(
-            {"op": "replace", "path": f"/steps/{idx}/toolCallIds", "value": list(ids)}
+        self.state["steps"][self._step_index[target]]["toolCallIds"].append(
+            tool_call_id
         )
 
     # -- sources & artifacts -------------------------------------------------
 
-    def _source_discovered(self, event: SourceDiscovered) -> list[JsonPatchOp]:
+    def _source_discovered(self, event: SourceDiscovered) -> None:
         # Deduplicate by canonical URI, else by document id.
         key = canonical_source_key(event.source)
         if key in self._source_index:
-            return []
+            return
         self._source_index[key] = len(self.state["sources"])
         source_id = event.source.id
         # The public state is thread-scoped. Preserve the tool id whenever it
         # is unambiguous, but disambiguate two distinct canonical documents
         # that happen to reuse an id in one thread.
         if any(source.get("id") == source_id for source in self.state["sources"]):
-            from app.kernel.identity import disambiguated_source_id
-
             source_id = disambiguated_source_id(source_id, key)
-        entry = {
-            "id": source_id,
-            "title": event.source.title,
-            "sourceType": event.source.source_type,
-            "uri": event.source.uri,
-            "excerpt": preview(event.source.excerpt or ""),
-            "toolCallId": event.tool_call_id,
-        }
-        self.state["sources"].append(entry)
-        ops: list[JsonPatchOp] = [{"op": "add", "path": "/sources/-", "value": entry}]
+        self.state["sources"].append(
+            {
+                "id": source_id,
+                "title": event.source.title,
+                "sourceType": event.source.source_type,
+                "uri": event.source.uri,
+                "excerpt": preview(event.source.excerpt or ""),
+                "toolCallId": event.tool_call_id,
+            }
+        )
         target_step = (
             event.step_id if event.step_id in self._step_index else "step-research"
         )
         if target_step in self._step_index:
-            idx = self._step_index[target_step]
-            ids = self.state["steps"][idx]["sourceIds"]
+            ids = self.state["steps"][self._step_index[target_step]]["sourceIds"]
             if source_id not in ids:
                 ids.append(source_id)
-            ops.append(
-                {"op": "replace", "path": f"/steps/{idx}/sourceIds", "value": list(ids)}
-            )
-        return ops
 
-    def _artifact_started(self, event: ArtifactStarted) -> list[JsonPatchOp]:
+    def _artifact_started(self, event: ArtifactStarted) -> None:
         if event.artifact.id in self._artifact_index:
-            return []
+            return
         self._artifact_index[event.artifact.id] = len(self.state["artifacts"])
-        entry = {
-            "id": event.artifact.id,
-            "name": event.artifact.name,
-            "mediaType": event.artifact.media_type,
-            "status": "generating",
-        }
-        self.state["artifacts"].append(entry)
-        return [{"op": "add", "path": "/artifacts/-", "value": entry}]
+        self.state["artifacts"].append(
+            {
+                "id": event.artifact.id,
+                "name": event.artifact.name,
+                "mediaType": event.artifact.media_type,
+                "status": "generating",
+            }
+        )
 
-    def _artifact_ready(self, event: ArtifactReady) -> list[JsonPatchOp]:
+    def _artifact_ready(self, event: ArtifactReady) -> None:
         idx = self._artifact_index.get(event.artifact.id)
         if idx is None:
-            return []
+            return
         artifact = self.state["artifacts"][idx]
         artifact["status"] = "ready"
         artifact["sizeBytes"] = event.artifact.size_bytes
         artifact["downloadUrl"] = event.download_url
-        step_ops: list[JsonPatchOp] = []
         target_step = (
             event.step_id if event.step_id in self._step_index else "step-research"
         )
         if target_step in self._step_index:
-            step_idx = self._step_index[target_step]
-            ids = self.state["steps"][step_idx]["artifactIds"]
+            ids = self.state["steps"][self._step_index[target_step]]["artifactIds"]
             if event.artifact.id not in ids:
                 ids.append(event.artifact.id)
-            step_ops.append(
-                {
-                    "op": "replace",
-                    "path": f"/steps/{step_idx}/artifactIds",
-                    "value": list(ids),
-                }
-            )
-        return [
-            {"op": "replace", "path": f"/artifacts/{idx}/status", "value": "ready"},
-            {
-                "op": "add",
-                "path": f"/artifacts/{idx}/sizeBytes",
-                "value": event.artifact.size_bytes,
-            },
-            {
-                "op": "add",
-                "path": f"/artifacts/{idx}/downloadUrl",
-                "value": event.download_url,
-            },
-            *step_ops,
-        ]
 
-    def _artifact_failed(self, event: ArtifactFailed) -> list[JsonPatchOp]:
+    def _artifact_failed(self, event: ArtifactFailed) -> None:
         idx = self._artifact_index.get(event.artifact_id)
         if idx is None:
             self._artifact_index[event.artifact_id] = len(self.state["artifacts"])
-            entry = {
-                "id": event.artifact_id,
-                "name": event.name,
-                "mediaType": event.media_type,
-                "status": "failed",
-            }
-            self.state["artifacts"].append(entry)
-            return [{"op": "add", "path": "/artifacts/-", "value": entry}]
+            self.state["artifacts"].append(
+                {
+                    "id": event.artifact_id,
+                    "name": event.name,
+                    "mediaType": event.media_type,
+                    "status": "failed",
+                }
+            )
+            return
         artifact = self.state["artifacts"][idx]
         artifact["status"] = "failed"
-        ops: list[JsonPatchOp] = [
-            {"op": "replace", "path": f"/artifacts/{idx}/status", "value": "failed"}
-        ]
-        if "downloadUrl" in artifact:
-            artifact.pop("downloadUrl")
-            ops.append({"op": "remove", "path": f"/artifacts/{idx}/downloadUrl"})
-        return ops
+        artifact.pop("downloadUrl", None)
 
 
 def _unique_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

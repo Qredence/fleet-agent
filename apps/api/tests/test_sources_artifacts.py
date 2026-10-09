@@ -79,7 +79,10 @@ def test_source_dedup_by_canonical_uri_and_id():
         ),
     )
     ops1 = reducer.apply_event(event)
-    assert any(op["path"] == "/sources/-" for op in ops1)
+    # The delta replaces the whole collection value: an incremental append is not
+    # idempotent if a client re-applies the same patch.
+    assert any(op["path"].startswith("/sources") for op in ops1)
+    assert [source["id"] for source in reducer.state["sources"]] == ["doc-agui-events"]
     assert reducer.state["steps"][1]["sourceIds"] == ["doc-agui-events"]
 
     # Same URI, different trailing slash + fragment + case → deduped away.

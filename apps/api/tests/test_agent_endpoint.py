@@ -123,8 +123,15 @@ async def test_tool_error_run_recovers(app):
     assert len(results) == 2
 
     deltas = [e for e in events if e["type"] == "STATE_DELTA"]
-    tool_ops = [op for d in deltas for op in d["delta"] if op["path"] == "/toolCalls/-"]
-    statuses = {op["value"]["status"] for op in tool_ops}
+    # Tool entries live in one collection that the delta replaces as a whole.
+    tool_ops = [
+        entry
+        for delta in deltas
+        for op in delta["delta"]
+        if op["path"].startswith("/toolCalls")
+        for entry in (op["value"] if op["path"] == "/toolCalls" else [op["value"]])
+    ]
+    statuses = {entry["status"] for entry in tool_ops}
     assert statuses == {"failed", "completed"}
 
 
