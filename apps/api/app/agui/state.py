@@ -37,6 +37,17 @@ from app.kernel.identity import canonical_source_key, disambiguated_source_id
 JsonPatchOp = dict[str, Any]
 
 
+_SUMMARY_PATCH_MIN_GROWTH = 192
+"""New summary characters worth one state patch.
+
+A growing string streamed as one whole-value patch per token is quadratic on the
+wire: a 2,000-character summary cost ~58 KB and a 4,000-character one ~216 KB,
+against a few hundred bytes of answer text. The state itself is still updated on
+every token, so the persisted snapshot stays exact; only the *reported* patch is
+coalesced, and ``complete_run`` always reports the final value.
+"""
+
+
 def _escape(token: str) -> str:
     """JSON Pointer escaping (RFC 6901) for one object key."""
     return token.replace("~", "~0").replace("/", "~1")
@@ -165,6 +176,7 @@ class TraceReducer:
             s["id"]: i for i, s in enumerate(self.state["steps"])
         }
         self._step_started_monotonic: dict[str, float] = {}
+        self._summary_reported_len = 0
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -307,10 +319,29 @@ class TraceReducer:
     # -- completion ----------------------------------------------------------
 
     def live_synthesis_summary(self, summary: str) -> list[JsonPatchOp]:
-        """Publish a model-written process summary while the run is in progress."""
+        """Publish a model-written process summary while the run is in progress.
+
+        Growth is coalesced: the state takes every token, the wire takes a patch
+        per ``_SUMMARY_PATCH_MIN_GROWTH`` characters. Creating the synthesis step
+        and starting it are always reported, so a client is never left without
+        the step while the first characters accumulate.
+        """
         if not summary:
             return []
-        return self._diff(lambda: self._set_live_summary(summary))
+        started = (
+            "step-synthesis" in self._step_index
+            and self.state["steps"][self._step_index["step-synthesis"]].get("status")
+            == "running"
+        )
+        if (
+            started
+            and len(summary) - self._summary_reported_len < _SUMMARY_PATCH_MIN_GROWTH
+        ):
+            self._set_live_summary(summary)
+            return []
+        ops = self._diff(lambda: self._set_live_summary(summary))
+        self._summary_reported_len = len(summary)
+        return ops
 
     def _set_live_summary(self, summary: str) -> None:
         if "step-synthesis" not in self._step_index:
