@@ -1,14 +1,12 @@
-"""TraceReducer: agent-run state machine producing AgentWorkspaceState patches.
+"""Public process state: the vocabulary, the reducer, and the patch diff.
 
-Deterministic public steps for the MVP:
-
-    step-understand   Understanding the request   (engine starts)
-    step-research     Researching with tools      (first ToolStarted)
-    step-synthesis    Preparing the response      (engine returns)
-
-Enriched at completion with the model-written process_summary, key_decisions,
-and caveats. Never contains raw reasoning — only curated public fields.
+The reducer owns one mutable ``AgentWorkspaceState`` dict per run. Consumers
+(the AG-UI mapper and the coordinators) read it and apply the JSON-Patch deltas
+it returns; nothing else mutates it, so the state streamed to the browser and
+the snapshot persisted for reload can never disagree.
 """
+
+from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
@@ -16,20 +14,41 @@ from typing import Any
 
 from app.agent.engine import AgentRunResult
 from app.agent.instrumented import preview
-from app.agui.types import JsonPatchOp
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
     ArtifactStarted,
+    FinalFieldsReady,
+    InlineDataEvent,
     SourceDiscovered,
     StepCompleted,
     StepFailed,
     StepStarted,
+    SynthesisTokenDelta,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
 )
 from app.kernel.identity import canonical_source_key
+
+# One RFC 6902 JSON Patch operation, as carried by AG-UI STATE_DELTA events.
+JsonPatchOp = dict[str, Any]
+
+AnyDomainEvent = (
+    InlineDataEvent
+    | ToolStarted
+    | ToolCompleted
+    | ToolFailed
+    | SourceDiscovered
+    | StepStarted
+    | StepCompleted
+    | StepFailed
+    | ArtifactStarted
+    | ArtifactReady
+    | ArtifactFailed
+    | FinalFieldsReady
+    | SynthesisTokenDelta
+)
 
 
 def _utc_now() -> str:

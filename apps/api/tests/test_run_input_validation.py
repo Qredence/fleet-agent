@@ -62,7 +62,7 @@ async def test_api_rejects_images_before_provider_or_reservation(
 async def test_accepted_settlement_survives_client_cancellation():
     import asyncio
 
-    from app.agui.live_coordinator import _settle_terminal
+    from app.agui.run import _settle_terminal
 
     started, release = asyncio.Event(), asyncio.Event()
     committed = []
@@ -83,7 +83,7 @@ async def test_accepted_settlement_survives_client_cancellation():
 
 
 async def test_settlement_retries_once():
-    from app.agui.live_coordinator import _settle_with_retry
+    from app.agui.run import _settle_with_retry
 
     calls = []
 

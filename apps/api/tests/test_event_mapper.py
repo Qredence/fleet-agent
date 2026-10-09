@@ -1,7 +1,7 @@
 import json
 
-from app.agui.event_mapper import map_domain_event, map_tool_event
-from app.agui.trace_reducer import TraceReducer
+from app.agui.state import TraceReducer
+from app.agui.wire import map_domain_event, map_tool_event
 from app.contracts.domain import (
     InlineDataEvent,
     SourceDiscovered,
@@ -121,7 +121,7 @@ def test_source_events_only_update_authoritative_state():
 
 def test_chunk_text_preserves_whitespace_across_boundaries():
     """Concatenating streamed chunks must reproduce the answer exactly."""
-    from app.agui.event_mapper import chunk_text
+    from app.agui.wire import chunk_text
 
     answer = (
         "Fleet Agent is an AI agent built with LangSmith Fleet that can be "
@@ -138,7 +138,7 @@ def test_chunk_text_preserves_whitespace_across_boundaries():
 
 
 def test_chunk_text_handles_empty_and_short_text():
-    from app.agui.event_mapper import chunk_text
+    from app.agui.wire import chunk_text
 
     assert chunk_text("") == []
     assert chunk_text("Short.") == ["Short."]
@@ -146,7 +146,7 @@ def test_chunk_text_handles_empty_and_short_text():
 
 def test_final_fields_event_streams_answer_with_intact_spacing():
     """The HTTP answer must not lose spaces at chunk boundaries."""
-    from app.agui.event_mapper import map_final_fields_event
+    from app.agui.wire import map_final_fields_event
     from app.contracts.domain import FinalFieldsReady
 
     reducer = TraceReducer(thread_id="thread-1", run_id="run-1")

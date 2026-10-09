@@ -19,8 +19,7 @@ from pydantic import ValidationError
 
 from app.agent.engine import EngineBuilder
 from app.agent.provider import ProviderOverrideError, parse_provider_override
-from app.agui.live_coordinator import LiveDSPyCoordinator
-from app.agui.run_coordinator import RunCoordinator
+from app.agui.run import LiveDSPyCoordinator, RunCoordinator
 from app.api.deps import get_sessions
 from app.contracts.agent_capabilities import AgentCapabilities
 from app.contracts.constants import ERROR_MESSAGES

@@ -6,7 +6,7 @@ import jsonpatch
 
 from app.agent.engine import AgentRunResult
 from app.agent.event_bus import DONE, RunEventBus
-from app.agui.trace_reducer import TraceReducer
+from app.agui.state import TraceReducer
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.domain import (
     ArtifactReady,

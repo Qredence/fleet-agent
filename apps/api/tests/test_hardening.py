@@ -9,7 +9,7 @@ from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 
 from app.agent.callbacks import AgUiRunCallback
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.run import LiveDSPyCoordinator
 from app.main import create_app
 from app.persistence.repositories import (
     ProjectsRepository,

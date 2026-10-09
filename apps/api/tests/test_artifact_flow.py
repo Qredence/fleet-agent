@@ -12,7 +12,7 @@ from app.agent.callbacks import AgUiRunCallback  # noqa: E402
 from app.agent.engine import DspyAgentEngine  # noqa: E402
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.run import LiveDSPyCoordinator
 from app.main import create_app
 from app.persistence.repositories import (
     ArtifactsRepository,

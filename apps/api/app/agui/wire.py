@@ -14,8 +14,7 @@ from ag_ui.core import (
 )
 
 from app.agent.instrumented import truncate_result
-from app.agui.trace_reducer import TraceReducer
-from app.agui.types import AnyDomainEvent, JsonPatchOp
+from app.agui.state import AnyDomainEvent, JsonPatchOp, TraceReducer
 from app.contracts.cards import make_card
 from app.contracts.domain import (
     ArtifactReady,

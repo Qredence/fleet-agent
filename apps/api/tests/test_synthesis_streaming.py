@@ -20,7 +20,7 @@ from app.agent.factory import build_tool_profiles
 from app.agent.program import FleetAgent
 from app.agent.tool_registry import ToolMetadata, ToolRegistry
 from app.agent.tooling import create_dspy_tool
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.run import LiveDSPyCoordinator
 from tests.helpers.scripted_lm import (
     StreamingScriptedLM,
     evidence_end,

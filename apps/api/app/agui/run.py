@@ -1,15 +1,25 @@
-"""Live DSPy coordinator with durable, exactly-once terminal settlement."""
+"""AG-UI SSE coordinators: fixture replay and the live DSPy run.
+
+Both coordinators own the same protocol invariants — the Accept header drives the
+encoder, exactly one terminal event is emitted, a client disconnect stops the
+stream quietly, and internal failures surface as a safe RUN_ERROR (never a stack
+trace). ``RunCoordinator`` replays scripted fixture streams; ``LiveDSPyCoordinator``
+runs the real engine, reduces domain events into public state, and settles the
+run durably.
+"""
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterable
 from contextlib import suppress
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from ag_ui.core import (
     BaseEvent,
+    EventType,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
@@ -32,8 +42,8 @@ from app.agent.engine import (
 )
 from app.agent.event_bus import DONE, RunEventBus
 from app.agent.provider import ProviderOverride
-from app.agui.event_mapper import chunk_text, map_domain_event
-from app.agui.trace_reducer import TraceReducer
+from app.agui.state import TraceReducer
+from app.agui.wire import chunk_text, map_domain_event
 from app.contracts.constants import public_error
 from app.contracts.domain import (
     ArtifactFailed,
@@ -50,6 +60,107 @@ from app.persistence.run_persistence import RunPersistence
 from app.services.metrics import MetricsRegistry
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TimedEvent:
+    """One fixture line: emit ``event`` ``at_ms`` after the stream starts."""
+
+    at_ms: int
+    event: BaseEvent
+
+
+_TERMINAL_EVENTS = {EventType.RUN_FINISHED, EventType.RUN_ERROR}
+
+
+class RunCoordinator:
+    """Replays timed events; owns timing, id binding, and stream invariants."""
+
+    def __init__(self, *, time_scale: float = 1.0) -> None:
+        self._time_scale = time_scale
+
+    async def stream(
+        self,
+        *,
+        input_data: RunAgentInput,
+        events: Iterable[TimedEvent],
+        accept: str | None,
+        is_disconnected: Callable[[], Awaitable[bool]],
+    ) -> AsyncIterator[str]:
+        # Upstream types the optional parameter as `str`; "" is the no-value form.
+        encoder = EventEncoder(accept=accept or "")
+        terminal_sent = False
+        started = asyncio.get_running_loop().time()
+
+        try:
+            for timed in events:
+                if terminal_sent:
+                    return
+                if await is_disconnected():
+                    return
+                await self._wait_until(timed.at_ms, started)
+                event = _bind_run_ids(timed.event, input_data)
+                if event.type in _TERMINAL_EVENTS:
+                    terminal_sent = True
+                yield encoder.encode(event)
+            if not terminal_sent:
+                yield encoder.encode(
+                    RunFinishedEvent(
+                        thread_id=input_data.thread_id, run_id=input_data.run_id
+                    )
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            if terminal_sent:
+                return
+            logger.exception(
+                "mock run failed", extra={"thread_id": input_data.thread_id}
+            )
+            terminal_sent = True
+            yield encoder.encode(
+                RunErrorEvent(
+                    message="The agent run failed.",
+                    code="internal_error",
+                )
+            )
+
+    async def _wait_until(self, at_ms: int, started: float) -> None:
+        if self._time_scale <= 0:
+            return
+        elapsed_ms = (asyncio.get_running_loop().time() - started) * 1000
+        delay_s = max(0.0, (at_ms - elapsed_ms) / 1000 * self._time_scale)
+        await asyncio.sleep(delay_s)
+
+
+def _bind_run_ids(event: BaseEvent, input_data: RunAgentInput) -> BaseEvent:
+    """Carry the client's thread/run ids onto fixture events."""
+    updates: dict[str, Any] = {}
+    if hasattr(event, "thread_id"):
+        updates["thread_id"] = input_data.thread_id
+    if hasattr(event, "run_id"):
+        updates["run_id"] = input_data.run_id
+
+    # Fixtures intentionally use stable IDs so they are easy to inspect. The
+    # browser-owned message repository, however, requires message IDs to be
+    # unique within a thread. Scope every fixture message identity to this
+    # run while keeping tool-call IDs stable for the fixture trace.
+    for field in ("message_id", "parent_message_id"):
+        value = getattr(event, field, None)
+        if isinstance(value, str) and value:
+            updates[field] = f"{value}-{input_data.run_id}"
+
+    if isinstance(event, StateSnapshotEvent):
+        snapshot = dict(event.snapshot)
+        snapshot["threadId"] = input_data.thread_id
+        snapshot_run = dict(snapshot.get("run", {}))
+        snapshot_run["id"] = input_data.run_id
+        snapshot["run"] = snapshot_run
+        updates["snapshot"] = snapshot
+
+    return event.model_copy(update=updates) if updates else event
+
+
 _CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
 
 

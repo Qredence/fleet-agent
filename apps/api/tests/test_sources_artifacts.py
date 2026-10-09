@@ -9,7 +9,7 @@ from app.agent.callbacks import AgUiRunCallback
 from app.agent.event_bus import RunEventBus
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
-from app.agui.trace_reducer import TraceReducer
+from app.agui.state import TraceReducer
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactStarted,

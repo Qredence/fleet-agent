@@ -11,7 +11,7 @@ from app.agent.engine import DspyAgentEngine
 from app.agent.event_bus import RunEventBus
 from app.agent.tools import get_current_time
 from app.agent.tools.docs import SearchDocsTool
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.run import LiveDSPyCoordinator
 from app.contracts.domain import SourceResult
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 from tests.helpers.signatures import AgentSignature

@@ -7,7 +7,7 @@ from ag_ui.core import RunAgentInput
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, update
 
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agui.run import LiveDSPyCoordinator
 from app.persistence.models import Message, Run, Thread
 from app.persistence.repositories import (
     MessagesRepository,
@@ -784,7 +784,7 @@ async def test_unsettled_run_cannot_be_advanced_by_history_writer(db_sessions):
 
 
 def test_legacy_save_inference_requires_authoritative_settlement():
-    from app.agui.trace_reducer import TraceReducer
+    from app.agui.state import TraceReducer
     from app.api.threads import _safe_bootstrap_agent_state
 
     state = TraceReducer(thread_id="legacy", run_id="legacy-run").state
