@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 
 const capabilitySchema = z.object({
+  supported_content_types: z.tuple([z.literal('text')]),
   agent_mode: z.enum(capabilityContract.properties.agent_mode.enum as ['fixtures', 'engine']),
 }).strict()
 

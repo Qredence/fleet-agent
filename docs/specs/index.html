@@ -1,0 +1,799 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fleet Agent - Review pages</title><style>
+:root{--bg:#f4f6f9;--surface:#fff;--ink:#16293d;--muted:#526477;--line:#d5dde6;--accent:#176e78;--accentbg:#e9f4f3;--warn:#965b12;--warnbg:#fff5e5;--radius:16px}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.55}a{color:#176e78;text-underline-offset:3px}button,select,input{font:inherit}button,select{cursor:pointer}button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px solid #257eaa;outline-offset:4px}button{border:1px solid var(--line);border-radius:10px;background:white;color:var(--ink);padding:10px 15px}.wrap{max-width:1440px;margin:auto;padding:32px}header{display:flex;justify-content:space-between;gap:25px;align-items:flex-start}.eyebrow{text-transform:uppercase;font-size:12px;letter-spacing:.14em;font-weight:750;color:var(--accent);margin-bottom:8px}h1{font-size:clamp(27px,3.7vw,44px);line-height:1.13;letter-spacing:-.04em;margin:0 0 12px}h2{font-size:23px;line-height:1.25;margin:0 0 12px}h3{font-size:18px;line-height:1.3;margin:22px 0 8px}p{margin:8px 0 15px}.muted{color:var(--muted)}.small{font-size:13px}.pill{display:inline-block;background:var(--accentbg);color:var(--accent);border-radius:50px;padding:5px 10px;font-size:12px;font-weight:700}.header-links{display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-end;padding-top:8px;font-size:14px}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:25px 0 18px}.segmented{display:flex;gap:4px;padding:4px;background:#e5eaf0;border-radius:13px}.segmented button{background:transparent;border-color:transparent}.segmented button.active{background:var(--ink);color:white}.scenario{display:flex;align-items:center;gap:10px;font-size:14px}select,input{border:1px solid var(--line);border-radius:9px;background:white;color:var(--ink);padding:9px 11px}.notice{border:1px solid #c9dbdf;background:#edf5f6;padding:16px 19px;border-radius:12px;margin-bottom:20px}.notice strong{display:block;margin-bottom:4px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px}.card{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);overflow:hidden}.cardhead{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;justify-content:space-between}.cardhead h2{font-size:17px;margin:0}.graph-scroll{overflow:auto;padding:10px}.graph-scroll svg{width:100%;min-width:740px;display:block}.node{cursor:pointer}.node rect{fill:#fff;stroke:var(--line);stroke-width:1.7}.node text{fill:var(--ink);font-family:inherit}.node:hover rect,.node.selected rect{stroke:var(--accent);stroke-width:3;fill:#f1f9f8}.node.flagged rect{stroke:var(--warn);stroke-width:3;fill:var(--warnbg)}.node.selected.flagged rect{stroke:var(--accent);stroke-width:4}.edge{fill:none;stroke:#7990a5;stroke-width:2;marker-end:url(#arrow)}.optional{stroke-dasharray:6 5;stroke:#b28042}.observe{stroke:#9aa8b7;stroke-dasharray:3 5}.target{stroke:var(--accent);stroke-width:2.5}.legend{display:flex;gap:20px;flex-wrap:wrap;padding:0 22px 17px;font-size:12px;color:var(--muted)}.legend span:before{content:'';display:inline-block;width:25px;border-top:2px solid #7990a5;vertical-align:middle;margin-right:6px}.legend .dash:before{border-top-style:dashed}.inspector{padding:23px;align-self:start;position:sticky;top:20px}.inspector h2{margin-top:14px}.inspector .evidence{border-left:3px solid var(--accent);padding:8px 12px;background:#f4f8f9;margin:15px 0}.inspector ul{padding-left:17px;font-size:12px;overflow-wrap:anywhere}.inspector li{margin:8px 0}.finding-section{margin-top:25px}.finding-tools{display:flex;gap:12px;align-items:center;margin-bottom:15px;flex-wrap:wrap}.finding-tools h2{margin:0;flex:1}.finding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.finding{padding:20px}.finding h3{font-size:16px;margin-top:10px}.finding p{font-size:13px;margin:10px 0}.tagrow{display:flex;gap:8px;align-items:center;font-size:12px;font-weight:700}.priority{background:var(--warnbg);color:var(--warn);padding:3px 8px;border-radius:5px}.find-count{font-size:13px;color:var(--muted)}.roadmap{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.roadmap article{padding:24px}.roadmap .number{font-size:35px;font-weight:750;color:var(--accent);line-height:1}footer{border-top:1px solid var(--line);margin-top:28px;padding:20px 0;color:var(--muted);font-size:12px}.node-select{display:flex;align-items:center;gap:10px;margin:0 22px 18px;font-size:13px}.node-select select{max-width:100%}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf1f5;padding:2px 5px;border-radius:4px;font-size:.87em}
+@media(max-width:1100px){.layout{grid-template-columns:minmax(0,1fr) 280px}.finding-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:850px){.wrap{padding:21px}.layout{grid-template-columns:1fr}.inspector{position:static}.header-links{justify-content:flex-start}header{flex-direction:column}.toolbar{align-items:flex-start}.finding-grid,.roadmap{grid-template-columns:1fr}.cardhead{flex-wrap:wrap}.scenario{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+.reader{max-width:1480px;margin:auto;display:grid;grid-template-columns:305px minmax(0,1fr);gap:35px;padding:28px}.sidebar{position:sticky;top:20px;align-self:start;max-height:calc(100vh - 40px);overflow:auto;padding-right:5px}.sidebar h2{font-size:20px}.sidebar input{width:100%;margin:12px 0}.sidenav a{display:block;padding:10px 11px;margin:3px 0;border-radius:9px;font-size:13px;text-decoration:none;color:var(--ink)}.sidenav a.active{background:var(--accentbg);box-shadow:inset 3px 0 var(--accent)}.navkind{display:block;text-transform:uppercase;letter-spacing:.08em;font-size:9px;color:var(--muted);font-weight:750}.document{background:white;border:1px solid var(--line);border-radius:18px;padding:40px 45px;min-width:0}.doc{display:none}.doc.active{display:block}.doc h1{font-size:32px;margin-bottom:20px}.doc h2{font-size:22px;margin:30px 0 14px}.doc h3{font-size:17px}.doc p,.doc li{font-size:15px}.doc li{margin:5px 0}.doc table{border-collapse:collapse;display:block;overflow-x:auto;font-size:13px;width:100%;margin:20px 0}.doc th,.doc td{text-align:left;border:1px solid var(--line);padding:10px 13px;vertical-align:top}.doc th{background:#edf3f6}.doc pre{background:#13293a;color:#edf6ff;border-radius:12px;padding:19px;overflow:auto;line-height:1.6;font-size:12px}.doc pre code{background:transparent;color:inherit;padding:0;font-size:inherit}.doc a{overflow-wrap:anywhere}.reader-head{margin-bottom:18px}.reader-head a{font-size:13px}.doc strong{font-weight:700}
+@media(max-width:850px){.reader{grid-template-columns:1fr;padding:18px;gap:18px}.sidebar{position:static;max-height:none}.sidenav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:220px;overflow:auto}.document{padding:24px}.doc h1{font-size:28px}.doc table{font-size:12px}}
+@media print{body{background:white}.reader{display:block;padding:0}.sidebar,.reader-head{display:none}.document{border:0;padding:0}.doc{display:block!important;break-before:page}.doc h1{font-size:24px}.doc p,.doc li{font-size:11px}.doc table{display:table;font-size:9px}a{color:inherit;text-decoration:none}}
+</style></head><body><div class="reader"><aside class="sidebar"><div class="eyebrow">Fleet Agent / Review pages</div><h2>Architecture &amp; improvement plan</h2><p class="small muted">October 8, 2026 &middot; <code>8b87caf</code></p><a href="architecture.html">Open interactive map &rarr;</a><label for="pageSearch" class="small" style="display:block;margin-top:17px">Find a page or topic</label><input type="search" id="pageSearch" placeholder="Search all pages"><nav class="sidenav" aria-label="Report pages"><a href="#doc-readme" data-target="doc-readme"><span class="navkind">Review</span>Fleet Agent - architecture review and Space-ready pages</a><a href="#doc-pages-00-index" data-target="doc-pages-00-index"><span class="navkind">Review</span>Fleet Agent review - page index</a><a href="#doc-pages-01-architecture" data-target="doc-pages-01-architecture"><span class="navkind">Review</span>01 - Architecture and verdict</a><a href="#doc-pages-02-backend" data-target="doc-pages-02-backend"><span class="navkind">Review</span>02 - Backend and reliability</a><a href="#doc-pages-03-frontend" data-target="doc-pages-03-frontend"><span class="navkind">Review</span>03 - Frontend and public contracts</a><a href="#doc-pages-04-dspy-evaluation" data-target="doc-pages-04-dspy-evaluation"><span class="navkind">Review</span>04 - DSPy, evaluation and MLflow</a><a href="#doc-pages-05-delivery" data-target="doc-pages-05-delivery"><span class="navkind">Review</span>05 - Prioritized delivery plan</a><a href="#doc-pages-06-evidence" data-target="doc-pages-06-evidence"><span class="navkind">Review</span>06 - Evidence and limitations</a><a href="#doc-docs-specs-001-run-outcome-durability" data-target="doc-docs-specs-001-run-outcome-durability"><span class="navkind">Specification</span>Spec 001 - Run outcome and durability</a><a href="#doc-docs-specs-002-compound-tasks-managed-output" data-target="doc-docs-specs-002-compound-tasks-managed-output"><span class="navkind">Specification</span>Spec 002 - Compound tasks and managed output</a><a href="#doc-docs-specs-003-evidence-continuity" data-target="doc-docs-specs-003-evidence-continuity"><span class="navkind">Specification</span>Spec 003 - Evidence continuity and outcome</a><a href="#doc-docs-specs-004-ui-capabilities-and-cards" data-target="doc-docs-specs-004-ui-capabilities-and-cards"><span class="navkind">Specification</span>Spec 004 - Honest UI capabilities and shared cards</a><a href="#doc-docs-specs-005-feedback-evaluation-provenance" data-target="doc-docs-specs-005-feedback-evaluation-provenance"><span class="navkind">Specification</span>Spec 005 - Feedback and evaluation provenance</a><a href="#doc-docs-specs-006-dspy-runtime-simplification" data-target="doc-docs-specs-006-dspy-runtime-simplification"><span class="navkind">Specification</span>Spec 006 - DSPy runtime simplification and optional decisions</a><a href="#doc-docs-specs-readme" data-target="doc-docs-specs-readme"><span class="navkind">Specification</span>Proposed Fleet Agent implementation specifications</a></nav><p class="small muted">Import-ready files. Not published native Space pages. Proposals are not implemented.</p></aside><main><div class="reader-head"><a href="README.md">Download Markdown index</a></div><div class="document"><article class="doc" id="doc-readme" data-title="Fleet Agent - architecture review and Space-ready pages"><h1>Fleet Agent - architecture review and Space-ready pages</h1>
+<p>Reviewed on <strong>October 8, 2026</strong>. Repository: <strong>Qredence/fleet-agent</strong>. Main snapshot: <strong><code>8b87cafc25a887b4b144df4ad938f47652d20866</code></strong>, committed October 2, 2026.</p>
+<p><strong>Verdict:</strong> retain the DSPy-native core. Prioritize truthful UI contracts, compound tasks, durable results, and measured quality before adding another abstraction.</p>
+<h2>Open the deliverables</h2>
+<ul>
+<li><a href="architecture.html">Interactive architecture explorer</a>: current versus proposed flow, clickable implementation boundaries, compound-task explanation, and a prioritized findings filter.</li>
+<li><a href="index.html">Complete linked report</a>: all review pages and starter specifications in one offline HTML reader.</li>
+<li><a href="#doc-pages-00-index">Page index</a>: seven import-ready Markdown pages, including this index.</li>
+<li><a href="#doc-docs-specs-readme">Implementation specifications</a>: six proposed specs with acceptance criteria and validation plans.</li>
+</ul>
+<h2>Scope and publication status</h2>
+<p>These are authored local files for import into a Space, not pages published into a native Space. No repository changes were made. The architecture explorer is a standalone HTML visualization, not a deployed application or verified native Visualize widget.</p>
+<p>This is a source-based architectural assessment, not a completed runtime, security, or visual UX audit. GitHub source was inspected through the connected repository tool. A local checkout was unavailable; no Fleet Agent tests, builds, lint commands, live provider evaluations, or application browser sessions were executed. CI definitions were inspected, not independently rerun. There are no invented performance scores.</p>
+<p>Confirmed behavior, code-derived risks, and proposed changes are distinguished in the findings. External DSPy documentation was checked on October 8, 2026; verify experimental behavior against the project's locked dependencies before implementation.</p>
+</article><article class="doc" id="doc-pages-00-index" data-title="Fleet Agent review - page index"><h1>Fleet Agent review - page index</h1>
+<p><strong>Source snapshot:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>. <strong>Review date:</strong> October 8, 2026.</p>
+<table>
+<thead>
+<tr>
+<th>Page</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#doc-pages-01-architecture">01 - Architecture and verdict</a></td>
+<td>What exists, what is sound, and the target direction.</td>
+</tr>
+<tr>
+<td><a href="#doc-pages-02-backend">02 - Backend and reliability</a></td>
+<td>Compound tasks, durability, evidence, termination and isolation.</td>
+</tr>
+<tr>
+<td><a href="#doc-pages-03-frontend">03 - Frontend and public contracts</a></td>
+<td>Honest UI controls, bounded composition, replay and approval.</td>
+</tr>
+<tr>
+<td><a href="#doc-pages-04-dspy-evaluation">04 - DSPy, evaluation and MLflow</a></td>
+<td>Native program simplification, metrics, Jev/ReAnchor and provenance.</td>
+</tr>
+<tr>
+<td><a href="#doc-pages-05-delivery">05 - Prioritized delivery plan</a></td>
+<td>Focused implementation slices, release gates and Amp Orb instructions.</td>
+</tr>
+<tr>
+<td><a href="#doc-pages-06-evidence">06 - Evidence and limitations</a></td>
+<td>Source register, confidence levels and what was not tested.</td>
+</tr>
+</tbody>
+</table>
+<p><a href="architecture.html">Open the interactive map</a> or <a href="index.html">read everything in the HTML reader</a>.</p>
+<h2>Main conclusion</h2>
+<p>Fleet Agent does not need a new agent framework. It needs a stronger contract between what the UI offers, what the agent can actually do, what the server saves, and what the user sees after reload.</p>
+<p>The proposal keeps one FastAPI application, PostgreSQL, native DSPy programs, AG-UI transport and assistant-ui. It does not introduce a generic workflow engine, arbitrary model-authored page layouts, or a new parallel frontend state store.</p>
+<p><a href="#doc-docs-specs-readme">Six starter implementation specs</a> accompany the review. They are proposals, not descriptions of implemented behavior.</p>
+</article><article class="doc" id="doc-pages-01-architecture" data-title="01 - Architecture and verdict"><h1>01 - Architecture and verdict</h1>
+<p><a href="#doc-pages-00-index">Page index</a> | <a href="#doc-pages-02-backend">Next: backend</a></p>
+<h2>Verdict</h2>
+<p><strong>The foundation is substantially aligned with a DSPy-native, UI-first agent workbench. The next investment should be product correctness, not a framework migration.</strong></p>
+<p>The repository already implements the important separation between an internal agent program and its public workspace projection. It also records explicit engineering principles against speculative abstractions and against exposing hidden reasoning. Treat those principles as constraints on the next changes, not as documentation to replace.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/README.md" rel="noopener noreferrer" target="_blank">README.md</a>.</p>
+<h2>Current system</h2>
+<pre><code class="language-text">React workspace / assistant-ui
+  | REST resources + AG-UI stream
+FastAPI / live run coordinator
+  | run-scoped engine; branch-aware history
+FleetAgent (DSPy Module)
+  | one selected capability profile
+ReActV2 evidence gathering -&gt; synthesis Predict
+  | safe text / domain events / managed tool results
+Public reducer -&gt; snapshots, deltas, tool parts, CUSTOM cards
+  |                          |
+PostgreSQL + artifacts       React process panel + transcript
+
+MLflow: optional operator-side tracing and offline evaluation history
+</code></pre>
+<p>The frontend uses React, Vite, assistant-ui and the AG-UI integration. The backend pins DSPy 3.4.0 and MLflow 3.16.1. PostgreSQL stores threads, branches, safe process state and server-side continuation history. Do not confuse the private continuation history with the browser-visible process summary.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/package.json" rel="noopener noreferrer" target="_blank">apps/web/package.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/pyproject.toml" rel="noopener noreferrer" target="_blank">apps/api/pyproject.toml</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/persistence/run_persistence.py" rel="noopener noreferrer" target="_blank">apps/api/app/persistence/run_persistence.py</a>.</p>
+<h2>Boundaries worth keeping</h2>
+<p><strong>Native DSPy composition.</strong> <code>FleetAgent</code> is a <code>dspy.Module</code>; routing is a predictor; profile-specific <code>ReActV2</code> loops gather evidence; a separate synthesis predictor streams explicit public fields. This is already a sensible DSPy design. There is no reason to replace it with a competing orchestration framework.</p>
+<p><strong>Deterministic tool exposure.</strong> <code>build_tool_profiles()</code> filters approval-gated tools before constructing the program. Preserve that order. A model's confidence in a requested action is not a permission grant.</p>
+<p><strong>A safe public projection.</strong> The engine scrubs streamed public text, the mapper emits AG-UI events, and the workspace schema excludes arbitrary properties. The browser does not need to know DSPy history objects or <code>next_thought</code>.</p>
+<p><strong>Branch-aware persistence.</strong> Reservation and lifecycle changes use short transactions; continuation history is chosen by branch ancestry. Improve failure semantics without discarding this infrastructure.</p>
+<p><strong>Explicit frontend ownership.</strong> Keep REST resources in React Query, execution/process state in AG-UI, and local layout preferences in Zustand. The process panel already follows the latter separation.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/approval.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts/agent-workspace-state.schema.json" rel="noopener noreferrer" target="_blank">packages/contracts/agent-workspace-state.schema.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/persistence/run_persistence.py" rel="noopener noreferrer" target="_blank">apps/api/app/persistence/run_persistence.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/process-panel/process-panel.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/process-panel/process-panel.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>.</p>
+<h2>Where the architecture currently breaks down</h2>
+<p>Some individually reasonable parts do not yet compose into one honest product contract. A report profile can create an artifact but cannot inspect workspace files; a workspace profile can inspect files but cannot create the managed report. The attachment UI accepts images while the execution boundary extracts text only. Successful streaming can be reported even after terminal persistence fails. Feedback is session-local.</p>
+<p>These are better priorities than adding more components, more graph nodes, or more model calls.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/kernel/run_input.py" rel="noopener noreferrer" target="_blank">apps/api/app/kernel/run_input.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/live_coordinator.py</a>.</p>
+<h2>Recommended target</h2>
+<p>Keep the current deployment topology. Make the application flow explicit:</p>
+<pre><code class="language-text">Validated user request + selected branch + input capabilities
+    -&gt; requested task / output intent
+    -&gt; deterministic permissions and available tools
+    -&gt; native DSPy evidence gathering
+    -&gt; bounded, source-addressable evidence
+    -&gt; native DSPy synthesis
+    -&gt; optional authorized managed artifact export
+    -&gt; safe public result + durable settlement
+    -&gt; consistent live and restored UI
+</code></pre>
+<p>This is a proposal, not an additional generic framework. Most of it can be implemented by clarifying existing functions and ordinary data types. In particular, managed report creation should be an output stage rather than a mutually exclusive alternative to workspace evidence gathering.</p>
+<p>Keep latency, cost and observability proportional to the task. Do not add Jev, a second critic, a planner or an optimizer call to every interaction merely because the library exposes it.</p>
+<h2>Deployment boundary</h2>
+<p>The README identifies the product as a single-local-owner application rather than a multi-user authorization system. Before deploying it as a shared hosted service, make authenticated principals, object-level project/thread/artifact access, credential handling, execution isolation and server-owned authorization explicit release gates. This is a deployment recommendation, not a claim that an exploit was demonstrated.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/README.md" rel="noopener noreferrer" target="_blank">README.md</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/approval.py</a>.</p>
+</article><article class="doc" id="doc-pages-02-backend" data-title="02 - Backend and reliability"><h1>02 - Backend and reliability</h1>
+<p><a href="#doc-pages-00-index">Page index</a> | <a href="#doc-pages-03-frontend">Next: frontend</a></p>
+<h2>F01 - Compound tasks are blocked by the profile shape</h2>
+<p><strong>Confirmed.</strong> <code>build_tool_profiles()</code> gives <code>artifact</code> the research capabilities plus artifact creation. Workspace profiles contain research and workspace capabilities but omit artifact creation. <code>FleetAgent.forward()</code> selects exactly one route. Therefore no selected profile can both inspect workspace files and invoke the managed-report tool in the same run.</p>
+<p>A minimal regression case is: "Inspect the workspace implementation and create a managed report explaining the findings." Evaluating either half separately will miss the defect.</p>
+<p><strong>Recommendation:</strong> keep evidence routing, add an explicit managed-output intent, and execute managed report export after evidence collection and synthesis using the existing bounded storage/tool boundary. Recheck authorization before export; use stable run/artifact identifiers to avoid duplicate writes on retries. A narrowly scoped combined profile is an acceptable tactical fix, but avoid expanding into a powerset of profile names.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>.</p>
+<h2>F03 - Completion and successful saving are different facts</h2>
+<p><strong>Confirmed.</strong> In the successful coordinator branch, answer/state events are sent, persistence is retried, and a failed settlement is logged. The stream still emits <code>RunFinishedEvent</code>. The execution may have completed, but the answer has not necessarily been saved for restoration.</p>
+<p><strong>Recommendation:</strong> distinguish execution outcome from persistence status. Proposed statuses such as <code>saveStatus: pending | saved | failed</code> should be versioned in the shared contract. Stream the useful answer immediately; only show "Saved" after a successful transaction. On save failure, keep the answer visible with an explicit warning and a safe copy/export option. Do not promise recovery of data that was never persisted.</p>
+<p>Preserve the existing short transaction boundaries. Before introducing an event log, queue or outbox, establish the actual required guarantee. An outbox can improve reliable event publication after a commit; it cannot make an unavailable database accept the original commit.</p>
+<p>Test failures on both settlement attempts, cancellation during settlement, duplicate finish attempts, and reload after each outcome. A terminal transport event is not proof of exactly-once processing of every tool side effect.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/live_coordinator.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/persistence/run_persistence.py" rel="noopener noreferrer" target="_blank">apps/api/app/persistence/run_persistence.py</a>.</p>
+<h2>F04/F05/F06 - Grounded answers need preserved context and evidence status</h2>
+<p>Three source-level issues interact:</p>
+<ol>
+<li>The router receives only <code>user_request</code>, even though the program has branch history. Follow-ups such as "turn that into a report" cannot be routed from the referenced context.</li>
+<li><code>_evidence_json()</code> walks the accumulated history in order. <code>bounded_json()</code> retains a budget-limited prefix and shortens the overflowing entry. Old observations can therefore consume the budget before a newly collected correction is included.</li>
+<li>The final prediction always sets <code>termination_reason="synthesis"</code>, discarding the gatherer's termination reason. A syntactically valid final answer is not proof that evidence gathering completed.</li>
+</ol>
+<p><strong>Recommendation:</strong> route with a bounded branch-local summary and explicit available capabilities. Separate route validity from fallback selection. Prioritize current-turn observations plus older evidence explicitly referenced by the user; preserve source IDs, tool-call IDs and truncation indicators. Carry the gatherer outcome through to the final result and UI.</p>
+<p>Do not convert every abnormal gatherer exit into total failure: a partial answer can be valuable. Its status and caveats must be truthful and grounded in retained evidence. Conversely, do not turn a router parse error into a confident unsupported answer simply because <code>direct</code> exposes no privileged tools.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/routing.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/routing.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/evidence.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/evidence.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a>.</p>
+<h2>F09/F10 - Reduce avoidable DSPy runtime coupling</h2>
+<p><strong>Confirmed implementation; concurrency impact not reproduced.</strong> <code>build_synthesizer()</code> is globally cached and returns a mutable DSPy Module reused across otherwise run-scoped programs. Cache immutable specs or prompt definitions, not live predictors, unless a concurrent isolation test proves the selected sharing strategy safe.</p>
+<p>The engine also patches the private <code>_forced_submit</code> method and extracts reasons from exception text. Keep any unavoidable workaround in one explicit, pinned compatibility module with contract tests and a deletion condition. Prefer supported return and exception semantics; do not fork ReActV2 again.</p>
+<p>Tests should interleave two runs with different providers, histories and cancellation signals. Assert no cross-run stream routing, configuration mutation, usage attribution or history contamination. No cross-run data leak was demonstrated in this review.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/signature.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/signature.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>.</p>
+<h2>Cancellation and scheduling</h2>
+<p>The inspected execution path offloads synchronous programs to worker threads and uses a cancellation token and shielded cleanup. Do not describe cancellation as immediate thread termination. Decide explicitly whether closing a stream cancels the run or merely detaches the client; the current coordinator attempts cancellation on disconnect.</p>
+<p>For the next release, retain this simple connection-coupled model and make cancellation status honest. A background worker becomes justified only when the product requires durable detached jobs, reconnectable execution or independent scheduling. Native async conversion should be measured against the locked DSPy version, not treated as an automatic rewrite.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/live_coordinator.py</a>.</p>
+<h2>Organization: move only when a boundary becomes clearer</h2>
+<p>Keep agent-specific DSPy construction in <code>agent/</code>, shared public schemas in <code>packages/contracts</code>, persistence in its current boundary, and AG-UI serialization in <code>agui/</code>. When modifying lifecycle behavior, extract only the terminal-settlement policy from the large coordinator into a small application-level unit. Avoid creating parallel service/repository/manager layers for each function.</p>
+<p>The ideal acceptance criterion is not a smaller file count or a prescribed directory tree. It is that lifecycle behavior can be tested without serializing SSE, and transport changes cannot accidentally redefine business outcomes.</p>
+</article><article class="doc" id="doc-pages-03-frontend" data-title="03 - Frontend and public contracts"><h1>03 - Frontend and public contracts</h1>
+<p><a href="#doc-pages-00-index">Page index</a> | <a href="#doc-pages-04-dspy-evaluation">Next: DSPy and evaluation</a></p>
+<h2>Keep the existing interaction model</h2>
+<p>The existing runtime integrates <code>HttpAgent</code>, <code>useAgUiRuntime</code>, a thread-history adapter, inline Data UI registrations and a process panel. Keep that architecture. The goal is a dependable conversation-first workspace, not a mandatory DAG viewer or a model-controlled application shell.</p>
+<p>The following recommendations come from source inspection, not a rendered screenshot audit. No claims about measured rendering performance, accessibility conformance or visual defects are made.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/process-panel/process-panel.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/process-panel/process-panel.tsx</a>.</p>
+<h2>F02 - Do not offer inputs the agent cannot use</h2>
+<p>The frontend registers image and text attachment adapters. The backend request extractor handles text strings and text parts only. An image preview is therefore not evidence that the DSPy program received an image.</p>
+<p><strong>First fix:</strong> expose accepted modalities and size limits through the existing capabilities contract. Until end-to-end image handling is implemented, hide image attachment controls and reject unsupported image input at the server with a stable public error. Never silently ignore it.</p>
+<p><strong>Later feature:</strong> support typed image/document inputs through validation, storage, authorized retrieval, DSPy input conversion and thread restoration. Include mixed text-plus-image and image-only cases in tests. This is more than an upload endpoint.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/kernel/run_input.py" rel="noopener noreferrer" target="_blank">apps/api/app/kernel/run_input.py</a>.</p>
+<h2>Make the run state legible</h2>
+<p>Use a compact run-status component above or beside the answer. It should explain the state that affects the user's next action: working, waiting for a pre-run permission choice, partial result, completed, cancelled, failed, or completed but not saved. Detailed tool activity belongs in the inspector, not in the user's way.</p>
+<p>Treat execution status, evidence sufficiency and save status as separate facts. For example, "Answer completed; saving failed" is more accurate than either "Everything failed" or an unqualified success chip. Display safe error text and run ID, with a relevant retry/copy action, rather than relying on console logging.</p>
+<p>This requires an explicit schema change; the current public schema is version 1 and forbids unknown properties. Regenerate Python and TypeScript types and provide an explicit bootstrap migration for older snapshots.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts/agent-workspace-state.schema.json" rel="noopener noreferrer" target="_blank">packages/contracts/agent-workspace-state.schema.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/live_coordinator.py</a>.</p>
+<h2>Approval: retain the simpler pre-run decision</h2>
+<p>The backend accepts <code>forwardedProps.approvedTools</code> and withholds gated tools before construction. The reviewed runtime provider does not set this property; repository search found it in backend code, documentation and tests, not a frontend sender. Treat a usable frontend approval path as a gap to confirm during implementation.</p>
+<p>Add a narrow pre-run permission control with named tools and an explicit scope, using the existing tool metadata as the source of truth. Default to none; avoid a casual "approve all" control. Starting a fresh authorized run is preferable to reviving the previous private-DSPy pause/resume fork.</p>
+<p>For a multi-user deployment, the request is only a requested approval selection. Intersect it with server-owned permissions for the authenticated principal. A browser boolean or model probability is not authorization.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/approval.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>.</p>
+<h2>F08 - Bounded dynamic composition, not generated React</h2>
+<p>The repository already registers <code>agent-progress</code>, <code>web-search</code>, <code>sources</code>, <code>research-report</code> and artifact cards. Do not introduce a second generative UI transport. The gap is that the inline payload parsers and versions are handwritten locally while the main process state is schema-generated.</p>
+<p><strong>Proposed direction:</strong> a closed, versioned union of safe presentation payloads, generated from <code>packages/contracts</code>, mapped through a small static React renderer registry. Begin by formalizing the existing cards; add a new card only for a demonstrated task outcome.</p>
+<p>Useful future kinds include a comparison table, approval request, structured findings, or artifact preview. The model may choose from allowed presentation kinds and bounded data; application code retains navigation, pane arrangement, authentication and executable behavior.</p>
+<p>Unknown versions or malformed payloads must leave the surrounding answer usable with a safe fallback. Use real source IDs that resolve to authorized source records; do not manufacture links from model-provided titles. Clamp numeric indices and collection sizes, and validate finite numbers.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/event_mapper.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/event_mapper.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts/agent-workspace-state.schema.json" rel="noopener noreferrer" target="_blank">packages/contracts/agent-workspace-state.schema.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>.</p>
+<h2>One public fact, several views</h2>
+<p>Derive transcript cards and the inspector from the same safe projection and stable IDs. A source shown in a card should resolve to the same record in the Sources tab. Avoid a separate mutable mirror of execution state in Zustand.</p>
+<p>Test historical progress during a new run: the inline search renderer currently consults thread-wide <code>isRunning</code>. A historical unfinished marker should not become active merely because another run has started. Use message/run identity when deciding live versus settled rendering.</p>
+<p>For durable cards, define how the bootstrap contains their settled representation; transient CUSTOM delivery alone is not a durability guarantee. Live rendering, branch selection and reload must converge on the same user-visible result.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/process-panel/process-panel.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/process-panel/process-panel.tsx</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>.</p>
+<h2>F07 - Turn feedback into a useful product signal</h2>
+<p>The current feedback adapter writes to an in-memory Map. Persist feedback by message and run, with an optional bounded reason and a recorded program version. Confirm persistence in the UI and restore the selected state on reload.</p>
+<p>Do not automatically feed every positive response into training. Create a reviewed, redacted candidate pool; add task labels and expected evidence; deduplicate by thread/task; keep evaluation holdouts separate. Feedback is supervision to curate, not automatic ground truth.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a>.</p>
+<h2>Performance and usability gates</h2>
+<p>Add fixture-based browser journeys for text-only use, denied permissions, partial results, save failures, cancellation, branch switching, artifact restoration and malformed cards. Test keyboard focus, status announcements, small-screen inspector access and reduced motion.</p>
+<p>Profile long transcripts and high-frequency token streams before adding selectors, memoization or virtualization. The recommendation is to measure and then optimize the affected boundary, not to install another state library.</p>
+</article><article class="doc" id="doc-pages-04-dspy-evaluation" data-title="04 - DSPy, evaluation and MLflow"><h1>04 - DSPy, evaluation and MLflow</h1>
+<p><a href="#doc-pages-00-index">Page index</a> | <a href="#doc-pages-05-delivery">Next: delivery</a></p>
+<h2>Use DSPy more directly, not more abstractly</h2>
+<p>Fleet Agent already uses native Modules, Predictors, ReActV2 and streaming. Keep that. The runtime YAML layer, however, defines its own field registry, module vocabulary and graph validation, while important control flow and evidence transformation remain in Python.</p>
+<p><strong>Recommendation:</strong> distinguish requirements specs from a runtime programming language. Keep Markdown prompts where readable; prefer ordinary typed DSPy Signatures and a small <code>FleetAgent</code> Module. Retain YAML only for configuration that has a real authoring requirement. Before deleting the dialect, inventory callers and tests; remove unused composite/generalization features rather than breaking needed behavior indiscriminately.</p>
+<p><code>AGENTS.md</code> asks for specs under <code>docs/specs/</code>, but that directory was absent in the reviewed docs listing. The supplied specs make the intended product behavior explicit without requiring a new agent DSL.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/signature.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/signature.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/spec/schema.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/spec/schema.py</a>.</p>
+<h2>F11 - Fix the metric before optimizing it</h2>
+<p>The routing metric returns 1 for exact match, 0.35 for a route with a higher numeric rank, and 0 otherwise. The optimizer calls its threshold <code>min_accuracy</code>, but this is a weighted utility, not exact-match accuracy.</p>
+<p>More importantly, capabilities are not totally ordered. An artifact route has report-generation capability that a numerically higher workspace route lacks. Giving that workspace prediction partial credit for simply being "more capable" misdescribes the executable tool set. Also, coercing malformed predictions to <code>direct</code> can conceal invalid output on direct-labeled examples.</p>
+<p><strong>Recommendation:</strong> report exact route match, invalid-output rate, task/capability sufficiency and unnecessary tool exposure separately. Derive sufficiency from actual capability sets. Keep unauthorized-tool exposure/execution as a hard test invariant, not a penalty a quality score can compensate for.</p>
+<p>Add compound tasks, follow-up references, unavailable tools, denied approvals, malformed decisions, provider errors, long evidence histories and partial gatherer exits to evaluation cases. Score end-to-end success as well as the isolated router.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/agent_tool_routing.py" rel="noopener noreferrer" target="_blank">apps/api/evals/agent_tool_routing.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/routing.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/routing.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a>.</p>
+<h2>Preserve the good promotion boundary</h2>
+<p>The current optimizer scores a baseline and candidate on a held-out split and does not pass that split into GEPA. It rejects unchanged instructions and requires explicit activation. Keep those protections.</p>
+<p>GEPA currently uses the same training set for candidate construction and selection (<code>trainset=train</code>, <code>valset=train</code>). As the dataset grows, separate train, development selection and final promotion holdout by task/thread/repository rather than randomly splitting near-duplicate paraphrases. Do not repeatedly use the final holdout to choose among manual iterations and still call it untouched.</p>
+<p>Define hard release gates: no safety regressions; no unsupported success claims; task-quality improvement on held-out examples; and an acceptable latency/token budget. Report provider failures separately from reasoning errors. No baseline or improved score was measured during this review.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/agent_tool_routing.py" rel="noopener noreferrer" target="_blank">apps/api/evals/agent_tool_routing.py</a>.</p>
+<h2>Jev and ReAnchor: useful, but not the next dependency of every run</h2>
+<p>Official DSPy documentation identifies Jev decision types and ReAnchor as experimental. <code>Choice</code> supports discrete decisions; <code>Noul</code> supports boolean decisions. ReAnchor tunes numeric decision settings rather than rewriting prompt instructions. Keep these types inside a narrow internal boundary and expose ordinary domain values to the rest of Fleet Agent.</p>
+<p>Official references: <a href="https://dspy.ai/current/tutorials/jev_decisions/" rel="noopener noreferrer" target="_blank">jev</a>; <a href="https://dspy.ai/current/api/experimental/ReAnchor/" rel="noopener noreferrer" target="_blank">reanchor</a>.</p>
+<p>My recommended experiment is bounded: compare the existing predictor with a decision-typed capability selector, or test an evidence-sufficiency decision on labeled cases. Do not add both immediately. Choose the one that produces the clearest measured product improvement.</p>
+<p>Define an ordinary internal result, conceptually:</p>
+<pre><code class="language-text">CapabilityDecision(selected, valid, fallback_reason)
+EvidenceAssessment(status, missing_requirements, evidence_ids)
+</code></pre>
+<p>These are proposed application types, not public DSPy types. Deterministic code still computes the allowed tools and controls actions. A confidence value is never a grant, and a model-produced probability is not automatically an empirically calibrated reliability estimate.</p>
+<p>Use separate development/calibration and final holdout data. Compare task success, false-sufficient decisions, parse failures, latency and request cost. Keep a baseline fallback and pin the experiment's model, program and dependency versions. Promote only after the UI correctly distinguishes partial and insufficient evidence.</p>
+<h2>F12 - Extend MLflow, do not add it from scratch</h2>
+<p>MLflow integration already exists. Startup tracing is opt-in and degrades on configuration failure. Offline routing/evaluation attempts already log metrics and selected metadata. Rejected optimization attempts, however, generally lack the candidate configuration and report because artifact directories are only written for passing candidates.</p>
+<p>For every completed attempt, save a bounded candidate artifact, report and manifest regardless of outcome. Record the git revision, task model, relevant model settings, DSPy version, prompt/program fingerprint, dataset digest, split IDs, baseline/candidate metrics, failure counts and promotion decision. Avoid logging credentials or user secrets in manifests.</p>
+<p>Tie the safe application run ID to operator traces, without exposing provider prompts or private reasoning to the browser. Keep tracing off the critical path; an unavailable MLflow store must not decide whether a runtime result exists.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/services/mlflow_observability.py" rel="noopener noreferrer" target="_blank">apps/api/app/services/mlflow_observability.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/mlflow_tracking.py" rel="noopener noreferrer" target="_blank">apps/api/evals/mlflow_tracking.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a>.</p>
+<h2>Make trace privacy explicit</h2>
+<p>The live tracing module intentionally captures prompts/completions in the operator store and scrubs secret-shaped values. That is not the same as a policy to exclude private reasoning or all sensitive user content. Reconcile this with the stricter engineering guidance.</p>
+<p>Use metadata-only telemetry as the normal operational baseline. Any detailed diagnostic capture should be separately enabled, access-controlled, redacted, retention-limited and documented. Test nested payloads and failure paths. Do not claim a secret leak based only on the existence of autologging; none was demonstrated here.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/services/mlflow_observability.py" rel="noopener noreferrer" target="_blank">apps/api/app/services/mlflow_observability.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>.</p>
+</article><article class="doc" id="doc-pages-05-delivery" data-title="05 - Prioritized delivery plan"><h1>05 - Prioritized delivery plan</h1>
+<p><a href="#doc-pages-00-index">Page index</a> | <a href="#doc-pages-06-evidence">Next: evidence</a></p>
+<h2>Delivery principle</h2>
+<p>One focused product behavior per task/Orb. Each change must state its public contract impact, frontend behavior, fixture behavior and evaluation impact. Prefer an end-to-end vertical slice to a backend-only feature with no usable UI.</p>
+<p>This plan has no time estimates and does not imply that any implementation has been performed.</p>
+<h2>Recommended sequence</h2>
+<table>
+<thead>
+<tr>
+<th>Order</th>
+<th>Focused change</th>
+<th>Completion evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Supported inputs and honest saved/unsaved status</td>
+<td>Unsupported modalities fail visibly; database failure cannot appear saved; reload reflects the durable record.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Compound workspace-to-report task</td>
+<td>One request inspects actual workspace files and returns one managed artifact, with no unauthorized tools.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Evidence continuity and stage outcomes</td>
+<td>Follow-ups route with branch context; current observations survive history truncation; partial gathering remains visible after synthesis.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Shared inline-card contract and approval UX</td>
+<td>Generated types/validation; safe unknown-card fallback; pre-run approval sent explicitly; live/reload agreement.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Persistent feedback and corrected eval metrics</td>
+<td>Feedback survives reload; exact-match and capability utility are distinct; grouped holdout and failure reporting exist.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>DSPy simplification and optional Jev experiment</td>
+<td>Run-isolated predictors; narrower compatibility shim; measured experimental improvement before activation.</td>
+</tr>
+</tbody>
+</table>
+<p>Steps 1-3 fix user-visible correctness. Steps 4-5 close the product/evaluation loop. Step 6 should not block those fixes. The six supplied specs separate these concerns more precisely for implementation.</p>
+<h2>Required release gates</h2>
+<p><strong>Contract gate:</strong> regenerate Python and TypeScript; validate representative snapshots and CUSTOM payloads; explicitly migrate existing persisted snapshots when the schema changes.</p>
+<p><strong>Safety gate:</strong> gated tools are absent from unauthorized programs; malformed routing does not expand permissions; streamed and final public output remain scrubbed; private reasoning never enters browser contracts.</p>
+<p><strong>Product gate:</strong> request, stream, terminal state, branch selection and reload agree. Failures have useful UI outcomes rather than only logs. Fixture mode remains deterministic.</p>
+<p><strong>Evaluation gate:</strong> when agent behavior changes, record a baseline on fixed examples, then a candidate comparison. Keep held-out promotion examples out of optimizer selection. Do not trade away safety or persistence truthfulness for a higher mean score.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts/agent-workspace-state.schema.json" rel="noopener noreferrer" target="_blank">packages/contracts/agent-workspace-state.schema.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/approval.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a>.</p>
+<h2>CI: add integration, not more isolated green checks</h2>
+<p>The inspected CircleCI workflow already configures web audit/lint/Vitest/build, backend audit/lint/types/migrations/pytest, a real API boot smoke and a schema-validation job. These are strengths. The shown workflow does not invoke the repository's fixture browser E2E script, and the web <code>test</code> script is Vitest.</p>
+<p>Add a deterministic full-stack browser job using the existing fixture path, covering the release gates above. Verify generated contract freshness in both languages as an explicit gate, extending existing tests rather than assuming there are none. Keep provider-backed smoke/evaluation opt-in or in a controlled environment with budgets.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/.circleci/config.yml" rel="noopener noreferrer" target="_blank">.circleci/config.yml</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/package.json" rel="noopener noreferrer" target="_blank">apps/web/package.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/README.md" rel="noopener noreferrer" target="_blank">README.md</a>.</p>
+<h2>Commands for the implementation agent to run</h2>
+<p>These commands are repository-documented/configured validation steps, not checks executed by this review.</p>
+<pre><code class="language-bash">pnpm --filter web lint
+pnpm --filter web test
+pnpm --filter web build
+
+cd apps/api
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+uv run pytest
+uv run python -m evals.optimize --validate
+</code></pre>
+<p>Run <code>bash scripts/e2e-fixtures.sh</code> from the repository root with its required services and fixture configuration. Use the current CONTRIBUTING instructions for contract regeneration rather than guessing generator flags.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/README.md" rel="noopener noreferrer" target="_blank">README.md</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/.circleci/config.yml" rel="noopener noreferrer" target="_blank">.circleci/config.yml</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/package.json" rel="noopener noreferrer" target="_blank">apps/web/package.json</a>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a>.</p>
+<h2>Reusable Amp Orb task instruction</h2>
+<pre><code class="language-text">Read AGENTS.md and the relevant docs/specs/ file before editing.
+Inspect the current implementation and identify the smallest end-to-end change.
+Do not add a framework, another frontend state owner, or a private DSPy loop fork.
+Preserve deterministic authorization, safe streaming, branch semantics and fixtures.
+
+Implement one specification's acceptance criteria only.
+Update shared schemas and generated models when the public contract changes.
+Include the matching frontend state and a deterministic browser scenario.
+For behavior changes, compare the baseline and candidate on fixed eval examples.
+
+Report: files changed, observable behavior changed, contract/migration changes,
+UI/fixture impact, commands actually executed, measured results and limitations.
+Do not report unexecuted tests or proposed scores as passing evidence.
+</code></pre>
+<h2>What not to add now</h2>
+<p>Do not add a distributed job platform, a general agent graph language, a second generative UI protocol, autonomous online self-optimization, arbitrary model-defined layouts, or a parallel execution-state store. Revisit these only when a specific product requirement cannot be met with the current stack.</p>
+</article><article class="doc" id="doc-pages-06-evidence" data-title="06 - Evidence and limitations"><h1>06 - Evidence and limitations</h1>
+<p><a href="#doc-pages-00-index">Page index</a></p>
+<h2>Snapshot and method</h2>
+<p>Main was reviewed at <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>, whose commit timestamp is October 2, 2026, 00:38:16 UTC. The assessment was prepared October 8, 2026. Reads of implementation files were pinned to this commit after resolving main.</p>
+<p>Source inspection covered agent construction/routing/synthesis, evidence bounding, run streaming and settlement, branch persistence, public schemas, frontend runtime/card/inspector boundaries, optimizer metrics/promotion, MLflow and CI configuration. Directory and code searches supplemented those file reads. This is a targeted assessment, not a claim that every repository file was read.</p>
+<p><a href="https://github.com/Qredence/fleet-agent/commit/8b87cafc25a887b4b144df4ad938f47652d20866" rel="noopener noreferrer" target="_blank">Reviewed commit</a></p>
+<h2>Confidence register</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Priority</th>
+<th>Evidence level</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F01</td>
+<td>P0</td>
+<td>Confirmed control-flow gap</td>
+<td>Workspace inspection and managed artifact creation cannot be combined in one selected profile</td>
+</tr>
+<tr>
+<td>F02</td>
+<td>P0</td>
+<td>Confirmed interface mismatch</td>
+<td>Image attachment UI feeds a text-only agent input path</td>
+</tr>
+<tr>
+<td>F03</td>
+<td>P0</td>
+<td>Confirmed failure-path behavior</td>
+<td>A completed stream can finish normally after persistence retries fail</td>
+</tr>
+<tr>
+<td>F04</td>
+<td>P1</td>
+<td>Confirmed implementation; task failures require measurement</td>
+<td>Routing ignores conversational context and coerces invalid output to direct</td>
+</tr>
+<tr>
+<td>F05</td>
+<td>P1</td>
+<td>Code-derived evidence loss risk</td>
+<td>Historical evidence can consume the budget before current observations arrive</td>
+</tr>
+<tr>
+<td>F06</td>
+<td>P1</td>
+<td>Confirmed loss of stage metadata</td>
+<td>Final synthesis overwrites the gatherer termination reason</td>
+</tr>
+<tr>
+<td>F07</td>
+<td>P1</td>
+<td>Confirmed implementation gap</td>
+<td>Feedback is stored only in a browser memory Map</td>
+</tr>
+<tr>
+<td>F08</td>
+<td>P1</td>
+<td>Confirmed duplicated contract surface</td>
+<td>Inline Data UI payloads rely on local handwritten parsing</td>
+</tr>
+<tr>
+<td>F09</td>
+<td>P1</td>
+<td>Confirmed sharing; isolation failure not demonstrated</td>
+<td>A cached synthesizer Module is shared across nominally run-scoped programs</td>
+</tr>
+<tr>
+<td>F10</td>
+<td>P2</td>
+<td>Confirmed compatibility burden</td>
+<td>Runtime patches a private DSPy method and interprets exception text</td>
+</tr>
+<tr>
+<td>F11</td>
+<td>P1</td>
+<td>Confirmed measurement mismatch</td>
+<td>Routing utility is labeled accuracy and assumes totally ordered capabilities</td>
+</tr>
+<tr>
+<td>F12</td>
+<td>P2</td>
+<td>Confirmed artifact retention gap</td>
+<td>Rejected optimization attempts retain metrics but not full candidate artifacts</td>
+</tr>
+</tbody>
+</table>
+<p>P0/P1/P2 are delivery recommendations in this review, not external severity scores. A code-derived risk is not a reproduced production incident. No security exploit, data leak, baseline latency or model-quality improvement was demonstrated.</p>
+<h2>What was not executed</h2>
+<p>A local checkout was unavailable. No application lint/build/test command, live LLM evaluation, integration service startup, CodeRabbit scan, or Fleet Agent browser walkthrough was executed. CI configuration was read, not independently rerun. The standalone documentation and visualization files are separate review artifacts; their validation does not validate the Fleet Agent application.</p>
+<p>No GitHub files, issues or pull requests were changed. The pages are import-ready local artifacts, not published native Space pages. The interactive explorer is an offline visualization, not an operating Fleet Agent instance.</p>
+<h2>Repository source register</h2>
+<p>All links below refer to the reviewed commit rather than moving main.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>guidance</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/AGENTS.md" rel="noopener noreferrer" target="_blank">AGENTS.md</a></td>
+</tr>
+<tr>
+<td>readme</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/README.md" rel="noopener noreferrer" target="_blank">README.md</a></td>
+</tr>
+<tr>
+<td>program</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/program.py</a></td>
+</tr>
+<tr>
+<td>routing</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/routing.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/routing.py</a></td>
+</tr>
+<tr>
+<td>factory</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/factory.py</a></td>
+</tr>
+<tr>
+<td>engine</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/engine.py</a></td>
+</tr>
+<tr>
+<td>signature</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/signature.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/signature.py</a></td>
+</tr>
+<tr>
+<td>evidence</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/evidence.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/evidence.py</a></td>
+</tr>
+<tr>
+<td>approval</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/approval.py</a></td>
+</tr>
+<tr>
+<td>dsl</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/spec/schema.py" rel="noopener noreferrer" target="_blank">apps/api/app/agent/spec/schema.py</a></td>
+</tr>
+<tr>
+<td>coordinator</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/live_coordinator.py</a></td>
+</tr>
+<tr>
+<td>mapper</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/event_mapper.py" rel="noopener noreferrer" target="_blank">apps/api/app/agui/event_mapper.py</a></td>
+</tr>
+<tr>
+<td>persistence</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/persistence/run_persistence.py" rel="noopener noreferrer" target="_blank">apps/api/app/persistence/run_persistence.py</a></td>
+</tr>
+<tr>
+<td>input</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/kernel/run_input.py" rel="noopener noreferrer" target="_blank">apps/api/app/kernel/run_input.py</a></td>
+</tr>
+<tr>
+<td>runtime</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/agent-runtime-provider.tsx</a></td>
+</tr>
+<tr>
+<td>inline</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx</a></td>
+</tr>
+<tr>
+<td>panel</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/process-panel/process-panel.tsx" rel="noopener noreferrer" target="_blank">apps/web/src/features/process-panel/process-panel.tsx</a></td>
+</tr>
+<tr>
+<td>state</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts/agent-workspace-state.schema.json" rel="noopener noreferrer" target="_blank">packages/contracts/agent-workspace-state.schema.json</a></td>
+</tr>
+<tr>
+<td>optimize</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">apps/api/evals/optimize.py</a></td>
+</tr>
+<tr>
+<td>metric</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/agent_tool_routing.py" rel="noopener noreferrer" target="_blank">apps/api/evals/agent_tool_routing.py</a></td>
+</tr>
+<tr>
+<td>mlflow</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/services/mlflow_observability.py" rel="noopener noreferrer" target="_blank">apps/api/app/services/mlflow_observability.py</a></td>
+</tr>
+<tr>
+<td>tracking</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/mlflow_tracking.py" rel="noopener noreferrer" target="_blank">apps/api/evals/mlflow_tracking.py</a></td>
+</tr>
+<tr>
+<td>ci</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/.circleci/config.yml" rel="noopener noreferrer" target="_blank">.circleci/config.yml</a></td>
+</tr>
+<tr>
+<td>api_deps</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/pyproject.toml" rel="noopener noreferrer" target="_blank">apps/api/pyproject.toml</a></td>
+</tr>
+<tr>
+<td>web_deps</td>
+<td><a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/package.json" rel="noopener noreferrer" target="_blank">apps/web/package.json</a></td>
+</tr>
+</tbody>
+</table>
+<p>Directory evidence: <a href="https://github.com/Qredence/fleet-agent/tree/8b87cafc25a887b4b144df4ad938f47652d20866/docs" rel="noopener noreferrer" target="_blank">reviewed docs tree</a> and <a href="https://github.com/Qredence/fleet-agent/tree/8b87cafc25a887b4b144df4ad938f47652d20866/packages/contracts" rel="noopener noreferrer" target="_blank">reviewed contracts tree</a>.</p>
+<h2>External technical references</h2>
+<p>These official pages were checked October 8, 2026. They can change; compare their behavior to the project's locked dependencies before coding.</p>
+<ul>
+<li><a href="https://dspy.ai/current/tutorials/jev_decisions/" rel="noopener noreferrer" target="_blank">DSPy Jev tutorial</a></li>
+<li><a href="https://dspy.ai/current/api/experimental/ReAnchor/" rel="noopener noreferrer" target="_blank">DSPy ReAnchor reference</a></li>
+<li><a href="https://dspy.ai/current/api/optimizers/GEPA/overview/" rel="noopener noreferrer" target="_blank">DSPy GEPA reference</a></li>
+<li><a href="https://dspy.ai/current/api/modules/ReActV2/" rel="noopener noreferrer" target="_blank">DSPy ReActV2 reference</a></li>
+<li><a href="https://mlflow.org/docs/latest/genai/tracing/integrations/listing/dspy/" rel="noopener noreferrer" target="_blank">MLflow DSPy tracing</a></li>
+</ul>
+</article><article class="doc" id="doc-docs-specs-001-run-outcome-durability" data-title="Spec 001 - Run outcome and durability"><h1>Spec 001 - Run outcome and durability</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p>A completed answer can be streamed even when both terminal persistence attempts fail. The coordinator logs the failure and emits <code>RunFinishedEvent</code>. Execution completion and durable save success are not the same guarantee.</p>
+<p>Source: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agui/live_coordinator.py" rel="noopener noreferrer" target="_blank">live_coordinator.py</a>, successful terminal branch; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/persistence/run_persistence.py" rel="noopener noreferrer" target="_blank">run_persistence.py</a>.</p>
+<h2>Desired behavior</h2>
+<p>Keep useful streaming output visible. Explicitly distinguish the execution outcome from whether that output was saved. Show "Saved" only after the terminal transaction commits. A failed save must remain visible in the current browser session, with an explanation that reload may not recover the answer.</p>
+<h2>Invariants</h2>
+<ul>
+<li>Exactly one logical terminal transition is accepted for a run; repeated settlement cannot produce duplicate assistant messages or artifacts.</li>
+<li>Public output remains scrubbed. Never expose driver errors, provider payloads or private history.</li>
+<li>A successful stream is not described as durable until persistence succeeds.</li>
+<li>A save failure does not erase already delivered useful text or trigger an automatic re-execution of mutating tools.</li>
+<li>Closing a connection retains the explicitly documented cancel-on-disconnect behavior for this slice.</li>
+</ul>
+<h2>Contract and migration</h2>
+<p>Propose a shared versioned run field <code>saveStatus: pending | saved | failed</code>, independent from the existing execution status. Define a stable public save-failure code. Decide the version increment in the schema PR; version-1 records require an explicit normalization/migration path because the existing schema forbids unknown properties.</p>
+<p>Use the existing AG-UI state snapshot/delta and terminal events. Do not invent a parallel transport. The persisted terminal state may contain its intended saved value inside the transaction, but the client receives that value only after commit succeeds. On commit failure, emit a safe unsaved state for the current session.</p>
+<h2>Backend and frontend</h2>
+<p>Extract only enough settlement policy to test it independently from SSE serialization. Keep the existing short transactions and branch/message identifiers. The frontend run banner must distinguish working, execution complete, and save failure, while retaining copy/download access to the visible answer where safe.</p>
+<h2>DSPy, MLflow and fixtures</h2>
+<p>No DSPy optimization is needed. Record sanitized settlement outcome/count metrics; MLflow availability must not affect settlement. Add deterministic fixtures for successful save, retry success, both retries failing and cancellation during save.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>Successful commit produces one saved answer and the same answer after reload.</li>
+<li>First persistence attempt fails, second succeeds: no duplicate message and no false permanent failure.</li>
+<li>Both attempts fail: answer remains visible, UI says not saved, and bootstrap does not invent a persisted answer.</li>
+<li>Duplicate finalization and disconnect races produce no contradictory saved/failed states.</li>
+<li>A save retry never reruns the DSPy program or a workspace mutation.</li>
+<li>Old snapshots normalize predictably; live and restored terminal state agree whenever a terminal transaction succeeded.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No background-job platform, token-by-token event log, unbounded retry queue, or promise to recover data that was never saved.</p>
+</article><article class="doc" id="doc-docs-specs-002-compound-tasks-managed-output" data-title="Spec 002 - Compound tasks and managed output"><h1>Spec 002 - Compound tasks and managed output</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p><code>artifact</code> exposes research and report creation. Workspace profiles expose research and workspace tools, but not report creation. The program selects exactly one profile. A task needing workspace evidence plus a managed report cannot access both through the current composition.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/factory.py" rel="noopener noreferrer" target="_blank">factory.py</a>, <code>build_tool_profiles</code>; <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">program.py</a>, <code>forward</code>.</p>
+<h2>Desired behavior</h2>
+<p>A user can request "Inspect the workspace and create a managed report" as one task. Evidence gathering uses the minimum authorized workspace profile; managed report export is a separately authorized output action after synthesis. The report cites the evidence actually gathered.</p>
+<h2>Invariants</h2>
+<ul>
+<li>Requested capabilities, configured availability and authorization remain distinct.</li>
+<li>Only deterministic application policy decides which tools/actions may execute.</li>
+<li>Denying workspace writes or shell access must not prevent a read-only inspection and allowed managed export.</li>
+<li>A report cannot claim a source was inspected when it was not.</li>
+<li>Retried delivery/export must not duplicate artifact records or silently overwrite unrelated artifacts.</li>
+</ul>
+<h2>Minimal design</h2>
+<p>Retain evidence routing and add a bounded output intent, rather than introducing a generic planner or every possible profile combination. Reuse the existing report storage, validation and event machinery outside the mutually exclusive evidence choice. Synthesis can supply report content from the same evidence; avoid an extra LM call when the answer already contains the report.</p>
+<p>A tactical combined profile is permitted only as a small documented step with the same tests. Do not expand route rank assumptions into authorization logic.</p>
+<h2>Contract and frontend</h2>
+<p>Represent managed-output request/status through the existing artifact lifecycle, extending generated contracts only where needed. Return stable artifact and source references. The transcript shows artifact progress/ready/failed; the inspector and restored branch refer to the same record.</p>
+<h2>DSPy evaluation</h2>
+<p>Add deterministic tool doubles for read-only workspace inspection, research plus report, missing required tool, denied mutations and export failure after a useful answer. Update capability sufficiency scoring to use actual sets. Exact route match, task success and authorization invariants are separate measurements.</p>
+<h2>MLflow and fixtures</h2>
+<p>Record selected evidence profile, requested output kind, export status and program version as safe metadata. Fixture scenarios must exercise combined capabilities rather than merely show a prebuilt artifact card.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>One task reads known workspace content and produces one managed artifact containing the expected grounded finding.</li>
+<li>No write/edit/bash tool is exposed when not approved.</li>
+<li>An unavailable evidence capability yields a clear limitation, not fabricated inspection.</li>
+<li>A follow-up "make that a report" uses the correct branch evidence.</li>
+<li>Export failure keeps the answer, marks the artifact failed and never shows a ready download.</li>
+<li>Repeated export settlement is idempotent for the same run/output identity.</li>
+<li>Reload and branch switching preserve the correct report and source associations.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No arbitrary generated agent graph, no new artifact service, no automatic permission escalation.</p>
+</article><article class="doc" id="doc-docs-specs-003-evidence-continuity" data-title="Spec 003 - Evidence continuity and outcome"><h1>Spec 003 - Evidence continuity and outcome</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p>Routing sees only current request text. Evidence is serialized from accumulated history into a bounded prefix. The final prediction labels termination as synthesis, without preserving the gatherer reason. These choices can make follow-ups under-specified, omit current corrections and hide partial evidence collection.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/program.py" rel="noopener noreferrer" target="_blank">program.py</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/evidence.py" rel="noopener noreferrer" target="_blank">evidence.py</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">engine.py</a>.</p>
+<h2>Desired behavior</h2>
+<p>Routing receives bounded, branch-local conversational context. Synthesis receives current relevant observations plus explicitly needed prior evidence. The result distinguishes successful synthesis from complete, partial or insufficient evidence gathering.</p>
+<h2>Invariants</h2>
+<ul>
+<li>Private DSPy history remains server-side; public explanations are deliberately written summaries.</li>
+<li>Current corrective evidence cannot be crowded out solely because older observations filled the budget first.</li>
+<li>Evidence JSON is always valid and bounded; preserve the existing valid-JSON guarantee.</li>
+<li>Invalid routing remains permission-safe and retains a diagnostic/degraded signal.</li>
+<li>Gatherer failures cannot disappear merely because a synthesis call returns valid text.</li>
+</ul>
+<h2>Minimal implementation</h2>
+<p>Pass a bounded conversation summary or recent relevant turns into the routing signature. Separate raw decision validity from the coerced fallback route. Partition current-run observations from older history before selecting evidence; preserve stable source/tool-call IDs and a deterministic truncation record. Avoid a vector database or another agent for this first iteration.</p>
+<p>Carry a plain application-level evidence outcome and original normalized stop reason through <code>AgentRunResult</code>. Define when to synthesize a partial answer and when to return an insufficiency explanation. A future model-based sufficiency checker must not replace deterministic error and authorization handling.</p>
+<h2>Contract and frontend</h2>
+<p>Version the public quality/limitation fields using the shared schema. The answer and run banner disclose partial or insufficient evidence without showing raw exception messages or internal thoughts. Source references resolve to records accessible in the selected branch.</p>
+<h2>DSPy and evaluation</h2>
+<p>Use controlled histories containing old claims and newer corrections. Include request-only versus contextual routing comparisons, parse-error fallback and forced-stop cases. Report omission of required evidence, unsupported success claims, task completion, tokens and latency. Any improvement claim must be measured against the old implementation on the same cases.</p>
+<h2>MLflow and fixtures</h2>
+<p>Log evidence selection counts, truncation status, normalized outcome and version metadata. Do not log raw user documents or hidden history by default. Create fixtures for a follow-up, a correction near the budget boundary, and a partial result.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>"Use the newer file, not the old result" includes the newer evidence even after a long history.</li>
+<li>"Create a report from that" resolves the selected branch, not a sibling branch.</li>
+<li>Budget-boundary outputs parse as JSON and retain stable evidence attribution.</li>
+<li>A malformed router result never grants additional tools and never implies successful external verification.</li>
+<li>A gatherer max-iteration/context/parse stop remains observable after synthesis.</li>
+<li>Streamed and restored caveats agree, with no private reasoning in either surface.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No automatic long-term memory store, unbounded history, or universal second-model critic.</p>
+</article><article class="doc" id="doc-docs-specs-004-ui-capabilities-and-cards" data-title="Spec 004 - Honest UI capabilities and shared cards"><h1>Spec 004 - Honest UI capabilities and shared cards</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p>Image attachments are offered by the runtime, but the execution extractor handles text only. Inline Data UI payloads have local handwritten parsers. Approval is supported at the backend boundary, but a frontend sender was not found in the inspected runtime/search results.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">runtime provider</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/kernel/run_input.py" rel="noopener noreferrer" target="_blank">input extraction</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/inline-agent-data-ui.tsx" rel="noopener noreferrer" target="_blank">inline cards</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/approval.py" rel="noopener noreferrer" target="_blank">approval</a>.</p>
+<h2>Desired behavior and delivery slices</h2>
+<p>A. Advertise and enforce supported input modalities. Ship this first.</p>
+<p>B. Add an explicit pre-run permission selection using the existing tool metadata and request property. Verify the full UI sender path before changing it.</p>
+<p>C. Formalize the existing inline cards as bounded, versioned shared contracts; do not add new card kinds in the same change.</p>
+<p>Each slice should be a separate reviewable PR with its own browser test.</p>
+<h2>Invariants</h2>
+<ul>
+<li>The UI does not imply an unsupported image reached the agent.</li>
+<li>Server validation remains authoritative even when the UI hides unsupported controls.</li>
+<li>Approval defaults to none, is explicit for the current run, and never comes from model confidence.</li>
+<li>The model cannot define arbitrary React, JavaScript, navigation or authentication behavior.</li>
+<li>Process state remains in AG-UI; layout state remains local; no new mutable execution-state mirror is introduced.</li>
+</ul>
+<h2>Contracts</h2>
+<p>Extend the capabilities schema for accepted content types and limits. Add a closed discriminated schema for existing Data UI kinds, with stable entity/run/message references, version, bounded data and safe fallback semantics. Generate backend/frontend types and runtime validation using the established tooling.</p>
+<p>Define which card state is durable in bootstrap. Prefer stable references into the authoritative public projection; transient events alone are not restored state. Provide migrations for older serialized card/snapshot versions.</p>
+<h2>Frontend behavior</h2>
+<p>Use the existing assistant-ui registrations and ordinary React components. Unsupported inputs are hidden or explained before submission. An unknown card version does not break the answer. Source selections open the corresponding authorized inspector record. Historical activity does not restart when a newer run is active.</p>
+<p>Pre-run approval lists named capabilities and warns about mutations. Hosted deployments must intersect the selection with server-owned principal permissions; the existing single-local-owner model must not be silently generalized.</p>
+<h2>DSPy, MLflow and tests</h2>
+<p>No optimizer is required for the UI contract itself. Track safe schema rejection codes, not raw malformed payloads. Add fixtures for image rejection, denied approval, malformed and future-version cards, stable source linking and restored activity.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>Image-only and mixed unsupported inputs yield a visible stable error; no silent text-only substitution.</li>
+<li>Denied tools are absent from the constructed program, including after a malformed approval request.</li>
+<li>All current card fixtures validate against generated contracts in Python and TypeScript.</li>
+<li>Unknown kinds/versions preserve the answer and show a safe fallback.</li>
+<li>Old completed-run cards remain settled while a new run is active.</li>
+<li>Live, reloaded and branch-selected views reference the same sources/artifacts.</li>
+<li>Keyboard focus, status announcements and small-screen inspector access work in the fixture browser journey.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No second UI protocol, arbitrary model-generated page layout or private DSPy pause/resume fork.</p>
+</article><article class="doc" id="doc-docs-specs-005-feedback-evaluation-provenance" data-title="Spec 005 - Feedback and evaluation provenance"><h1>Spec 005 - Feedback and evaluation provenance</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p>Feedback is stored in memory only. Routing utility is exposed as accuracy and uses numeric route rank despite non-nested capabilities. Failed optimization gates record metrics but generally not the full candidate report/configuration.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/web/src/features/agent-runtime/agent-runtime-provider.tsx" rel="noopener noreferrer" target="_blank">runtime provider</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/agent_tool_routing.py" rel="noopener noreferrer" target="_blank">routing metric</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/optimize.py" rel="noopener noreferrer" target="_blank">optimizer</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/evals/mlflow_tracking.py" rel="noopener noreferrer" target="_blank">tracking</a>.</p>
+<h2>Desired behavior</h2>
+<p>Persist useful user feedback and curate it into versioned examples. Evaluate exact prediction correctness, actual task sufficiency and safety separately. Keep a reproducible report for every completed optimizer attempt without auto-promoting it.</p>
+<h2>Invariants</h2>
+<ul>
+<li>Feedback is tied to the correct message, run and branch; retries do not create accidental duplicates.</li>
+<li>User feedback is not automatically labeled ground truth or sent to an optimizer.</li>
+<li>Invalid route output is counted as invalid rather than silently rewarded after coercion.</li>
+<li>Required capability containment is checked against real tool metadata, not an assumed total order.</li>
+<li>Promotion holdout examples never enter optimizer training or selection.</li>
+<li>Evaluation and MLflow failures cannot authorize live changes.</li>
+</ul>
+<h2>Contracts and frontend</h2>
+<p>Add a small authenticated/owner-scoped feedback API and persisted record with bounded optional reason, message/run identity, and program version. Restore feedback on bootstrap or resource fetch and surface save failure. Use existing REST state ownership; do not place evaluation state inside the live AG-UI execution store.</p>
+<p>Use explicit metric names: exact match, invalid-output rate, capability sufficiency, over-selection and task success. Retain weighted utility only under that name. Treat unauthorized exposure/execution as a hard test failure.</p>
+<h2>Dataset and optimization changes</h2>
+<p>Add compound and multi-turn cases first. Split by task/thread/repository to avoid near-duplicate leakage. Introduce train/development/final promotion separation when the expanded dataset supports it; retain the current held-out isolation until then.</p>
+<p>Every completed optimization attempt writes a bounded manifest, candidate configuration, report and failure summary. Include git revision, model/config identity, DSPy version, program fingerprint, dataset digest and split IDs. Log passing and rejected attempts to the existing MLflow experiments; an unavailable tracker must leave local reports usable.</p>
+<h2>Trace privacy</h2>
+<p>Operational metadata is the default. Detailed prompt/completion traces require separately documented opt-in, access control, redaction and retention. Do not expose raw trace payloads through the frontend or attach secrets to candidate manifests.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>Feedback survives reload and remains attached to the intended branch/message.</li>
+<li>Feedback retry/update is idempotent for the chosen record identity.</li>
+<li>An artifact-required case predicted as workspace-only is correctly marked insufficient.</li>
+<li>Malformed predictions are reported separately and cannot receive exact-match credit through fallback coercion.</li>
+<li>Failed promotion gates still retain the candidate manifest and report.</li>
+<li>A corrupted or incompatible activated artifact is rejected with an operator-readable error.</li>
+<li>A deliberately failing safety case blocks promotion regardless of the mean quality score.</li>
+<li>MLflow outage does not delete the local evaluation report or change live behavior.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No autonomous online self-training, feedback-as-truth shortcut, or new observability platform.</p>
+</article><article class="doc" id="doc-docs-specs-006-dspy-runtime-simplification" data-title="Spec 006 - DSPy runtime simplification and optional decisions"><h1>Spec 006 - DSPy runtime simplification and optional decisions</h1>
+<p><strong>Status:</strong> proposed, not implemented. <strong>Baseline:</strong> <code>8b87cafc25a887b4b144df4ad938f47652d20866</code>.</p>
+<p><a href="#doc-docs-specs-readme">Specification index</a> | <a href="#doc-pages-00-index">Review pages</a></p>
+<h2>Problem and current behavior</h2>
+<p>The synthesizer builder returns a cached mutable Module shared by run-scoped programs. The engine patches private forced-submit behavior. A custom YAML module dialect duplicates some native DSPy structure while routing and evidence transformation remain in Python.</p>
+<p>Sources: <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/signature.py" rel="noopener noreferrer" target="_blank">signature.py</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/engine.py" rel="noopener noreferrer" target="_blank">engine.py</a>, <a href="https://github.com/Qredence/fleet-agent/blob/8b87cafc25a887b4b144df4ad938f47652d20866/apps/api/app/agent/spec/schema.py" rel="noopener noreferrer" target="_blank">spec schema</a>.</p>
+<h2>Desired behavior</h2>
+<p>Create a clearly run-isolated native DSPy program from immutable definitions. Keep one small supported runtime boundary, removing private compatibility and unused abstractions when behavior tests permit. An optional Jev/ReAnchor experiment must be independently gated and must not block this simplification.</p>
+<h2>Invariants</h2>
+<ul>
+<li>Runs with different providers/histories cannot mutate one another's predictors or stream attribution.</li>
+<li>All public events and safe output fields preserve the same contract during the refactor.</li>
+<li>DSPy callbacks, usage tracking and MLflow callback composition remain active.</li>
+<li>No generic framework or new private ReAct fork replaces the existing code.</li>
+<li>Experimental decision types stay internal; authorization remains deterministic.</li>
+</ul>
+<h2>Implementation slices</h2>
+<p>A. Cache immutable prompt/spec definitions only; create run-scoped predictor/module instances. Add overlapping-run tests before changing lifetime rules.</p>
+<p>B. Characterize supported locked-version termination behavior. Remove the private patch where possible; otherwise isolate a single documented compatibility shim with tests and an explicit removal criterion. Do not silently catch unrelated provider failures as normal partial answers.</p>
+<p>C. Inventory YAML dialect uses. Keep real configuration needs; replace unused generality with direct typed Signature/Module composition. A requirements spec does not require a runtime graph language.</p>
+<p>D. Optional experiment after the baseline: choose either a decision-typed capability selector or an evidence-sufficiency decision. Keep the old predictor available. Pin experimental behavior and use independent calibration/development and final holdout data.</p>
+<h2>Contracts and frontend</h2>
+<p>No frontend DSPy imports or experimental types. Any selected decision is normalized to a plain domain result and the already-approved public schema. Show evidence limitations, not raw model confidence as a truth guarantee.</p>
+<h2>DSPy evaluation and MLflow</h2>
+<p>Measure task quality, false-sufficient evidence judgments, invalid output, latency and request/token cost. Log model, dataset, prompt/program, calibration and dependency identities for every experiment. Do not label an unmeasured migration as faster, cheaper or better calibrated.</p>
+<p>Official implementation references, checked October 8, 2026: <a href="https://dspy.ai/current/tutorials/jev_decisions/" rel="noopener noreferrer" target="_blank">Jev decisions</a>, <a href="https://dspy.ai/current/api/experimental/ReAnchor/" rel="noopener noreferrer" target="_blank">ReAnchor</a>. These APIs are experimental; verify against the lockfile.</p>
+<h2>Acceptance tests</h2>
+<ol>
+<li>Two interleaved runs with different providers and histories retain isolated configuration, streams and usage attribution.</li>
+<li>Cancelling one run cannot cancel or contaminate the other.</li>
+<li>Streaming and non-streaming paths produce equivalent safe final fields.</li>
+<li>Forced/partial/error termination remains correctly normalized with no dependence on unrelated exception wording.</li>
+<li>Callback composition still permits opt-in MLflow tracing without making tracing a runtime dependency.</li>
+<li>Removed dialect features have no remaining callers; behavior fixtures pass without a second replacement DSL.</li>
+<li>An optional decision experiment is activated only after passing the same quality/safety/budget gates on the final holdout.</li>
+</ol>
+<h2>Non-goals</h2>
+<p>No broad dependency upgrade, Flex program evolution, always-on critic or simultaneous migration to a new execution framework.</p>
+</article><article class="doc" id="doc-docs-specs-readme" data-title="Proposed Fleet Agent implementation specifications"><h1>Proposed Fleet Agent implementation specifications</h1>
+<p>These six documents define behavior and acceptance criteria. They are not a new runtime DSL, generated code, completed implementation, or a claim that the tests already pass.</p>
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#doc-docs-specs-001-run-outcome-durability">001 - Run outcome and durability</a></td>
+<td>Separate completion from saving and preserve terminal truth.</td>
+</tr>
+<tr>
+<td><a href="#doc-docs-specs-002-compound-tasks-managed-output">002 - Compound tasks and managed output</a></td>
+<td>Combine workspace evidence and report creation safely.</td>
+</tr>
+<tr>
+<td><a href="#doc-docs-specs-003-evidence-continuity">003 - Evidence continuity and outcome</a></td>
+<td>Context-aware routing, bounded evidence and partial results.</td>
+</tr>
+<tr>
+<td><a href="#doc-docs-specs-004-ui-capabilities-and-cards">004 - Honest UI and shared cards</a></td>
+<td>Supported inputs, scoped approval and versioned Data UI.</td>
+</tr>
+<tr>
+<td><a href="#doc-docs-specs-005-feedback-evaluation-provenance">005 - Feedback and evaluation provenance</a></td>
+<td>Durable feedback, correct metrics and auditable candidates.</td>
+</tr>
+<tr>
+<td><a href="#doc-docs-specs-006-dspy-runtime-simplification">006 - DSPy runtime simplification</a></td>
+<td>Isolated predictors and optional measured decision experiments.</td>
+</tr>
+</tbody>
+</table>
+<p>Start with 001, the supported-input slice of 004, and 002. Use one focused implementation task per vertical slice; do not implement the entire program in a single large change.</p>
+<p>Each PR should report exact commands run and failures encountered. Never manufacture performance baselines or report unexecuted tests as passing.</p>
+</article></div></main></div><script>
+function openDoc(){const id=location.hash.slice(1)||'doc-readme';let target=document.getElementById(id);if(!target||!target.classList.contains('doc'))target=document.querySelector('.doc');document.querySelectorAll('.doc').forEach(d=>d.classList.toggle('active',d===target));document.querySelectorAll('.sidenav a').forEach(a=>{const active=a.dataset.target===target.id;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});document.title=target.dataset.title+' | Fleet Agent review';window.scrollTo(0,0);}
+document.getElementById('pageSearch').addEventListener('input',e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('.sidenav a').forEach(a=>{const article=document.getElementById(a.dataset.target);a.style.display=article.textContent.toLowerCase().includes(q)?'':'none';});});
+window.addEventListener('hashchange',openDoc);openDoc();
+</script></body></html>

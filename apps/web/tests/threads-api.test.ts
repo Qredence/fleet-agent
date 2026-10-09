@@ -12,21 +12,21 @@ describe('thread bootstrap contract validation', () => {
     ).toThrow(UnsupportedThreadBootstrapSchemaError)
   })
 
-  it('accepts the v1 legacy flat-message compatibility shape', () => {
+  it('accepts the v2 envelope with legacy flat-message compatibility shape', () => {
     expect(
       validateThreadBootstrap({
-        schemaVersion: 1,
+        schemaVersion: 2,
         thread: {},
         messages: [],
         agentState: null,
         latestRun: null,
       }).schemaVersion,
-    ).toBe(1)
+    ).toBe(2)
   })
 
   it('accepts both known message formats', () => {
     const bootstrap = validateThreadBootstrap({
-      schemaVersion: 1,
+      schemaVersion: 2,
       thread: {},
       messages: [],
       messageRepository: {
@@ -50,7 +50,7 @@ describe('thread bootstrap contract validation', () => {
   it('rejects an unknown message format', () => {
     expect(() =>
       validateThreadBootstrap({
-        schemaVersion: 1,
+        schemaVersion: 2,
         thread: {},
         messages: [],
         messageRepository: {

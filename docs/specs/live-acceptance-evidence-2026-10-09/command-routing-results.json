@@ -1,0 +1,35 @@
+{
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Command",
+  "promotion": false,
+  "routing": {
+    "cases": 45,
+    "metrics": {
+      "exact_match": 0.9777777777777777,
+      "invalid_output_rate": 0.0,
+      "capability_sufficiency": 1.0,
+      "over_selection": 0.044444444444444446,
+      "authorization_failure": 0.0
+    },
+    "mean": 0.9777777777777777,
+    "provider_failures": 0,
+    "mean_latency_s": 2.0045468573510234,
+    "output_intent_cases": 0,
+    "output_intent_accuracy": null
+  },
+  "product_regression": {
+    "cases": 16,
+    "metrics": {
+      "exact_match": 1.0,
+      "invalid_output_rate": 0.0,
+      "capability_sufficiency": 1.0,
+      "over_selection": 0.0,
+      "authorization_failure": 0.0
+    },
+    "mean": 1.0,
+    "provider_failures": 0,
+    "mean_latency_s": 1.8504935026867315,
+    "output_intent_cases": 16,
+    "output_intent_accuracy": 1.0
+  }
+}

@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from '@/state/workspace-store'
+import { cardData } from './card-contract'
 import { useState } from 'react'
 
 import { useAssistantDataUI, useAuiState } from '@assistant-ui/react'
@@ -62,6 +64,7 @@ function toolState(value: unknown): GroupedTool['state'] {
 }
 
 function parseProgress(value: unknown) {
+  value = cardData(value, 'agent-progress')
   if (!versioned(value) || !Array.isArray(value.steps)) return null
   const steps = value.steps
     .filter(isRecord)
@@ -94,6 +97,7 @@ function parseProgress(value: unknown) {
 }
 
 function parseWebSearch(value: unknown) {
+  value = cardData(value, 'web-search')
   if (!versioned(value) || !Array.isArray(value.results)) return null
   const results: WebSearchResult[] = value.results
     .filter(isRecord)
@@ -115,6 +119,7 @@ function parseWebSearch(value: unknown) {
 }
 
 function parseSources(value: unknown) {
+  value = cardData(value, 'sources')
   if (!versioned(value) || !Array.isArray(value.sources)) return null
   const sources: Source[] = value.sources
     .filter(isRecord)
@@ -127,6 +132,7 @@ function parseSources(value: unknown) {
 }
 
 function parseReport(value: unknown) {
+  value = cardData(value, 'research-report')
   if (!versioned(value) || !Array.isArray(value.sections)) return null
   const sections: ReportSection[] = value.sections
     .filter(isRecord)
@@ -162,7 +168,7 @@ function parseReport(value: unknown) {
 function InlineProgress({ data }: { data: unknown }) {
   const parsed = parseProgress(data)
   const [open, setOpen] = useState(false)
-  if (!parsed) return null
+  if (!parsed) return <p role="status" className="text-xs text-muted-foreground">This card could not be displayed.</p>
 
   return (
     <div className="flex flex-col gap-3 py-2" data-slot="inline-agent-progress">
@@ -186,9 +192,9 @@ function InlineProgress({ data }: { data: unknown }) {
 }
 
 function InlineWebSearch({ data }: { data: unknown }) {
-  const isRunning = useAuiState((state) => state.thread.isRunning)
+  const isRunning = useAuiState((state) => state.message.status?.type === 'running')
   const parsed = parseWebSearch(data)
-  if (!parsed) return null
+  if (!parsed) return <p role="status" className="text-xs text-muted-foreground">This card could not be displayed.</p>
   // A historical transcript can hold a "search started" event that was never
   // superseded. Outside a live run it shimmers forever with an empty results
   // hole; drop result-less stale markers and settle the rest.
@@ -209,21 +215,26 @@ function InlineWebSearch({ data }: { data: unknown }) {
 
 function InlineSources({ data }: { data: unknown }) {
   const parsed = parseSources(data)
+  const raw = cardData(data, 'sources')
+  const openPanel = useWorkspaceStore((state) => state.setProcessPanelOpen)
+  const openSheet = useWorkspaceStore((state) => state.setProcessSheetOpen)
+  const setTab = useWorkspaceStore((state) => state.setProcessPanelTab)
+  const select = useWorkspaceStore((state) => state.setSelectedSourceId)
   const [open, setOpen] = useState(false)
-  if (!parsed) return null
+  if (!parsed) return <p role="status" className="text-xs text-muted-foreground">This card could not be displayed.</p>
   return (
-    <Sources
+    <div><Sources
       sources={parsed.sources}
       open={open}
       onOpenChange={setOpen}
       className="py-2"
-    />
+    />{Array.isArray(raw?.sources) && raw.sources.map((source, index) => isRecord(source) && typeof source.sourceId === 'string' ? <button key={source.sourceId} type="button" className="me-2 text-xs underline" onClick={() => { openPanel(true); openSheet(true); setTab('sources'); select(String(source.sourceId)) }}>Inspect source {index + 1}</button> : null)}</div>
   )
 }
 
 function InlineResearchReport({ data }: { data: unknown }) {
   const parsed = parseReport(data)
-  if (!parsed) return null
+  if (!parsed) return <p role="status" className="text-xs text-muted-foreground">This card could not be displayed.</p>
   return (
     <ResearchReport
       title={parsed.title}

@@ -6,6 +6,7 @@ the per-run directory. Failures raise so the wrapper marks the tool call
 failed and ReActV2 can recover.
 """
 
+import hashlib
 import uuid
 
 from app.agent.event_bus import RunEventBus
@@ -38,6 +39,25 @@ class WriteReportTool:
         self._thread_id = thread_id
         self._max_bytes = max_bytes
         self._step_id = step_id
+        self._output_id: str | None = None
+        self._exported = False
+
+    def export(self, run_id: str, content: str) -> None:
+        """Deterministic post-synthesis output, independent of workspace permissions."""
+        if self._exported:
+            return
+        self._output_id = (
+            "artifact_"
+            + hashlib.sha256(f"{self._thread_id}/{run_id}/report".encode()).hexdigest()[
+                :24
+            ]
+        )
+        try:
+            self("Fleet Agent report", content)
+        except Exception:
+            # ArtifactFailed was emitted; keep the useful answer.
+            return
+        self._exported = True
 
     def __call__(self, title: str, content: str) -> str:
         """Write a short markdown report and return it as a downloadable artifact."""
@@ -45,7 +65,7 @@ class WriteReportTool:
         # or echoed back, while the tool's callers keep the original text.
         title = scrub_public_text(title)
         content = scrub_public_text(content)
-        artifact_id = f"artifact_{uuid.uuid4().hex[:12]}"
+        artifact_id = self._output_id or f"artifact_{uuid.uuid4().hex[:12]}"
         name = sanitize_artifact_name(title)
         if not name.endswith(".md"):
             name = f"{name}.md"
@@ -61,9 +81,24 @@ class WriteReportTool:
         )
 
         truncated = len(content.encode()) > self._max_bytes
-        payload = content.encode()[: self._max_bytes]
+        payload = (
+            content.encode()[: self._max_bytes]
+            .decode("utf-8", errors="ignore")
+            .encode()
+        )
         try:
-            size = self._storage.save(storage_key=artifact.storage_key, content=payload)
+            existing = (
+                self._storage.resolve_path(artifact.storage_key)
+                if self._output_id
+                else None
+            )
+            size = (
+                existing.stat().st_size
+                if existing is not None and existing.is_file()
+                else self._storage.save(
+                    storage_key=artifact.storage_key, content=payload
+                )
+            )
         except Exception:
             self._bus.publish_from_worker(
                 ArtifactFailed(

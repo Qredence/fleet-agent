@@ -9,7 +9,7 @@ import { apiFetch, apiJsonFetch } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 
 export const THREAD_BOOTSTRAP_SCHEMA_VERSION: ThreadBootstrapEnvelope['schemaVersion'] =
-  1
+  2
 
 export type { MessageStorageEntry, ThreadOut }
 

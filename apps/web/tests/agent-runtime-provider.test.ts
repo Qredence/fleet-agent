@@ -15,7 +15,7 @@ vi.mock('@/features/agent-runtime/agent-capabilities', () => ({
   refreshAgentCapabilities: vi.fn(),
 }))
 beforeEach(() => {
-  vi.mocked(refreshAgentCapabilities).mockReset().mockResolvedValue({ agent_mode: 'engine' })
+  vi.mocked(refreshAgentCapabilities).mockReset().mockResolvedValue({ agent_mode: 'engine', supported_content_types: ['text'] })
 })
 
 afterEach(() => {
@@ -95,7 +95,7 @@ describe('agent request provider headers', () => {
 it('omits stored and supplied provider headers for fixture sends and refreshes before regeneration', async () => {
   setApiKey('seeded-key')
   setActiveProviderId('openrouter')
-  vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({ agent_mode: 'fixtures' })
+  vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({ agent_mode: 'fixtures', supported_content_types: ['text'] })
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
   const send = createAgentFetch()
   await send('http://localhost:8000/api/agent', { method: 'POST', headers: { 'X-LLM-Key': 'supplied-key', 'X-LLM-Model': 'supplied-model' } })
@@ -112,4 +112,20 @@ it('blocks the POST when capability lookup fails', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
   await expect(createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' })).rejects.toThrow('API unavailable')
   expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('requires a fresh approval selection for regenerated requests', async () => {
+  vi.mocked(refreshAgentCapabilities).mockResolvedValue({ agent_mode: 'fixtures', supported_content_types: ['text'] })
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+  let approvals = ['write_file']
+  const send = createAgentFetch(undefined, () => {
+    const selected = approvals
+    approvals = []
+    return selected
+  })
+  const request = { method: 'POST', body: JSON.stringify({ forwardedProps: { approvedTools: ['bash'] } }) }
+  await send('http://localhost:8000/api/agent', request)
+  await send('http://localhost:8000/api/agent', request)
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).forwardedProps.approvedTools).toEqual(['write_file'])
+  expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).forwardedProps.approvedTools).toEqual([])
 })

@@ -50,11 +50,13 @@ class TraceReducer:
         self._run_scoped_decisions = run_scoped_decisions
         self._monotonic_start = time.monotonic()
         base: dict[str, Any] = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "threadId": thread_id,
             "run": {
                 "id": run_id,
                 "status": "running",
+                "saveStatus": "pending",
+                "programVersion": "fleet-agent@2",
                 "startedAt": _utc_now(),
                 "toolCallCount": 0,
             },
@@ -334,6 +336,25 @@ class TraceReducer:
                 {"op": "add", "path": "/run/errorCode", "value": result.error_code}
             )
 
+        if result.evidence_status:
+            run["evidenceStatus"] = result.evidence_status
+            ops.append(
+                {
+                    "op": "add",
+                    "path": "/run/evidenceStatus",
+                    "value": result.evidence_status,
+                }
+            )
+        if result.evidence_reason:
+            run["evidenceStopReason"] = result.evidence_reason
+            ops.append(
+                {
+                    "op": "add",
+                    "path": "/run/evidenceStopReason",
+                    "value": result.evidence_reason,
+                }
+            )
+
         metrics = self.state["metrics"]
         usage_metric_names = (
             ("prompt_tokens", "inputTokens"),
@@ -546,11 +567,24 @@ class TraceReducer:
     def _artifact_failed(self, event: ArtifactFailed) -> list[JsonPatchOp]:
         idx = self._artifact_index.get(event.artifact_id)
         if idx is None:
-            return []
-        self.state["artifacts"][idx]["status"] = "failed"
-        return [
+            self._artifact_index[event.artifact_id] = len(self.state["artifacts"])
+            entry = {
+                "id": event.artifact_id,
+                "name": event.name,
+                "mediaType": event.media_type,
+                "status": "failed",
+            }
+            self.state["artifacts"].append(entry)
+            return [{"op": "add", "path": "/artifacts/-", "value": entry}]
+        artifact = self.state["artifacts"][idx]
+        artifact["status"] = "failed"
+        ops: list[JsonPatchOp] = [
             {"op": "replace", "path": f"/artifacts/{idx}/status", "value": "failed"}
         ]
+        if "downloadUrl" in artifact:
+            artifact.pop("downloadUrl")
+            ops.append({"op": "remove", "path": f"/artifacts/{idx}/downloadUrl"})
+        return ops
 
 
 def _unique_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

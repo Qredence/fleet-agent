@@ -130,10 +130,13 @@ async def test_engine_run_lands_a_trace(tracing_store: Path) -> None:
 
     assert _trace_count(tracing_store) == 0, "store must start empty"
 
+    from app.services.metadata_tracing import get_metadata_callback
+
     engine = DspyAgentEngine(
         program_factory=_TinyProgram,
         lm=DummyLM([{"answer": "traced"} for _ in range(5)]),
         adapter=dspy.ChatAdapter(),
+        callbacks=[get_metadata_callback()],
     )
     result = await engine.run(
         user_request="hello",
@@ -171,15 +174,60 @@ def test_redact_span_secrets_preserves_structure_with_sensitive_keys() -> None:
 
     assert span.set_inputs.called
     inputs = span.set_inputs.call_args[0][0]
-    assert "[redacted]" in inputs["user_request"]
-    assert inputs["kwargs"]["api_key"] == "[redacted]"
-    assert inputs["kwargs"]["count"] == 42
-    assert inputs["kwargs"]["nested"]["password"] == "[redacted]"
-
-    assert span.set_outputs.called
-    outputs = span.set_outputs.call_args[0][0]
-    assert outputs["result"] == "success"
-    assert outputs["secret"] == "[redacted]"
+    assert inputs == {"capture": "metadata-only"}
+    assert span.set_outputs.call_args[0][0] == {"capture": "metadata-only"}
 
     assert span.set_attribute.called
-    span.set_attribute.assert_called_with("detail", "token: [redacted]")
+    span.set_attribute.assert_any_call("detail", "[excluded]")
+
+
+def test_metadata_trace_excludes_all_execution_and_exception_content(
+    tracing_store: Path,
+):
+    import mlflow
+    from mlflow import MlflowClient
+
+    marker = "PRIVATE_ACCEPTANCE_MARKER_789 sk-1234567890abcdefgh"
+
+    class SecretNamedModule(dspy.Module):
+        def forward(self, **kwargs):
+            raise RuntimeError(marker)
+
+    with pytest.raises(RuntimeError, match="PRIVATE_ACCEPTANCE"):
+        from app.services.metadata_tracing import get_metadata_callback
+
+        with dspy.context(callbacks=[get_metadata_callback()]):
+            SecretNamedModule()(user_request=marker)
+    mlflow.flush_trace_async_logging()
+    experiment = mlflow.get_experiment_by_name(TRACING_EXPERIMENT)
+    traces = MlflowClient().search_traces(locations=[experiment.experiment_id])
+    assert traces
+    for trace in traces:
+        blob = trace.to_json()
+        assert marker not in blob
+        assert "SecretNamedModule" not in blob
+        assert "Traceback" not in blob
+        for span in trace.data.spans:
+            assert span.name in {"dspy.module", "dspy.lm", "dspy.tool"}
+            assert span.events == []
+            assert not span.status.description
+
+
+def test_metadata_callback_failure_and_disable_do_not_affect_execution(monkeypatch):
+    import mlflow
+
+    from app.services.metadata_tracing import MetadataTracingCallback
+
+    callback = MetadataTracingCallback()
+
+    def unavailable(**kwargs):
+        raise RuntimeError("PRIVATE_EXPORT_ERROR")
+
+    monkeypatch.setattr(mlflow, "start_span_no_context", unavailable)
+    callback.on_module_start("test", object(), {"prompt": "PRIVATE_INPUT"})
+    callback.on_module_end("test", "PRIVATE_OUTPUT", RuntimeError("PRIVATE_ERROR"))
+    assert callback._spans == {}
+    from app.services.metadata_tracing import get_metadata_callback
+
+    assert configure_mlflow(Settings(mlflow_tracing_enabled=False)) is False
+    assert get_metadata_callback() is None

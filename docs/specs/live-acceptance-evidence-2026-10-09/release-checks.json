@@ -1,0 +1,27 @@
+{
+  "backend": {
+    "passed": 560,
+    "skipped": 1
+  },
+  "frontend": {
+    "files": 33,
+    "passed": 227
+  },
+  "build": "passed",
+  "lint": "passed with one warning",
+  "ruff": "passed",
+  "mypy": {
+    "files": 90,
+    "result": "passed"
+  },
+  "deptry": {
+    "files": 100,
+    "result": "passed"
+  },
+  "contracts": "fresh",
+  "e2eSyntax": "passed",
+  "e2eAlternateBrowser": "not executed; in-app Browser matrix used",
+  "optimization": "none",
+  "promotion": "none",
+  "credentialsInEvidence": false
+}

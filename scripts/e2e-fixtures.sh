@@ -20,6 +20,17 @@ export AGENT_BROWSER_SESSION="${AGENT_BROWSER_SESSION:-fleet-e2e-fixtures}"
 API_BASE="${API_BASE:-http://localhost:8000}"
 WEB_BASE="${WEB_BASE:-http://localhost:5173}"
 AB="${AB:-npx agent-browser}"
+# Start the frontend with matching VITE_API_BASE_URL and VITE_API_KEY.
+# API_BASE/WEB_BASE select services; FLEET_AGENT_API_KEY authenticates REST probes.
+
+# Keep authentication headers out of output and browser navigation URLs.
+curl() {
+  if [[ -n "${FLEET_AGENT_API_KEY:-}" ]]; then
+    command curl -H "X-API-Key: ${FLEET_AGENT_API_KEY}" "$@"
+  else
+    command curl "$@"
+  fi
+}
 
 note() { printf '\n=== %s ===\n' "$*"; }
 die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -31,6 +42,9 @@ require_grep() {
   }
   printf 'ok: %s\n' "$label"
 }
+
+MODE=$(curl -fsS "$API_BASE/api/agent/capabilities" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent_mode"])')
+[[ "$MODE" == "fixtures" ]] || die "Expected an explicit fixtures service at API_BASE"
 
 note "setup: fresh thread via REST"
 BODY=$(curl -sS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E fixtures"}')

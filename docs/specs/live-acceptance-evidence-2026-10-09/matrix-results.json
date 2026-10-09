@@ -1,0 +1,969 @@
+{
+  "revision": {
+    "head": "a6197e444659488b21914788a15e68c48fa23bc3",
+    "source_digest": "1ff2062314960129ebca0e134f5d42f943adcfef78a32e1d6cac666ac4ae2aad",
+    "provider": "Command",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "response_format": "json_tool_calls",
+    "messages_format": "system_role"
+  },
+  "passed": 36,
+  "total": 36,
+  "cases": [
+    {
+      "repeat": 1,
+      "case": 1,
+      "thread_id": "thread_4d7b65fb3a98",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "xUu6OE6",
+          "status": "completed",
+          "latencySeconds": 3.109457,
+          "usage": {
+            "total_tokens": 2236,
+            "prompt_tokens": 2136,
+            "completion_tokens": 100
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 2,
+      "thread_id": "thread_02dc18ceafff",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "i14wScN",
+          "status": "completed",
+          "latencySeconds": 4.695249,
+          "usage": {
+            "total_tokens": 2458,
+            "prompt_tokens": 2188,
+            "completion_tokens": 270
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 3,
+      "thread_id": "thread_8a9a966b5d76",
+      "result": "passed",
+      "runs": []
+    },
+    {
+      "repeat": 1,
+      "case": 4,
+      "thread_id": "thread_1be3afdc2d66",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "CnNCE2X",
+          "status": "completed",
+          "latencySeconds": 10.944718,
+          "usage": {
+            "total_tokens": 8716,
+            "prompt_tokens": 8039,
+            "completion_tokens": 677
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 5,
+      "thread_id": "thread_d943cdf67674",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "E7wqePM",
+          "status": "completed",
+          "latencySeconds": 16.653128,
+          "usage": {
+            "total_tokens": 9555,
+            "prompt_tokens": 8090,
+            "completion_tokens": 1465
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 6,
+      "thread_id": "thread_2fe56ee7032b",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "JpdjZtb",
+          "status": "completed",
+          "latencySeconds": 3.783242,
+          "usage": {
+            "total_tokens": 2376,
+            "prompt_tokens": 2162,
+            "completion_tokens": 214
+          }
+        },
+        {
+          "id": "Amc6QEK",
+          "status": "completed",
+          "latencySeconds": 6.668469,
+          "usage": {
+            "total_tokens": 3010,
+            "prompt_tokens": 2346,
+            "completion_tokens": 664
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 7,
+      "thread_id": "thread_b07088555c70",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "n9qPSsM",
+          "status": "completed",
+          "latencySeconds": 4.167008,
+          "usage": {
+            "total_tokens": 2480,
+            "prompt_tokens": 2146,
+            "completion_tokens": 334
+          }
+        },
+        {
+          "id": "fICTrEj",
+          "status": "completed",
+          "latencySeconds": 4.213386,
+          "usage": {
+            "total_tokens": 2366,
+            "prompt_tokens": 2148,
+            "completion_tokens": 218
+          }
+        },
+        {
+          "id": "0GGiE7O",
+          "status": "completed",
+          "latencySeconds": 6.887755,
+          "usage": {
+            "total_tokens": 2960,
+            "prompt_tokens": 2298,
+            "completion_tokens": 662
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 8,
+      "thread_id": "thread_e0fcc50c8353",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "BzGcHlQ",
+          "status": "completed",
+          "latencySeconds": 11.8404,
+          "usage": {
+            "total_tokens": 7331,
+            "prompt_tokens": 6193,
+            "completion_tokens": 1138
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 9,
+      "thread_id": "thread_2a332c7c3f8d",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "KAwe54N",
+          "status": "completed",
+          "latencySeconds": 16.548415,
+          "usage": {
+            "total_tokens": 9569,
+            "prompt_tokens": 8460,
+            "completion_tokens": 1109
+          }
+        },
+        {
+          "id": "c1vkIMn",
+          "status": "completed",
+          "latencySeconds": 9.926594,
+          "usage": {
+            "total_tokens": 11729,
+            "prompt_tokens": 10923,
+            "completion_tokens": 806
+          }
+        },
+        {
+          "id": "UVnPhpi",
+          "status": "completed",
+          "latencySeconds": 11.768716,
+          "usage": {
+            "total_tokens": 8925,
+            "prompt_tokens": 7877,
+            "completion_tokens": 1048
+          }
+        },
+        {
+          "id": "cN0NcjW",
+          "status": "completed",
+          "latencySeconds": 9.855222,
+          "usage": {
+            "total_tokens": 5985,
+            "prompt_tokens": 5114,
+            "completion_tokens": 871
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 10,
+      "thread_id": "thread_484600bf0888",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "cLJBmYJ",
+          "status": "cancelled",
+          "latencySeconds": 1.310738,
+          "usage": null
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 11,
+      "thread_id": "thread_378fb78a5ab1",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "azLzB4F",
+          "status": "completed",
+          "latencySeconds": 2.803468,
+          "usage": {
+            "total_tokens": 2226,
+            "prompt_tokens": 2132,
+            "completion_tokens": 94
+          }
+        },
+        {
+          "id": "bOPbUeF",
+          "status": "completed",
+          "latencySeconds": 3.337951,
+          "usage": {
+            "total_tokens": 2366,
+            "prompt_tokens": 2243,
+            "completion_tokens": 123
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "case": 12,
+      "thread_id": "thread_0f34df11b30f",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "Lhem454",
+          "status": "completed",
+          "latencySeconds": 25.400038,
+          "usage": {
+            "total_tokens": 10956,
+            "prompt_tokens": 7861,
+            "completion_tokens": 3095
+          }
+        },
+        {
+          "id": "DwYU7ch",
+          "status": "completed",
+          "latencySeconds": 18.55991,
+          "usage": {
+            "total_tokens": 17243,
+            "prompt_tokens": 15436,
+            "completion_tokens": 1807
+          }
+        },
+        {
+          "id": "jdvoza9",
+          "status": "completed",
+          "latencySeconds": 3.151917,
+          "usage": {
+            "total_tokens": 6403,
+            "prompt_tokens": 6299,
+            "completion_tokens": 104
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 1,
+      "thread_id": "thread_8af778971ec3",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "IenI9v0",
+          "status": "completed",
+          "latencySeconds": 3.10963,
+          "usage": {
+            "total_tokens": 2262,
+            "prompt_tokens": 2136,
+            "completion_tokens": 126
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 2,
+      "thread_id": "thread_2c123b9d9f6b",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "X685R2T",
+          "status": "completed",
+          "latencySeconds": 3.961209,
+          "usage": {
+            "total_tokens": 2453,
+            "prompt_tokens": 2188,
+            "completion_tokens": 265
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 3,
+      "thread_id": "thread_ecfa0da85d96",
+      "result": "passed",
+      "runs": []
+    },
+    {
+      "repeat": 2,
+      "case": 4,
+      "thread_id": "thread_2532ffd04282",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "c7onD8q",
+          "status": "completed",
+          "latencySeconds": 13.553634,
+          "usage": {
+            "total_tokens": 8799,
+            "prompt_tokens": 8085,
+            "completion_tokens": 714
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 5,
+      "thread_id": "thread_3c0e9fdbb3bc",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "x5q3TNk",
+          "status": "completed",
+          "latencySeconds": 11.49276,
+          "usage": {
+            "total_tokens": 9058,
+            "prompt_tokens": 8151,
+            "completion_tokens": 907
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 6,
+      "thread_id": "thread_86ee095203b4",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "ZVuiauU",
+          "status": "completed",
+          "latencySeconds": 4.188146,
+          "usage": {
+            "total_tokens": 2415,
+            "prompt_tokens": 2162,
+            "completion_tokens": 253
+          }
+        },
+        {
+          "id": "iwjbrVa",
+          "status": "completed",
+          "latencySeconds": 6.960167,
+          "usage": {
+            "total_tokens": 3080,
+            "prompt_tokens": 2340,
+            "completion_tokens": 740
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 7,
+      "thread_id": "thread_990de17a8e2e",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "IRUnddU",
+          "status": "completed",
+          "latencySeconds": 5.075649,
+          "usage": {
+            "total_tokens": 2529,
+            "prompt_tokens": 2146,
+            "completion_tokens": 383
+          }
+        },
+        {
+          "id": "ITrtzTK",
+          "status": "completed",
+          "latencySeconds": 4.793833,
+          "usage": {
+            "total_tokens": 2543,
+            "prompt_tokens": 2148,
+            "completion_tokens": 395
+          }
+        },
+        {
+          "id": "3tvOThI",
+          "status": "completed",
+          "latencySeconds": 6.524097,
+          "usage": {
+            "total_tokens": 2900,
+            "prompt_tokens": 2288,
+            "completion_tokens": 612
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 8,
+      "thread_id": "thread_6b8d54599898",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "CM0eYf4",
+          "status": "completed",
+          "latencySeconds": 16.13736,
+          "usage": {
+            "total_tokens": 7604,
+            "prompt_tokens": 6253,
+            "completion_tokens": 1351
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 9,
+      "thread_id": "thread_a1775748bcb1",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "5jmqrt5",
+          "status": "completed",
+          "latencySeconds": 17.021411,
+          "usage": {
+            "total_tokens": 10124,
+            "prompt_tokens": 8646,
+            "completion_tokens": 1478
+          }
+        },
+        {
+          "id": "72GysRz",
+          "status": "completed",
+          "latencySeconds": 10.142739,
+          "usage": {
+            "total_tokens": 12290,
+            "prompt_tokens": 11515,
+            "completion_tokens": 775
+          }
+        },
+        {
+          "id": "8Kloa6I",
+          "status": "completed",
+          "latencySeconds": 14.11242,
+          "usage": {
+            "total_tokens": 9536,
+            "prompt_tokens": 8433,
+            "completion_tokens": 1103
+          }
+        },
+        {
+          "id": "yoyQ5OH",
+          "status": "completed",
+          "latencySeconds": 9.533334,
+          "usage": {
+            "total_tokens": 6387,
+            "prompt_tokens": 5458,
+            "completion_tokens": 929
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 10,
+      "thread_id": "thread_ff30c67bce68",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "pd5REQN",
+          "status": "cancelled",
+          "latencySeconds": 1.29854,
+          "usage": null
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 11,
+      "thread_id": "thread_a9b361dd0e8d",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "oKTTrSc",
+          "status": "completed",
+          "latencySeconds": 3.026391,
+          "usage": {
+            "total_tokens": 2224,
+            "prompt_tokens": 2132,
+            "completion_tokens": 92
+          }
+        },
+        {
+          "id": "qFcbCfN",
+          "status": "completed",
+          "latencySeconds": 3.023803,
+          "usage": {
+            "total_tokens": 2343,
+            "prompt_tokens": 2245,
+            "completion_tokens": 98
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "case": 12,
+      "thread_id": "thread_94e301e154c1",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "VVLUhl5",
+          "status": "completed",
+          "latencySeconds": 17.641751,
+          "usage": {
+            "total_tokens": 7419,
+            "prompt_tokens": 5443,
+            "completion_tokens": 1976
+          }
+        },
+        {
+          "id": "5a38ZTa",
+          "status": "completed",
+          "latencySeconds": 12.190014,
+          "usage": {
+            "total_tokens": 11513,
+            "prompt_tokens": 10458,
+            "completion_tokens": 1055
+          }
+        },
+        {
+          "id": "gX3aH3n",
+          "status": "completed",
+          "latencySeconds": 4.14954,
+          "usage": {
+            "total_tokens": 5372,
+            "prompt_tokens": 5130,
+            "completion_tokens": 242
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 1,
+      "thread_id": "thread_5cc28003dc37",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "PyYe1W1",
+          "status": "completed",
+          "latencySeconds": 3.203832,
+          "usage": {
+            "total_tokens": 2264,
+            "prompt_tokens": 2136,
+            "completion_tokens": 128
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 2,
+      "thread_id": "thread_fac2a54286c4",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "kLTueVZ",
+          "status": "completed",
+          "latencySeconds": 3.713589,
+          "usage": {
+            "total_tokens": 2395,
+            "prompt_tokens": 2188,
+            "completion_tokens": 207
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 3,
+      "thread_id": "thread_1656305c18d9",
+      "result": "passed",
+      "runs": []
+    },
+    {
+      "repeat": 3,
+      "case": 4,
+      "thread_id": "thread_0fe0549b690a",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "cWCTlXi",
+          "status": "completed",
+          "latencySeconds": 10.367522,
+          "usage": {
+            "total_tokens": 6772,
+            "prompt_tokens": 5995,
+            "completion_tokens": 777
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 5,
+      "thread_id": "thread_30a285e0b555",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "pdRmHUa",
+          "status": "completed",
+          "latencySeconds": 11.107531,
+          "usage": {
+            "total_tokens": 9109,
+            "prompt_tokens": 8220,
+            "completion_tokens": 889
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 6,
+      "thread_id": "thread_6ae9f78894f7",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "UoKFz07",
+          "status": "completed",
+          "latencySeconds": 4.171241,
+          "usage": {
+            "total_tokens": 2398,
+            "prompt_tokens": 2162,
+            "completion_tokens": 236
+          }
+        },
+        {
+          "id": "0QZZvHH",
+          "status": "completed",
+          "latencySeconds": 7.686286,
+          "usage": {
+            "total_tokens": 3341,
+            "prompt_tokens": 2350,
+            "completion_tokens": 991
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 7,
+      "thread_id": "thread_deb1871f63f1",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "SIwzEt6",
+          "status": "completed",
+          "latencySeconds": 5.216407,
+          "usage": {
+            "total_tokens": 2517,
+            "prompt_tokens": 2146,
+            "completion_tokens": 371
+          }
+        },
+        {
+          "id": "3fOFJxq",
+          "status": "completed",
+          "latencySeconds": 3.962282,
+          "usage": {
+            "total_tokens": 2418,
+            "prompt_tokens": 2148,
+            "completion_tokens": 270
+          }
+        },
+        {
+          "id": "WAFCeP1",
+          "status": "completed",
+          "latencySeconds": 9.385021,
+          "usage": {
+            "total_tokens": 3297,
+            "prompt_tokens": 2296,
+            "completion_tokens": 1001
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 8,
+      "thread_id": "thread_ec0818f94786",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "itdpLvR",
+          "status": "completed",
+          "latencySeconds": 13.436177,
+          "usage": {
+            "total_tokens": 7464,
+            "prompt_tokens": 6264,
+            "completion_tokens": 1200
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 9,
+      "thread_id": "thread_9cea9ca45a60",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "4P7EIsn",
+          "status": "completed",
+          "latencySeconds": 22.058236,
+          "usage": {
+            "total_tokens": 10036,
+            "prompt_tokens": 8449,
+            "completion_tokens": 1587
+          }
+        },
+        {
+          "id": "qA48ZVi",
+          "status": "completed",
+          "latencySeconds": 12.932873,
+          "usage": {
+            "total_tokens": 12367,
+            "prompt_tokens": 11238,
+            "completion_tokens": 1129
+          }
+        },
+        {
+          "id": "NkA4ThC",
+          "status": "completed",
+          "latencySeconds": 12.425878,
+          "usage": {
+            "total_tokens": 9354,
+            "prompt_tokens": 8212,
+            "completion_tokens": 1142
+          }
+        },
+        {
+          "id": "nhLtPsR",
+          "status": "completed",
+          "latencySeconds": 12.451702,
+          "usage": {
+            "total_tokens": 6699,
+            "prompt_tokens": 5416,
+            "completion_tokens": 1283
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 10,
+      "thread_id": "thread_61204605efc2",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "3bnYgKJ",
+          "status": "cancelled",
+          "latencySeconds": 1.295552,
+          "usage": null
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 11,
+      "thread_id": "thread_4e522df8d54c",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "fgpCyc6",
+          "status": "completed",
+          "latencySeconds": 2.933396,
+          "usage": {
+            "total_tokens": 2222,
+            "prompt_tokens": 2132,
+            "completion_tokens": 90
+          }
+        },
+        {
+          "id": "4w59WX3",
+          "status": "completed",
+          "latencySeconds": 3.753756,
+          "usage": {
+            "total_tokens": 2424,
+            "prompt_tokens": 2249,
+            "completion_tokens": 175
+          }
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "case": 12,
+      "thread_id": "thread_5d82e4464ed0",
+      "result": "passed",
+      "runs": [
+        {
+          "id": "IfQrC17",
+          "status": "completed",
+          "latencySeconds": 22.058013,
+          "usage": {
+            "total_tokens": 14555,
+            "prompt_tokens": 12207,
+            "completion_tokens": 2348
+          }
+        },
+        {
+          "id": "QNL1MJS",
+          "status": "completed",
+          "latencySeconds": 14.676679,
+          "usage": {
+            "total_tokens": 13878,
+            "prompt_tokens": 12830,
+            "completion_tokens": 1048
+          }
+        },
+        {
+          "id": "aWsNCPi",
+          "status": "completed",
+          "latencySeconds": 2.995596,
+          "usage": {
+            "total_tokens": 5863,
+            "prompt_tokens": 5691,
+            "completion_tokens": 172
+          }
+        }
+      ]
+    }
+  ],
+  "concurrencyPeers": [
+    {
+      "repeat": 1,
+      "case": 10,
+      "thread_id": "thread_1d2342cb1c60",
+      "id": "MgKnouZ",
+      "status": "completed",
+      "usage": {
+        "total_tokens": 2653,
+        "prompt_tokens": 2170,
+        "completion_tokens": 483
+      },
+      "stateRun": {
+        "id": "MgKnouZ",
+        "status": "completed",
+        "startedAt": "2026-10-09T01:19:30.813Z",
+        "finishedAt": "2026-10-09T01:19:36.515Z",
+        "saveStatus": "saved",
+        "toolCallCount": 0,
+        "evidenceStatus": "complete",
+        "programVersion": "fleet-agent@2",
+        "terminationReason": "synthesis",
+        "evidenceStopReason": "submit"
+      }
+    },
+    {
+      "repeat": 2,
+      "case": 10,
+      "thread_id": "thread_f4c968174b84",
+      "id": "SNsr2lQ",
+      "status": "completed",
+      "usage": {
+        "total_tokens": 2710,
+        "prompt_tokens": 2170,
+        "completion_tokens": 540
+      },
+      "stateRun": {
+        "id": "SNsr2lQ",
+        "status": "completed",
+        "startedAt": "2026-10-09T01:20:40.357Z",
+        "finishedAt": "2026-10-09T01:20:45.444Z",
+        "saveStatus": "saved",
+        "toolCallCount": 0,
+        "evidenceStatus": "complete",
+        "programVersion": "fleet-agent@2",
+        "terminationReason": "synthesis",
+        "evidenceStopReason": "submit"
+      }
+    },
+    {
+      "repeat": 3,
+      "case": 10,
+      "thread_id": "thread_e34dbb27a734",
+      "id": "KBFYmbR",
+      "status": "completed",
+      "usage": {
+        "total_tokens": 2720,
+        "prompt_tokens": 2170,
+        "completion_tokens": 550
+      },
+      "stateRun": {
+        "id": "KBFYmbR",
+        "status": "completed",
+        "startedAt": "2026-10-09T01:21:33.579Z",
+        "finishedAt": "2026-10-09T01:21:40.756Z",
+        "saveStatus": "saved",
+        "toolCallCount": 0,
+        "evidenceStatus": "complete",
+        "programVersion": "fleet-agent@2",
+        "terminationReason": "synthesis",
+        "evidenceStopReason": "submit"
+      }
+    }
+  ],
+  "underlyingRuns": 63,
+  "availableTokenUsage": {
+    "total_tokens": 357197,
+    "prompt_tokens": 312287,
+    "completion_tokens": 44910
+  },
+  "usageUnavailableRuns": 3,
+  "primaryRunMeanLatencySeconds": 8.723229633333334
+}

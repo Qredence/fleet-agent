@@ -40,8 +40,10 @@ def test_routing_metric_rewards_exact_and_penalizes_over_privilege():
     over = routing_metric(example, dspy.Prediction(route="workspace_shell"))
 
     assert exact.score == 1.0
-    assert over.score == 0.35
-    assert "more capability" in over.feedback
+    assert over.score == 0.0
+    assert over.over_selection == 1.0
+    assert over.capability_sufficiency == 1.0
+    assert over.over_selection == 1.0
 
 
 def test_routing_metric_scores_under_selection_as_failure():
@@ -49,7 +51,7 @@ def test_routing_metric_scores_under_selection_as_failure():
     verdict = routing_metric(example, dspy.Prediction(route="direct"))
 
     assert verdict.score == 0.0
-    assert "cannot complete" in verdict.feedback
+    assert verdict.capability_sufficiency == 0.0
 
 
 def test_eval_runner_validates_and_exits_zero_without_a_provider(capsys):
@@ -159,7 +161,9 @@ def test_score_seeded_router_is_exact_on_canonical_gold():
 def test_tool_routing_signature_parses_surface_noise_without_adapter_error():
     from app.agent.routing import ToolRoutingSignature, coerce_route
 
-    lm = ScriptedLM([{"content": '{"route": "  \'WORKSPACE_WRITE\'  "}'}])
+    lm = ScriptedLM(
+        [{"content": '{"route": "  \'WORKSPACE_WRITE\'  ", "output_intent": "none"}'}]
+    )
     router = dspy.Predict(ToolRoutingSignature)
     with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
         prediction = router(user_request="write tests")

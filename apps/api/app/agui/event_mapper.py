@@ -16,6 +16,7 @@ from ag_ui.core import (
 from app.agent.instrumented import truncate_result
 from app.agui.trace_reducer import TraceReducer
 from app.agui.types import AnyDomainEvent, JsonPatchOp
+from app.contracts.cards import make_card
 from app.contracts.domain import (
     ArtifactReady,
     FinalFieldsReady,
@@ -84,7 +85,13 @@ def map_domain_event(
         )
 
     if isinstance(event, InlineDataEvent):
-        return [CustomEvent(name=event.name, value=event.value)]
+        card = make_card(
+            event.name,
+            event.value,
+            run_id=reducer.run_id,
+            message_id=assistant_message_id,
+        )
+        return [CustomEvent(name=event.name, value=card)] if card else []
 
     ops = reducer.apply_event(event)
     if isinstance(event, (ToolStarted, ToolCompleted, ToolFailed)):
@@ -101,13 +108,17 @@ def map_domain_event(
         events.append(
             CustomEvent(
                 name="artifact",
-                value={
-                    "schemaVersion": 1,
-                    "id": event.artifact.id,
-                    "name": event.artifact.name,
-                    "mediaType": event.artifact.media_type,
-                    "downloadUrl": event.download_url,
-                },
+                value=make_card(
+                    "artifact",
+                    {
+                        "id": event.artifact.id,
+                        "name": event.artifact.name,
+                        "mediaType": event.artifact.media_type,
+                        "downloadUrl": event.download_url,
+                    },
+                    run_id=reducer.run_id,
+                    message_id=assistant_message_id,
+                ),
             )
         )
     return events

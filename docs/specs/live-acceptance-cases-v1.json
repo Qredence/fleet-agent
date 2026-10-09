@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "repetitions": 3,
+  "provider": "frontend Command profile",
+  "documents": {
+    "acceptance.md": {"project":"Aster","currentLaunch":"17 November","budget":"420 units","retiredLaunch":"3 October"},
+    "text-note.txt": {"code":"ORBIT-742","color":"violet"},
+    "approval-N.md": {"initial":"ORIGINAL-APPROVAL","approved":"APPROVED-N","forbidden":"EDIT-BLOCKED-N"}
+  },
+  "cases": [
+    {"id":1,"name":"Plain text","facts":["19 + 23 = 42"],"privilegedTools":[],"persisted":"completed, saved, same answer after reload"},
+    {"id":2,"name":"Text attachment","facts":["ORBIT-742","violet"],"privilegedTools":[],"persisted":"attachment and answer survive reload"},
+    {"id":3,"name":"Unsupported inputs","facts":["picker/paste/mixed drop rejected","image-only and mixed API requests return unsupported_input_type","historical image limitation visible"],"privilegedTools":[],"persisted":"no execution reservation; historical seed remains viewable"},
+    {"id":4,"name":"Workspace inspection","facts":["Aster","17 November","420 units"],"privilegedTools":[],"persisted":"completed, saved, attributed source restored"},
+    {"id":5,"name":"Inspection and report","facts":["Aster","17 November","420 units"],"privilegedTools":[],"persisted":"one managed Markdown artifact, matching run/source references, authenticated download and reload"},
+    {"id":6,"name":"Make that a report","facts":["Juniper","730 units","22 December"],"privilegedTools":[],"persisted":"selected branch facts, zero unnecessary tool calls, one artifact"},
+    {"id":7,"name":"Branch correction","facts":["Cedar/100 original branch","Larch/900 corrected branch"],"privilegedTools":[],"persisted":"original branch retained; corrected report excludes sibling facts; switch and reload agree"},
+    {"id":8,"name":"Unavailable evidence capability","facts":["no approval permits overwrite","capability_unavailable","insufficient"],"privilegedTools":[],"persisted":"truthful limitation restored; no write"},
+    {"id":9,"name":"Approvals","facts":["unselected tools withheld","explicitly approved write succeeds","regeneration/edit need fresh selection"],"privilegedTools":["write only for explicitly selected run"],"persisted":"approved content remains after unapproved regeneration/edit; approvals reset"},
+    {"id":10,"name":"Concurrent isolation","facts":["ALPHA-N cancelled","BETA-N completes with 42","no cross-run marker contamination"],"privilegedTools":[],"persisted":"both underlying runs recorded; cancellation saved; peer answer and usage remain independent"},
+    {"id":11,"name":"Feedback lifecycle","facts":["positive/negative/remove","failed write visible","retry succeeds","branch-local restoration"],"privilegedTools":[],"persisted":"server feedback matches reload and selected assistant branch"},
+    {"id":12,"name":"Cards and responsive access","facts":["historical search settled during next run","source and artifact inspector resolve","keyboard operation and status announcements","narrow-screen inspector"],"privilegedTools":[],"persisted":"live/restored cards and associations agree"}
+  ],
+  "gate": "All 36 pass on the same final application source/configuration; no authorization, privacy, durability, or restoration failures."
+}

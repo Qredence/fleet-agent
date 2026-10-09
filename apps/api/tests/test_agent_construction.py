@@ -82,7 +82,12 @@ def test_synthesizer_is_a_predict_over_the_synthesis_contract() -> None:
 
     assert isinstance(synthesizer, dspy.Predict)
     signature = synthesizer.signature
-    assert list(signature.input_fields) == ["user_request", "evidence_json", "history"]
+    assert list(signature.input_fields) == [
+        "user_request",
+        "output_intent",
+        "evidence_json",
+        "history",
+    ]
     assert list(signature.output_fields) == [
         "answer",
         "process_summary",
@@ -126,3 +131,20 @@ def test_build_signature_builds_a_fresh_class_per_name() -> None:
 def test_build_signature_requires_instruction_text() -> None:
     with pytest.raises(ValueError, match="has no instruction text"):
         build_signature({}, "   ", signature_name="Empty")
+
+
+def test_synthesis_report_wire_fields_accept_markdown_and_empty_lists() -> None:
+    from app.agent.signature import build_synthesizer
+
+    signature = build_synthesizer().signature
+    response = (
+        "[[ ## answer ## ]]\n# Report\nProject Juniper; budget 730 units.\n"
+        "[[ ## process_summary ## ]]\nRestated the selected branch facts.\n"
+        "[[ ## key_decisions ## ]]\n[]\n"
+        '[[ ## caveats ## ]]\n["Currency was not specified."]\n'
+        "[[ ## completed ## ]]"
+    )
+    parsed = dspy.ChatAdapter().parse(signature, response)
+    assert parsed["answer"].startswith("# Report")
+    assert parsed["key_decisions"] == []
+    assert parsed["caveats"] == ["Currency was not specified."]

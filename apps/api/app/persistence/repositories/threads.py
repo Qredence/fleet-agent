@@ -67,6 +67,14 @@ class ThreadsRepository:
     async def set_active_head(self, thread_id: str, head_id: str | None) -> None:
         async with self._sessions() as session:
             async with session.begin():
+                if head_id is not None and head_id.startswith("msg-"):
+                    run = await session.get(Run, head_id.removeprefix("msg-"))
+                    if run is not None and (
+                        run.thread_id != thread_id
+                        or run.status != "completed"
+                        or run.output_message_id != head_id
+                    ):
+                        raise ValueError("The run has not been durably saved.")
                 if head_id is not None:
                     exists = await session.scalar(
                         select(Message.id).where(

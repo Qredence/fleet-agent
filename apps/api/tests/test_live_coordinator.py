@@ -157,6 +157,7 @@ async def test_settlement_failure_after_answer_still_finishes_once():
     assert types[-1] == "RUN_FINISHED"
     assert "database driver detail" not in json.dumps(events)
     assert apply_state(events)["run"]["status"] == "completed"
+    assert apply_state(events)["run"]["saveStatus"] == "failed"
 
 
 async def test_unexpected_failure_still_emits_terminal_when_settlement_fails(caplog):
@@ -309,12 +310,12 @@ async def test_web_search_and_sources_are_transcript_custom_events():
         "sources",
         "web-search",
     ]
-    assert custom[0]["value"]["searching"] is True
-    assert custom[1]["value"]["sources"] == [
-        {"title": "DSPy docs", "domain": "dspy.ai"}
+    assert custom[0]["value"]["data"]["searching"] is True
+    assert custom[1]["value"]["data"]["sources"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai", "sourceId": "w1"}
     ]
-    assert custom[2]["value"]["results"] == [
-        {"title": "DSPy docs", "domain": "dspy.ai"}
+    assert custom[2]["value"]["data"]["results"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai", "sourceId": "w1"}
     ]
 
 

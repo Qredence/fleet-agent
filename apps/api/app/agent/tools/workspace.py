@@ -8,6 +8,7 @@ one configured root, and mutation is disabled by default.
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -23,6 +24,8 @@ import dspy
 from app.agent.instrumented import preview
 from app.agent.tooling import create_dspy_tool
 from app.agent.tools.process import GREP_MATCHER_SCRIPT, read_bounded_process_output
+from app.contracts.domain import SourceResult
+from app.kernel.content_safety import scrub_public_text
 
 _BLOCKED_DIRS = frozenset(
     {
@@ -104,6 +107,7 @@ class WorkspaceTools:
 
         self._policy = policy
         self._root = root
+        self.last_sources: list[SourceResult] = []
 
     def ls(self, path: str = ".", max_entries: int = 200) -> str:
         """List files and directories directly inside a workspace directory."""
@@ -243,6 +247,7 @@ class WorkspaceTools:
         end_line: int = 400,
     ) -> str:
         """Read a bounded line range from a UTF-8 workspace file."""
+        self.last_sources = []
         target = self._resolve_path(path, must_exist=True)
         if not target.is_file():
             raise ValueError("path is not a file")
@@ -267,7 +272,19 @@ class WorkspaceTools:
             f"{number:>{width}} | {line}"
             for number, line in enumerate(selected, start=start_line)
         )
-        return self._bound_output(rendered)
+        output = self._bound_output(rendered)
+        title = scrub_public_text(str(target.relative_to(self._root)))[:240]
+        excerpt = scrub_public_text(output)[:1200]
+        identity = hashlib.sha256(f"{title}\n{excerpt}".encode()).hexdigest()[:24]
+        self.last_sources = [
+            SourceResult(
+                id=f"source_workspace_{identity}",
+                title=title,
+                source_type="repository",
+                excerpt=excerpt,
+            )
+        ]
+        return output
 
     def write(self, path: str, content: str) -> str:
         """Create or atomically overwrite a workspace text file."""

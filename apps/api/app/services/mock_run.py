@@ -56,6 +56,10 @@ def _validate_snapshots(name: str, timed: list[TimedEvent]) -> None:
 def select_fixture_name(input_data: RunAgentInput) -> str:
     """Deterministic mock routing so demo/error paths are reachable from the UI."""
     text = last_user_text(input_data).lower()
+    if "save failed" in text:
+        return "save-failed-run"
+    if "save retry" in text:
+        return "save-retry-run"
     if "no output" in text:
         return "forced-submit-run"
     if "tool error" in text:

@@ -5,9 +5,8 @@ Three independent surfaces share this module:
 * ``evals/mlflow_tracking.py`` logs offline optimization and scoring runs.
 * ``evals/datasets.py`` stores the versioned routing eval set.
 * ``configure_mlflow`` enables dspy tracing for live agent runs — strictly
-  opt-in, because MLflow traces capture LLM prompts and completions *by
-  design*. Traces live in the operator's MLflow store; they never reach the
-  browser, and the feature stays off unless the operator turns it on.
+  opt-in. Exported spans retain operational metadata only; prompt, response,
+  history, and reasoning content are excluded before export.
 
 The default store is a local SQLite backend at ``.artifacts/mlflow.db``
 (gitignored alongside artifact storage); MLflow 3.x put the old filesystem
@@ -29,7 +28,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
@@ -198,52 +196,26 @@ def connect(configured: str | None = None) -> Any:
     return mlflow
 
 
-_SENSITIVE_KEY_RE = re.compile(
-    r"\b(?:api[_-]?key|apikey|secret|access[_-]?token|auth[_-]?token|password|passwd|pwd)\b",
-    re.IGNORECASE,
-)
-
-
-def _scrub_json(value: Any) -> Any:
-    """Mask secrets in a JSON-shaped span payload, keeping its structure intact."""
-    if isinstance(value, str):
-        return scrub_public_text(value)
-    if isinstance(value, dict):
-        result: dict[str, Any] = {}
-        for k, v in value.items():
-            if (
-                isinstance(k, str)
-                and _SENSITIVE_KEY_RE.search(k)
-                and isinstance(v, str)
-            ):
-                result[k] = "[redacted]" if len(v) >= 16 else scrub_public_text(v)
-            else:
-                result[k] = _scrub_json(v)
-        return result
-    if isinstance(value, (list, tuple)):
-        return [_scrub_json(item) for item in value]
-    return value
-
-
 def redact_span_secrets(span: Any) -> None:
-    """Span processor: mask secret-shaped text before the span is exported.
-
-    MLflow traces capture prompts and completions by design, so enabling
-    tracing is a deliberate operator decision. The app's own scrubbing contract
-    still applies: ``content_safety.scrub_public_text`` runs over span inputs,
-    outputs, and string attributes, so a key pasted into a prompt is masked in
-    the store exactly as it is in the browser.
-
-    Takes exactly one positional argument and returns nothing — mlflow 3.16.0's
-    ``mlflow.tracing.configure`` validates both.
-    """
+    """Exclude execution content; retain only bounded operational metadata."""
     if span.inputs is not None:
-        span.set_inputs(_scrub_json(span.inputs))
+        span.set_inputs({"capture": "metadata-only"})
     if span.outputs is not None:
-        span.set_outputs(_scrub_json(span.outputs))
+        span.set_outputs({"capture": "metadata-only"})
+    allowed = {
+        "model",
+        "model_name",
+        "provider",
+        "status",
+        "duration_ms",
+        "mlflow.spanType",
+        "mlflow.traceRequestId",
+    }
     for key, value in list(span.attributes.items()):
-        if isinstance(value, str) and (masked := scrub_public_text(value)) != value:
-            span.set_attribute(key, masked)
+        if key not in allowed or not isinstance(value, (str, int, float, bool)):
+            span.set_attribute(key, "[excluded]")
+        elif isinstance(value, str):
+            span.set_attribute(key, scrub_public_text(value)[:128])
 
 
 def configure_mlflow(settings: Settings) -> bool:
@@ -254,10 +226,12 @@ def configure_mlflow(settings: Settings) -> bool:
     tracking URI, an unwritable store, or a missing mlflow degrades to "no
     traces" with a warning instead of stopping the API from booting.
 
-    Privacy boundary: enabling this makes LLM prompts and completions
-    observable in the operator's own MLflow store, scrubbed by the same
-    secret patterns the browser edition uses (``redact_span_secrets``).
+    Privacy boundary: DSPy native autologging is disabled. The operational
+    callback passes no execution content or exceptions to MLflow.
     """
+    from app.services.metadata_tracing import set_metadata_tracing
+
+    set_metadata_tracing(False)
     if not settings.mlflow_tracing_enabled:
         return False
     try:
@@ -267,19 +241,14 @@ def configure_mlflow(settings: Settings) -> bool:
         mlflow.set_tracking_uri(uri)
         experiment_id = ensure_experiment(TRACING_EXPERIMENT)
         mlflow.set_experiment(experiment_id=experiment_id)
-        mlflow.tracing.configure(span_processors=[redact_span_secrets])
-        # Trace predictor, ReAct, and tool-call spans from live runs. Compile-
-        # time and eval-time tracing stay off here: optimization is logged
-        # explicitly (params, metrics, artifacts) by the offline harness.
-        mlflow.dspy.autolog(
-            log_traces=True,
-            log_traces_from_compile=False,
-            log_traces_from_eval=False,
-        )
+        # Native autologging can capture exception events/status descriptions
+        # that its span processor cannot remove through supported public APIs.
+        mlflow.dspy.autolog(disable=True)
+        mlflow.tracing.configure(span_processors=[])
+        set_metadata_tracing(True)
     except Exception:  # noqa: BLE001 — observability must never break boot
         logger.warning(
             "MLflow dspy tracing could not be enabled; continuing without it",
-            exc_info=True,
         )
         return False
     # Operator-facing startup fact: warn so it survives a default logging

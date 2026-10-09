@@ -24,7 +24,7 @@ import { AgentRuntimeProvider } from '@/features/agent-runtime/agent-runtime-pro
 import type { ThreadBootstrap } from '@/features/threads/threads-api'
 
 const bootstrap: ThreadBootstrap = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   thread: {
     id: 't-1',
     projectId: 'p-1',

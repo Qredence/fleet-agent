@@ -90,7 +90,7 @@ def test_inline_events_are_custom_parts_and_do_not_change_public_state():
 
     assert [mapped.type.value for mapped in events] == ["CUSTOM"]
     assert events[0].name == "agent-progress"
-    assert events[0].value["schemaVersion"] == 1
+    assert events[0].value["schemaVersion"] == 2
     assert reducer.state["steps"][0]["id"] == "step-understand"
 
 

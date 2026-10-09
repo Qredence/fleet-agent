@@ -153,6 +153,25 @@ class RunPersistence:
                     label="continuation message",
                     allow_missing=False,
                 )
+                unresolved = await session.scalar(
+                    select(Run.id).where(
+                        Run.thread_id == input_data.thread_id,
+                        Run.id != input_data.run_id,
+                        Run.status.in_(["queued", "running"]),
+                        Run.input_message_id.in_(
+                            [
+                                identity
+                                for identity in (
+                                    input_message_id,
+                                    continuation_message_id,
+                                )
+                                if identity
+                            ]
+                        ),
+                    )
+                )
+                if unresolved is not None:
+                    raise RunReservationError(ReservationErrorCode.RESERVATION_CONFLICT)
                 # A regeneration resumes DSPy from the selected assistant
                 # sibling, but the user node itself remains attached to its
                 # original predecessor.  Reusing the continuation head as
@@ -341,7 +360,10 @@ class RunPersistence:
                 if run is None or run.thread_id != thread_id:
                     return False
                 if run.status not in {"queued", "running"}:
-                    return False
+                    return (
+                        run.status == "completed"
+                        and run.output_message_id == assistant_message_id
+                    )
                 await MessagesRepository.upsert_in_session(
                     session,
                     thread_id=thread_id,
@@ -445,6 +467,11 @@ class RunPersistence:
                 run = await session.get(Run, run_id, with_for_update=True)
                 if run is None or run.thread_id != thread_id:
                     return False
+                if run.status not in {"queued", "running"}:
+                    return (
+                        run.status == status
+                        and run.termination_reason == termination_reason
+                    )
                 changed = await RunsRepository.settle_in_session(
                     session,
                     run_id=run_id,

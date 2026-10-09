@@ -353,7 +353,7 @@ async def test_bootstrap_endpoint_restores_exact_thread(db_sessions, db_settings
     assert payload["thread"]["projectId"] == project_id
     assert [m["role"] for m in payload["messages"]] == ["user", "assistant"]
     assert payload["messages"][1]["content"] == "Bootstrap me."
-    assert payload["agentState"]["schemaVersion"] == 1
+    assert payload["agentState"]["schemaVersion"] == 2
     assert payload["latestRun"]["status"] == "completed"
     # The DSPy history (and therefore next_thought) is never served.
     assert "next_thought" not in json.dumps(payload)
@@ -689,3 +689,140 @@ async def test_continuation_history_does_not_leak_cross_branch(db_sessions):
             for m in history_b.messages
         ]
         assert not any("Secret Branch A" in c for c in contents)
+
+
+async def test_feedback_round_trip_and_server_identity(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+    await drive_live_run(
+        None,
+        persistence,
+        [[submit_call(answer="Durable answer")]],
+        thread_id,
+        "feedback-run",
+    )
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        path = f"/api/threads/{thread_id}/messages/msg-feedback-run/feedback"
+        body = {
+            "messageId": "msg-feedback-run",
+            "type": "positive",
+            "reason": "Useful",
+            "runId": "forged",
+        }
+        saved = await client.put(path, json=body)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["runId"] == "feedback-run"
+        loaded = await client.get(f"/api/threads/{thread_id}/feedback")
+        assert loaded.json()["msg-feedback-run"]["type"] == "positive"
+        body["type"] = "negative"
+        assert (await client.put(path, json=body)).status_code == 200
+        assert (await client.delete(path)).status_code == 204
+        assert (await client.get(f"/api/threads/{thread_id}/feedback")).json() == {}
+        body["reason"] = "x" * 501
+        assert (await client.put(path, json=body)).status_code == 422
+
+
+async def test_history_adapter_rejects_unsupported_attachments(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/api/threads/{thread_id}/messages/image-message",
+            json={
+                "format": "aui/v0",
+                "content": {
+                    "id": "image-message",
+                    "role": "user",
+                    "content": [{"type": "text", "text": "mixed"}],
+                    "attachments": [{"type": "image", "content": []}],
+                },
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "unsupported_input_type"
+    assert await MessagesRepository(db_sessions).list_for_thread(thread_id) == []
+
+
+async def test_unsettled_run_cannot_be_advanced_by_history_writer(db_sessions):
+    import pytest
+
+    from app.persistence.run_persistence import RunReservationError
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    persistence = RunPersistence(db_sessions)
+    first = RunAgentInput.model_validate(run_input(thread_id, "pending-run"))
+    await persistence.reserve_run(input_data=first)
+    second = RunAgentInput.model_validate(run_input(thread_id, "next-run"))
+    with pytest.raises(RunReservationError):
+        await persistence.reserve_run(input_data=second)
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/api/threads/{thread_id}/messages/msg-pending-run",
+            json={
+                "format": "aui/v0",
+                "parentId": "m-user-pending-run",
+                "content": {
+                    "id": "msg-pending-run",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Premature"}],
+                },
+            },
+        )
+        assert response.status_code == 409
+    assert await RunsRepository(db_sessions).get("next-run") is None
+
+
+def test_legacy_save_inference_requires_authoritative_settlement():
+    from app.agui.trace_reducer import TraceReducer
+    from app.api.threads import _safe_bootstrap_agent_state
+
+    state = TraceReducer(thread_id="legacy", run_id="legacy-run").state
+    state["schemaVersion"] = 1
+    state["run"].pop("saveStatus")
+    state["run"]["status"] = "completed"
+    unknown = _safe_bootstrap_agent_state(state, thread_id="legacy")
+    saved = _safe_bootstrap_agent_state(state, thread_id="legacy", terminal_saved=True)
+    assert unknown["run"]["saveStatus"] == "unknown"
+    assert saved["run"]["saveStatus"] == "saved"
+    assert state["schemaVersion"] == 1
+
+
+async def test_text_attachment_is_persisted_without_upload_storage(db_sessions):
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    content = [{"type": "text", "text": "Known text file evidence"}]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/api/threads/{thread_id}/messages/text-file",
+            json={
+                "format": "aui/v0",
+                "content": {
+                    "id": "text-file",
+                    "role": "user",
+                    "content": content,
+                    "attachments": [
+                        {
+                            "type": "document",
+                            "contentType": "text/plain",
+                            "content": content,
+                        }
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+    assert len(await MessagesRepository(db_sessions).list_for_thread(thread_id)) == 1

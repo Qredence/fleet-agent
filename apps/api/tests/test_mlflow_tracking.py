@@ -301,7 +301,7 @@ class TestConfigureMlflow:
         enabled = configure_mlflow(self._settings(True))  # type: ignore[arg-type]
 
         assert enabled is True
-        assert calls and calls[0]["log_traces"] is True
+        assert calls and calls[0]["disable"] is True
         import mlflow
 
         assert mlflow.get_tracking_uri() == uri
@@ -409,13 +409,18 @@ class TestTracingRedaction:
             user_request: str = dspy.InputField()
             answer: str = dspy.OutputField()
 
-        with dspy.context(lm=dspy.utils.DummyLM([{"answer": f"using {_SECRET}"}])):
+        from app.services.metadata_tracing import get_metadata_callback
+
+        with dspy.context(
+            lm=dspy.utils.DummyLM([{"answer": f"using {_SECRET}"}]),
+            callbacks=[get_metadata_callback()],
+        ):
             dspy.Predict(_Answer)(user_request=f"my api_key = {_SECRET} for you")
 
         blob = _last_trace_blob()
 
         assert _SECRET not in blob
-        assert "[redacted]" in blob
+        assert "metadata-only" in blob
 
     def test_a_run_writes_nothing_into_the_repo_mlruns_tree(
         self, tracing_store: str
@@ -431,7 +436,12 @@ class TestTracingRedaction:
             user_request: str = dspy.InputField()
             answer: str = dspy.OutputField()
 
-        with dspy.context(lm=dspy.utils.DummyLM([{"answer": "ok"}])):
+        from app.services.metadata_tracing import get_metadata_callback
+
+        with dspy.context(
+            lm=dspy.utils.DummyLM([{"answer": "ok"}]),
+            callbacks=[get_metadata_callback()],
+        ):
             dspy.Predict(_Answer)(user_request="write nothing into the repo")
         _last_trace_blob()
 

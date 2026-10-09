@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import dspy
 
-from evals.agent_tool_routing import routing_score
+from evals.agent_tool_routing import routing_metric, routing_score
 
 Miss = tuple[str, str, str, float]
 """One non-exact route as ``(request, expected_route, actual_route, score)``."""
@@ -34,6 +34,7 @@ class RoutingScore:
     mean: float
     misses: list[Miss]
     mean_latency_s: float
+    metrics: dict[str, float] = field(default_factory=dict)
     failures: int = 0
     """Examples whose program call raised.
 
@@ -110,7 +111,20 @@ def score_router(
 
     scores: list[float] = []
     misses: list[Miss] = []
+    dimensions = {
+        name: []
+        for name in (
+            "exact_match",
+            "invalid_output_rate",
+            "capability_sufficiency",
+            "over_selection",
+            "authorization_failure",
+        )
+    }
     for example, prediction, score in evaluation.results:
+        verdict = routing_metric(example, prediction)
+        for name in dimensions:
+            dimensions[name].append(float(getattr(verdict, name)))
         value = float(score)
         scores.append(value)
         if value < 1.0:
@@ -130,4 +144,7 @@ def score_router(
         misses=misses,
         mean_latency_s=timed.mean_latency_s,
         failures=timed.failures,
+        metrics={
+            name: sum(values) / len(values) for name, values in dimensions.items()
+        },
     )

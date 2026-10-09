@@ -67,7 +67,7 @@ ignore_missing_imports = true
 
 # Generated from packages/contracts/*.schema.json — not authored code.
 [[tool.mypy.overrides]]
-module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap"]
+module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap", "app.contracts.inline_card", "app.contracts.message_feedback"]
 ignore_errors = true
 
 [tool.deptry]

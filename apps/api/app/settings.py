@@ -115,9 +115,8 @@ class Settings(BaseSettings):
         default=False,
         description=(
             "Opt-in MLflow tracing of live dspy runs (predictor, ReAct, tool "
-            "spans) via mlflow.dspy.autolog. Off by default: traces capture "
-            "LLM prompts/completions by design, so enabling is an explicit "
-            "operator decision for their own observability store."
+            "spans) through metadata-only callbacks. Off by default; inputs, "
+            "outputs, exception details, and private reasoning are excluded."
         ),
     )
     mlflow_tracking_uri: str | None = Field(

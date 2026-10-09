@@ -95,6 +95,10 @@ def _synthesis_signature() -> type[dspy.Signature]:
     return build_signature(
         {
             "user_request": (str, dspy.InputField(desc="The user's request.")),
+            "output_intent": (
+                str,
+                dspy.InputField(desc="Validated output mode: none or managed_report."),
+            ),
             "evidence_json": (
                 str,
                 dspy.InputField(desc="Bounded successful and failed evidence."),
@@ -126,7 +130,6 @@ def _synthesis_signature() -> type[dspy.Signature]:
     )
 
 
-@lru_cache(maxsize=1)
 def build_synthesizer() -> dspy.Module:
     """Build the synthesis node: one ``Predict`` over the Markdown text."""
     return dspy.Predict(_synthesis_signature())

@@ -4,7 +4,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "agent_mode"
+    "agent_mode",
+    "supported_content_types"
   ],
   "properties": {
     "agent_mode": {
@@ -13,6 +14,18 @@
         "fixtures",
         "engine"
       ]
+    },
+    "supported_content_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "text"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true
     }
   }
 }

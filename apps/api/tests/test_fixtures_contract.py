@@ -16,7 +16,13 @@ GENERATED_MODEL = (
     Path(__file__).resolve().parents[1] / "app" / "contracts" / "agent_state.py"
 )
 
-FIXTURE_NAMES = ["successful-run", "tool-error-run", "forced-submit-run"]
+FIXTURE_NAMES = [
+    "successful-run",
+    "tool-error-run",
+    "forced-submit-run",
+    "save-failed-run",
+    "save-retry-run",
+]
 
 # Fields that must never appear in any client-visible payload.
 PROHIBITED_KEYS = {

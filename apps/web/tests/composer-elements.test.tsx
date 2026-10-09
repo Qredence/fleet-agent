@@ -101,7 +101,7 @@ function AttachmentRuntimeComposer({
 }
 
 beforeEach(() => {
-  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine' })
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine', supported_content_types: ['text'] })
 })
 
 afterEach(() => {
@@ -621,7 +621,7 @@ describe('ComposerTriggerPopovers', () => {
 
 it('allows credential-free fixture submission and indicates fixture mode', async () => {
   localStorage.clear()
-  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' })
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures', supported_content_types: ['text'] })
   render(<RuntimeComposer />)
   const input = screen.getByRole('textbox', { name: 'Message input' })
   await userEvent.type(input, 'Fixture question')
@@ -643,18 +643,18 @@ it('disables submission while capabilities are loading and when lookup fails', a
 
 it('uses run readiness for edited-message Update and Enter submission', async () => {
   localStorage.clear()
-  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' })
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures', supported_content_types: ['text'] })
   render(<RuntimeComposer withHistory />)
   await userEvent.hover(screen.getByText('Original question'))
   await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
   const edited = document.querySelector<HTMLTextAreaElement>('#edited-message-input')!
   expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled()
-  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine' }) })
+  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine', supported_content_types: ['text'] }) })
   await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled())
   await userEvent.clear(edited)
   await userEvent.type(edited, 'Changed question{Enter}')
   expect(document.querySelector('#edited-message-input')).toBeInTheDocument()
-  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures' }) })
+  act(() => { queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'fixtures', supported_content_types: ['text'] }) })
   await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled())
   await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(document.querySelector('#edited-message-input')).not.toBeInTheDocument())

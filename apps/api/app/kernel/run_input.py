@@ -8,6 +8,45 @@ from ag_ui.core import RunAgentInput
 from ag_ui.core.types import TextInputContent
 
 
+def validate_user_content(content: Any) -> None:
+    """Reject unsupported modalities instead of silently discarding them."""
+    if isinstance(content, str):
+        return
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, (str, TextInputContent)):
+                continue
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "text"
+                and isinstance(part.get("text"), str)
+            ):
+                continue
+            raise ValueError("unsupported_input_type")
+        return
+    raise ValueError("unsupported_input_type")
+
+
+def validate_user_attachments(attachments: Any) -> None:
+    """Validate assistant-ui envelopes as well as flattened AG-UI parts."""
+    if attachments is None:
+        return
+    if not isinstance(attachments, list):
+        raise ValueError("unsupported_input_type")
+    for attachment in attachments:
+        if not isinstance(attachment, dict) or attachment.get("type") not in {
+            "document",
+            "file",
+        }:
+            raise ValueError("unsupported_input_type")
+        mime = attachment.get("contentType", "text/plain")
+        if not isinstance(mime, str) or not (
+            mime.startswith("text/") or mime == "application/json"
+        ):
+            raise ValueError("unsupported_input_type")
+        validate_user_content(attachment.get("content"))
+
+
 def extract_message_text(content: Any) -> str:
     """Extract plain text from string or structured content parts."""
     if isinstance(content, str):

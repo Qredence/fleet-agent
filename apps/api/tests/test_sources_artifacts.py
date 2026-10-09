@@ -195,3 +195,18 @@ async def test_write_report_failure_marks_event(tmp_path: Path):
     assert isinstance(started, ArtifactStarted)
     assert isinstance(failed, ArtifactFailed)
     assert failed.artifact_id == started.artifact.id
+
+
+async def test_managed_report_output_slot_is_idempotent_across_instances(tmp_path):
+    import asyncio
+
+    storage = LocalArtifactStorage(tmp_path)
+    for answer in ("First grounded answer", "A retry must not overwrite"):
+        bus = RunEventBus(asyncio.get_running_loop())
+        tool = WriteReportTool(
+            storage=storage, bus=bus, thread_id="thread", max_bytes=1000
+        )
+        await asyncio.to_thread(tool.export, "same-run", answer)
+    paths = list(tmp_path.rglob("*.md"))
+    assert len(paths) == 1
+    assert paths[0].read_text() == "First grounded answer"

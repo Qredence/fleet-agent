@@ -51,6 +51,9 @@ class AgentRunResult:
     caveats: list[str] = field(default_factory=list)
     termination_reason: str | None = None
     error_code: str | None = None
+    evidence_status: Literal["complete", "partial", "insufficient"] | None = None
+    evidence_reason: str | None = None
+    output_intent: str = "none"
     # Server-side only. Never serialize this field to the browser.
     history: Any | None = None
     usage: dict[str, int] = field(default_factory=dict)
@@ -104,7 +107,7 @@ def compose_callbacks(
     """Return DSPy's active callbacks extended with the engine's own.
 
     ``dspy.context(callbacks=...)`` REPLACES ``dspy.settings.callbacks`` instead of
-    extending it (``dspy/utils/callback.py``). ``mlflow.dspy.autolog`` installs its
+    extending it (``dspy/utils/callback.py``). The opt-in metadata tracer installs its
     callback into that global list, so passing only the engine's callbacks silently
     disabled tracing on every live run while leaving offline runs traced. Compose
     instead of replace.
@@ -217,6 +220,9 @@ def _map_result(prediction: dspy.Prediction) -> AgentRunResult:
             termination_reason=reason,
             history=getattr(prediction, "history", None),
             usage=usage,
+            evidence_status=getattr(prediction, "evidence_status", None),
+            evidence_reason=getattr(prediction, "evidence_reason", None),
+            output_intent=getattr(prediction, "output_intent", "none"),
         )
 
     return AgentRunResult(
@@ -255,12 +261,14 @@ class DspyAgentEngine:
         adapter: dspy.Adapter | None = None,
         callbacks: list[BaseCallback] | None = None,
         cleanup: Callable[[], None] | None = None,
+        export_report: Callable[[AgentRunContext, AgentRunResult], None] | None = None,
     ) -> None:
         self._program_factory = program_factory
         self._lm = lm
         self._adapter = adapter
         self._callbacks = list(callbacks or [])
         self._cleanup = cleanup
+        self._export_report = export_report
 
     async def run(
         self,
@@ -372,6 +380,12 @@ class DspyAgentEngine:
                 if prediction is None:
                     raise RuntimeError("streaming program ended without a prediction")
                 result = _map_result(prediction)
+                if (
+                    self._export_report
+                    and result.output_intent == "managed_report"
+                    and result.answer
+                ):
+                    await asyncio.to_thread(self._export_report, context, result)
         finally:
             self._close_resources()
 
@@ -422,7 +436,14 @@ class DspyAgentEngine:
                     if mapped is None:
                         raise
                     return mapped
-            return _map_result(prediction)
+            result = _map_result(prediction)
+            if (
+                self._export_report
+                and result.output_intent == "managed_report"
+                and result.answer
+            ):
+                self._export_report(context, result)
+            return result
         finally:
             self._close_resources()
 

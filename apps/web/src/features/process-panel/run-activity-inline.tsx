@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils'
  * process state belongs to the AG-UI runtime and is visible independently of
  * the transcript.
  *
- * Panel timeline (schemaVersion 1 only): route/decisions → steps with nested
+ * Panel timeline (schemaVersion 2): route/decisions → steps with nested
  * tool cards → termination. Chat stays conversation; this panel is the process.
  */
 export function RunActivityPanel() {
@@ -49,6 +49,8 @@ export function RunActivityPanel() {
 
   return (
     <section aria-label="Activity" className="h-full overflow-y-auto p-4">
+      {agentState?.run.saveStatus === 'saved' && <p role="status" className="text-xs text-muted-foreground">Saved</p>}
+      {agentState?.run.saveStatus === 'failed' && <UnsavedAnswer />}
       <h3 className={cn(mono, 'mb-2 text-foreground/45 font-normal')}>
         Process timeline
       </h3>
@@ -319,6 +321,23 @@ export function RunActivityInlineContent({
       </CollapsibleContent>
     </Collapsible>
   )
+}
+
+export function UnsavedAnswer() {
+  const answer = useAuiState((state) => state.thread.messages.filter((message) => message.role === 'assistant').at(-1)?.content.filter((part) => part.type === 'text').map((part) => part.type === 'text' ? part.text : '').join('\n') ?? '')
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([answer], { type: 'text/markdown;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'fleet-agent-answer.md'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  return <div role="alert" className="mb-3 rounded border border-amber-500/30 p-3 text-sm">
+    <p>Saving failed. Reloading may lose this answer and its process state.</p>
+    <button type="button" onClick={() => void navigator.clipboard.writeText(answer)} className="me-3 underline">Copy answer</button>
+    <button type="button" onClick={download} className="underline">Download Markdown</button>
+  </div>
 }
 
 function ToolExecutionSummary({

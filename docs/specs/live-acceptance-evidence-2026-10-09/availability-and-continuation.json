@@ -1,0 +1,42 @@
+[
+  {
+    "thread_id": "thread_8f949718d8fb",
+    "headAdvanceStatus": 409
+  },
+  {
+    "thread_id": "thread_945ca8094a05",
+    "headAdvanceStatus": 409
+  },
+  {
+    "thread_id": "thread_622fa4860801",
+    "status": "completed",
+    "run": {
+      "id": "ybXPYsx",
+      "status": "completed",
+      "startedAt": "2026-10-09T01:40:05.769Z",
+      "finishedAt": "2026-10-09T01:40:09.976Z",
+      "saveStatus": "saved",
+      "toolCallCount": 0,
+      "evidenceStatus": "complete",
+      "programVersion": "fleet-agent@2",
+      "terminationReason": "synthesis",
+      "evidenceStopReason": "submit"
+    }
+  },
+  {
+    "thread_id": "thread_80144553ac4b",
+    "status": "completed",
+    "run": {
+      "id": "aLzDGrf",
+      "status": "completed",
+      "startedAt": "2026-10-09T01:40:34.737Z",
+      "finishedAt": "2026-10-09T01:40:40.135Z",
+      "saveStatus": "saved",
+      "toolCallCount": 0,
+      "evidenceStatus": "complete",
+      "programVersion": "fleet-agent@2",
+      "terminationReason": "synthesis",
+      "evidenceStopReason": "submit"
+    }
+  }
+]

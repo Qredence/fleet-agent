@@ -456,6 +456,7 @@ const ImageImpl: ImageMessagePartComponent = (props) => {
         <ImagePreview src={image} alt={filename || "Image content"} />
       </ImageZoom>
       <ImageFilename>{filename}</ImageFilename>
+      <p role="note" className="text-xs text-muted-foreground">Historical image — image inputs are not supported by this agent.</p>
     </ImageRoot>
   );
 };

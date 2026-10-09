@@ -149,7 +149,10 @@ def synthesis_call(
 
 def router_call(route: str) -> dict[str, Any]:
     """A router step selecting one capability route."""
-    return {"calls": [], "content": json.dumps({"route": route})}
+    return {
+        "calls": [],
+        "content": json.dumps({"route": route, "output_intent": "none"}),
+    }
 
 
 def evidence_end() -> dict[str, Any]:

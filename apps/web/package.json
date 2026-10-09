@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "NODE_ENV=test vitest run",
-    "contracts:sync": "json2ts --input ../../packages/contracts/agent-workspace-state.schema.json --output src/contracts/generated.ts && json2ts --input ../../packages/contracts/thread-bootstrap.schema.json --output src/contracts/thread-bootstrap.ts && json2ts --input ../../packages/contracts/agent-capabilities.schema.json --output src/contracts/agent-capabilities.ts",
+    "contracts:sync": "json2ts --input ../../packages/contracts/agent-workspace-state.schema.json --output src/contracts/generated.ts && json2ts --input ../../packages/contracts/thread-bootstrap.schema.json --output src/contracts/thread-bootstrap.ts && json2ts --input ../../packages/contracts/agent-capabilities.schema.json --output src/contracts/agent-capabilities.ts && json2ts --input ../../packages/contracts/inline-card.schema.json --output src/contracts/inline-card.ts && json2ts --input ../../packages/contracts/message-feedback.schema.json --output src/contracts/message-feedback.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "@streamdown/mermaid": "1.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.103.2",
+    "ajv": "8.20.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.4.0",

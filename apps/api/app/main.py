@@ -20,6 +20,7 @@ from app.api.tools import router as tools_router
 from app.persistence.db import build_engine, build_sessionmaker
 from app.persistence.repositories import RunsRepository
 from app.services.artifact_storage import LocalArtifactStorage
+from app.services.metadata_tracing import get_metadata_callback
 from app.services.metrics import MetricsRegistry
 from app.services.mlflow_observability import configure_mlflow
 from app.settings import get_settings
@@ -32,6 +33,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Opt-in dspy tracing into MLflow: enabled once, before any predictor
     # call. Off by default; see app/services/mlflow_observability.py.
     configure_mlflow(app.state.settings)
+    app.state.engine_builder = make_engine_builder(
+        app.state.settings,
+        storage=app.state.artifact_storage,
+        telemetry_callback=get_metadata_callback(),
+    )
     # Server-restart reconciliation: no in-memory run state survives a restart,
     # so any run still marked live is stale. One statement settles them.
     #

@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import suppress
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -121,6 +122,8 @@ class LiveDSPyCoordinator:
             return encoder.encode(event)
 
         terminal_settled = False
+        terminal_save_task: asyncio.Task[bool] | None = None
+        failed_artifacts: set[str] = set()
         terminal_emitted = False
         settlement_lock = asyncio.Lock()
         metrics_recorded = False
@@ -179,6 +182,16 @@ class LiveDSPyCoordinator:
                     run_state["errorCode"] = result.error_code
                 return []
 
+        def committed_state() -> dict[str, Any]:
+            snapshot = deepcopy(reducer.state)
+            snapshot["run"]["saveStatus"] = "saved"
+            return snapshot
+
+        def save_outcome(settled: bool) -> list[dict[str, Any]]:
+            status = "saved" if settled and persistence else "failed"
+            reducer.state["run"]["saveStatus"] = status
+            return [{"op": "replace", "path": "/run/saveStatus", "value": status}]
+
         async def settle_cancelled() -> bool:
             """Settle a cancelled agent run and record its terminal state.
 
@@ -205,12 +218,13 @@ class LiveDSPyCoordinator:
                         lambda: persistence.run_cancelled(
                             thread_id=thread_id,
                             run_id=run_id,
-                            state_json=reducer.state,
+                            state_json=committed_state(),
                         )
                     )
                     if persistence
                     else True
                 )
+                save_outcome(settled)
                 # A failed second retry is logged by _settle_with_retry, but
                 # this generator must still stop rather than racing another
                 # terminal event into the same run.
@@ -404,12 +418,15 @@ class LiveDSPyCoordinator:
                             answer_tokens_streamed = True
                         if isinstance(event, FinalFieldsReady) and event.answer:
                             answer_streamed = True
-                        agui_events = map_domain_event(
-                            event,  # type: ignore[arg-type]
-                            assistant_message_id=assistant_message_id,
-                            reducer=reducer,
-                            emit_answer_text=not answer_tokens_streamed,
-                        )
+                        if (
+                            isinstance(event, ArtifactReady)
+                            and event.artifact.id in failed_artifacts
+                        ):
+                            event = ArtifactFailed(
+                                artifact_id=event.artifact.id,
+                                name=event.artifact.name,
+                                media_type=event.artifact.media_type,
+                            )
                         if persistence and isinstance(
                             event,
                             (
@@ -419,9 +436,28 @@ class LiveDSPyCoordinator:
                                 ArtifactFailed,
                             ),
                         ):
-                            await persistence.record_domain_event(
-                                event, thread_id=thread_id, run_id=run_id
-                            )
+                            try:
+                                await persistence.record_domain_event(
+                                    event, thread_id=thread_id, run_id=run_id
+                                )
+                            except Exception as exc:
+                                logger.error(
+                                    "resource persistence failed (exception_type=%s)",
+                                    type(exc).__name__,
+                                )
+                                if isinstance(event, (ArtifactStarted, ArtifactReady)):
+                                    failed_artifacts.add(event.artifact.id)
+                                    event = ArtifactFailed(
+                                        artifact_id=event.artifact.id,
+                                        name=event.artifact.name,
+                                        media_type=event.artifact.media_type,
+                                    )
+                        agui_events = map_domain_event(
+                            event,  # type: ignore[arg-type]
+                            assistant_message_id=assistant_message_id,
+                            reducer=reducer,
+                            emit_answer_text=not answer_tokens_streamed,
+                        )
                         if metrics:
                             if isinstance(event, ToolCompleted):
                                 metrics.incr("agent_tool_calls_total")
@@ -458,6 +494,29 @@ class LiveDSPyCoordinator:
                 )
 
             delta = complete_public_state(result)
+            if persistence:
+                operation = (
+                    (
+                        lambda: persistence.run_completed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=committed_state(),
+                            assistant_message_id=assistant_message_id,
+                        )
+                    )
+                    if result.status == "completed"
+                    else (
+                        lambda: persistence.run_failed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=committed_state(),
+                        )
+                    )
+                )
+                terminal_save_task = asyncio.create_task(_settle_with_retry(operation))
+            terminal_settled = True
             if result.status == "completed":
                 yield emit(StateDeltaEvent(delta=delta))
                 if not answer_streamed:
@@ -469,18 +528,11 @@ class LiveDSPyCoordinator:
                         )
                 yield emit(TextMessageEndEvent(message_id=assistant_message_id))
                 settled = (
-                    await _settle_with_retry(
-                        lambda: persistence.run_completed(
-                            thread_id=thread_id,
-                            run_id=run_id,
-                            result=result,
-                            state_json=reducer.state,
-                            assistant_message_id=assistant_message_id,
-                        )
-                    )
-                    if persistence
-                    else True
+                    await _finish_terminal(terminal_save_task)
+                    if terminal_save_task
+                    else False
                 )
+                yield emit(StateDeltaEvent(delta=save_outcome(settled)))
                 if not settled:
                     # The answer and completed public state are already on the
                     # wire.  Persistence is retried above, but a database
@@ -504,17 +556,11 @@ class LiveDSPyCoordinator:
                 yield emit(StateDeltaEvent(delta=delta))
                 yield emit(TextMessageEndEvent(message_id=assistant_message_id))
                 settled = (
-                    await _settle_with_retry(
-                        lambda: persistence.run_failed(
-                            thread_id=thread_id,
-                            run_id=run_id,
-                            result=result,
-                            state_json=reducer.state,
-                        )
-                    )
-                    if persistence
-                    else True
+                    await _finish_terminal(terminal_save_task)
+                    if terminal_save_task
+                    else False
                 )
+                yield emit(StateDeltaEvent(delta=save_outcome(settled)))
                 if not settled:
                     logger.error(
                         "failed run could not be persisted (thread %s, run %s)",
@@ -540,6 +586,14 @@ class LiveDSPyCoordinator:
 
         except asyncio.CancelledError:
             bus.cancel_token.cancel()
+            if terminal_save_task is not None and not terminal_save_task.done():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(terminal_save_task), timeout=5
+                    )
+                except TimeoutError:
+                    terminal_save_task.cancel()
+                    await asyncio.gather(terminal_save_task, return_exceptions=True)
             if not terminal_emitted:
                 if engine_task is not None and not engine_task.done():
                     engine_task.cancel()
@@ -575,12 +629,12 @@ class LiveDSPyCoordinator:
             settled = True
             if persistence:
                 try:
-                    settled = await _settle_with_retry(
+                    settled = await _settle_terminal(
                         lambda: persistence.run_failed(
                             thread_id=thread_id,
                             run_id=run_id,
                             result=failure,
-                            state_json=reducer.state,
+                            state_json=committed_state(),
                         )
                     )
                 except Exception as persist_exc:
@@ -594,6 +648,7 @@ class LiveDSPyCoordinator:
                         type(persist_exc).__name__,
                     )
                     settled = False
+            delta.extend(save_outcome(settled))
             if not settled:
                 logger.error(
                     "unexpected terminal failure could not be persisted "
@@ -615,6 +670,23 @@ class LiveDSPyCoordinator:
             yield emit(StateDeltaEvent(delta=delta))
             yield emit(TextMessageEndEvent(message_id=assistant_message_id))
             yield emit(RunErrorEvent(message=message, code=code))
+
+
+async def _settle_terminal(operation: Callable[[], Awaitable[bool | None]]) -> bool:
+    """Finish accepted terminal persistence despite a disconnected client."""
+    return await _finish_terminal(asyncio.create_task(_settle_with_retry(operation)))
+
+
+async def _finish_terminal(task: asyncio.Task[bool]) -> bool:
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5)
+        except TimeoutError:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        raise
 
 
 async def _settle_with_retry(

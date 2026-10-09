@@ -1,53 +1,82 @@
 /** HTTP client for the Fleet API. Origin and key come from `lib/env`. */
 
-import { API_BASE_URL, API_KEY } from '@/lib/env'
+import { API_BASE_URL, API_KEY } from "@/lib/env";
 
 export class ApiError extends Error {
-  readonly status: number
+  readonly status: number;
 
   constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      Accept: 'application/json',
-      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+      Accept: "application/json",
+      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
       ...init?.headers,
     },
-  })
+  });
 
   if (!response.ok) {
-    throw new ApiError(response.status, `API request failed: ${response.status}`)
+    throw new ApiError(
+      response.status,
+      `API request failed: ${response.status}`,
+    );
   }
 
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
-    return undefined as T
+  if (
+    response.status === 204 ||
+    response.headers.get("content-length") === "0"
+  ) {
+    return undefined as T;
   }
 
-  return response.json() as Promise<T>
+  return response.json() as Promise<T>;
 }
 
-export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
+export async function apiFetchText(
+  path: string,
+  init?: RequestInit,
+): Promise<string> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      Accept: 'text/plain, text/markdown;q=0.9',
-      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+      Accept: "text/plain, text/markdown;q=0.9",
+      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
       ...init?.headers,
     },
-  })
+  });
 
   if (!response.ok) {
-    throw new ApiError(response.status, `API request failed: ${response.status}`)
+    throw new ApiError(
+      response.status,
+      `API request failed: ${response.status}`,
+    );
   }
 
-  return response.text()
+  return response.text();
+}
+
+/** Binary resources use the same authentication boundary as REST and previews. */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
+  });
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      `API request failed: ${response.status}`,
+    );
+  }
+  return response.blob();
 }
 
 /**
@@ -60,11 +89,11 @@ export function apiJsonFetch<T>(
   body: unknown,
   init?: RequestInit,
 ): Promise<T> {
-  const { headers: extraHeaders, ...rest } = init ?? {}
+  const { headers: extraHeaders, ...rest } = init ?? {};
   return apiFetch<T>(path, {
     ...rest,
     method,
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
-  })
+  });
 }

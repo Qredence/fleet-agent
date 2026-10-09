@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, conint
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, conint, constr
 
 
 class RunStatus(StrEnum):
@@ -17,6 +17,19 @@ class RunStatus(StrEnum):
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
+
+
+class SaveStatus(StrEnum):
+    pending = "pending"
+    saved = "saved"
+    failed = "failed"
+    unknown = "unknown"
+
+
+class EvidenceStatus(StrEnum):
+    complete = "complete"
+    partial = "partial"
+    insufficient = "insufficient"
 
 
 class Run(BaseModel):
@@ -36,6 +49,10 @@ class Run(BaseModel):
         None, description="Stable public error code. Never a raw exception string."
     )
     toolCallCount: conint(ge=0)
+    saveStatus: SaveStatus
+    evidenceStatus: EvidenceStatus | None = None
+    evidenceStopReason: constr(max_length=64) | None = None
+    programVersion: constr(max_length=128) | None = None
 
 
 class StepPhase(StrEnum):
@@ -180,7 +197,7 @@ class AgentWorkspaceState(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    schemaVersion: Literal[1] = Field(
+    schemaVersion: Literal[2] = Field(
         ..., description="Contract version. Any breaking shape change increments it."
     )
     threadId: str

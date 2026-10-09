@@ -1,0 +1,8 @@
+{
+  "head": "a6197e444659488b21914788a15e68c48fa23bc3",
+  "source_digest": "1ff2062314960129ebca0e134f5d42f943adcfef78a32e1d6cac666ac4ae2aad",
+  "provider": "Command",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "response_format": "json_tool_calls",
+  "messages_format": "system_role"
+}

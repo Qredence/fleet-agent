@@ -7,4 +7,9 @@
 
 export interface AgentCapabilities {
   agent_mode: "fixtures" | "engine";
+  /**
+   * @minItems 1
+   * @maxItems 1
+   */
+  supported_content_types: ["text"];
 }

@@ -1,0 +1,14 @@
+{
+  "trace_count": 965,
+  "span_names": {
+    "dspy.lm": 334,
+    "dspy.module": 497,
+    "dspy.tool": 134
+  },
+  "statuses": {
+    "SpanStatusCode.OK": 951,
+    "SpanStatusCode.ERROR": 14
+  },
+  "marker_checks": 5,
+  "inputs_outputs_events_status_descriptions": "absent"
+}

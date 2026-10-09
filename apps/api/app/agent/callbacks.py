@@ -155,6 +155,10 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
             # Emit discovered sources from source-producing tools
             func = getattr(instance, "func", instance)
             produced = getattr(func, "last_sources", None)
+            if name == "read" and produced is None:
+                produced = getattr(
+                    getattr(func, "__self__", None), "last_sources", None
+                )
             if produced:
                 for source in produced:
                     self._bus.publish_from_worker(
@@ -193,6 +197,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                     "query": query or {"type": "string", "chars": 0},
                     "results": [
                         {
+                            "sourceId": source.id,
                             "title": _safe_inline_text(source.title, limit=240)
                             or "Untitled source",
                             "domain": _inline_source(source)["domain"],
@@ -230,6 +235,7 @@ def _inline_source(source: SourceResult) -> dict[str, str]:
         except ValueError:
             hostname = ""
     return {
+        "sourceId": source.id,
         "title": _safe_inline_text(source.title, limit=240) or "Untitled source",
         "domain": _safe_inline_text(hostname or source.source_type, limit=120)
         or "source",

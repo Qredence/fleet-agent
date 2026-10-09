@@ -115,7 +115,7 @@ def test_promoted_instructions_reach_the_router() -> None:
     assert promoted.signature.instructions == "OPTIMIZED ROUTER RULES"
     assert baseline.signature.instructions != "OPTIMIZED ROUTER RULES"
     # The declared contract survives the override, Literal included.
-    assert list(promoted.signature.output_fields) == ["route"]
+    assert list(promoted.signature.output_fields) == ["output_intent", "route"]
     assert (
         promoted.signature.output_fields["route"].annotation
         == ToolRoutingSignature.output_fields["route"].annotation
@@ -232,7 +232,12 @@ def test_no_improvement_is_rejected_and_writes_nothing(
     assert code == 2
     captured = capsys.readouterr()
     assert "rejected" in captured.err
-    assert not list((tmp_path / "artifacts").glob("router_gepa_*"))
+    attempts = list((tmp_path / "artifacts").glob("router_gepa_*"))
+    assert len(attempts) == 1
+    assert (
+        json.loads((attempts[0] / "manifest.json").read_text())["promotion_decision"]
+        is False
+    )
     assert not (tmp_path / "artifacts" / "router_active.json").exists()
 
 
@@ -362,7 +367,12 @@ def test_identical_text_is_rejected_even_when_the_numbers_differ(
 
     assert main([]) == 2
     assert "without rewriting" in capsys.readouterr().err
-    assert not list((tmp_path / "artifacts").glob("router_gepa_*"))
+    attempts = list((tmp_path / "artifacts").glob("router_gepa_*"))
+    assert len(attempts) == 1
+    assert (
+        json.loads((attempts[0] / "manifest.json").read_text())["promotion_decision"]
+        is False
+    )
     assert not (tmp_path / "artifacts" / "router_active.json").exists()
 
 
@@ -388,7 +398,12 @@ def test_provider_failure_exits_cleanly_and_is_logged(
     assert main([]) == 2
     assert "optimization failed" in capsys.readouterr().err
     assert logged.get("outcome") == "error"
-    assert not (tmp_path / "artifacts").exists()
+    attempts = list((tmp_path / "artifacts").glob("router_gepa_*"))
+    assert len(attempts) == 1
+    assert (
+        json.loads((attempts[0] / "manifest.json").read_text())["promotion_decision"]
+        is False
+    )
 
 
 class RuleEngine(ScriptedEngine):
@@ -402,6 +417,27 @@ class RuleEngine(ScriptedEngine):
             if "OPTIMIZED ROUTER RULES" in text
             else "direct"
         )
-        return ScriptedEngine([{"content": json.dumps({"route": route})}]).complete(
-            request
-        )
+        return ScriptedEngine(
+            [{"content": json.dumps({"route": route, "output_intent": "none"})}]
+        ).complete(request)
+
+
+def test_grouped_splits_never_share_a_task_between_sets():
+    examples = [
+        dspy.Example(
+            user_request=f"Task {group} follow-up {turn}",
+            expected_route="direct",
+            group_id=f"task-{group}",
+        ).with_inputs("user_request")
+        for group in range(8)
+        for turn in range(2)
+    ]
+    train, holdout = split_examples(examples, seed=11)
+    training, development = split_examples(train, val_fraction=0.2, seed=12)
+    identities = [
+        {e.group_id for e in split} for split in (training, development, holdout)
+    ]
+    assert all(identities)
+    assert not identities[0] & identities[1]
+    assert not identities[0] & identities[2]
+    assert not identities[1] & identities[2]

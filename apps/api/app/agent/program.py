@@ -18,6 +18,7 @@ from app.agent.signature import (
     build_gatherer,
     build_synthesizer,
 )
+from app.agent.tool_registry import TOOL_SPECS
 from app.agent.tooling import RESERVED_TOOL_NAMES, create_dspy_tool, is_async_tool
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,12 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         # keeps the baseline contract declared in routing.py.
         self.router = dspy.Predict(routing_signature(router_instructions))
         profiles = {
-            route: _validate_tools(tool_profiles.get(route, ())) for route in ROUTES
+            route: [
+                tool
+                for tool in _validate_tools(tool_profiles.get(route, ()))
+                if tool.name != "write_report"
+            ]
+            for route in ROUTES
         }
         self.tool_names = {
             route: tuple(str(tool.name) for tool in tools)
@@ -99,8 +105,26 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             messages=_extract_conversation_turns(incoming_history)
         )
 
-        route = self._select_route(user_request)
+        prior_count = len(incoming_history.messages)
+        route, output_intent, routing_valid = self._select_decision(
+            user_request, conversation_history
+        )
+        evidence_reason = "submit"
+        evidence_status = "complete" if routing_valid else "insufficient"
         gatherer = self.evidence_agents.get(route)
+        essential = {
+            "workspace_read": "workspace_read",
+            "workspace_write": "workspace_write",
+            "workspace_shell": "shell",
+        }.get(route)
+        capability_missing = (route != "direct" and gatherer is None) or (
+            essential is not None
+            and not any(
+                TOOL_SPECS[name].capability == essential
+                for name in self.tool_names[route]
+                if name in TOOL_SPECS
+            )
+        )
         # With no loop to run, the prior turns ARE the evidence: a follow-up that
         # routes to ``direct`` still has to synthesize from what earlier turns
         # gathered, so the incoming history is used as-is.
@@ -120,26 +144,57 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
                 ContextWindowExceededError,
             ) as exc:
                 reason = _reason_from_react_exc(exc) or "failed"
-                return dspy.Prediction(
-                    answer=None,
-                    process_summary=None,
-                    key_decisions=[],
-                    caveats=[],
-                    history=incoming_history,
-                    termination_reason=reason,
+                if reason == "failed":
+                    raise
+                evidence_history = incoming_history
+                evidence_reason = reason
+                evidence_status = (
+                    "partial"
+                    if len(incoming_history.messages) > prior_count
+                    else "insufficient"
                 )
-            evidence_history = getattr(evidence, "history", None)
+            else:
+                evidence_reason = str(getattr(evidence, "termination_reason", "submit"))
+                if evidence_reason not in {
+                    "submit",
+                    "evidence_submit",
+                    "forced_submit",
+                    "max_iters",
+                    "timeout",
+                    "cancelled",
+                    "context_window_exceeded",
+                    "parse_error",
+                }:
+                    evidence_reason = "failed"
+                if evidence_reason not in {"submit", "evidence_submit"}:
+                    evidence_status = "partial"
+                evidence_history = getattr(evidence, "history", incoming_history)
 
+        if capability_missing:
+            evidence_status, evidence_reason = "insufficient", "capability_unavailable"
         synthesis = self._synthesize(
             user_request=user_request,
             evidence_history=evidence_history,
             conversation_history=conversation_history,
+            evidence_outcome={"status": evidence_status, "reason": evidence_reason},
+            output_intent=output_intent,
+            current_run_start=prior_count,
         )
 
         ans = getattr(synthesis, "answer", None)
         summary = getattr(synthesis, "process_summary", None)
         decisions = list(getattr(synthesis, "key_decisions", None) or [])
         caveats = list(getattr(synthesis, "caveats", None) or [])
+        if evidence_status != "complete":
+            caveats.append(
+                "Evidence collection was incomplete; "
+                "external verification may be limited."
+            )
+        if not routing_valid:
+            caveats.append(
+                "Capability selection failed safely; "
+                "no additional tools were authorized."
+            )
 
         history_msgs = (
             getattr(evidence_history, "messages", None)
@@ -180,6 +235,10 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             caveats=caveats,
             history=final_history,
             termination_reason="synthesis",
+            evidence_status=evidence_status,
+            evidence_reason=evidence_reason,
+            output_intent=output_intent,
+            routing_valid=routing_valid,
         )
         # Diagnostic metadata stays on the server-side Prediction and is not
         # included in AgentRunResult or any AG-UI event.
@@ -191,18 +250,34 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         return result
 
     def _select_route(self, user_request: str) -> ToolRoute:
-        """Pick the least-privileged profile for this request.
+        return self._select_decision(user_request, dspy.History(messages=[]))[0]
 
-        A router answer outside the route vocabulary degrades to the
-        least-privileged profile instead of failing the run.
-        """
+    def _select_decision(
+        self, user_request: str, history: dspy.History
+    ) -> tuple[ToolRoute, str, bool]:
+        context = bounded_json(list(reversed(history.messages[-6:])), max_chars=4000)
         try:
-            routing = self.router(user_request=user_request)
+            decision = self.router(
+                user_request=user_request, conversation_context=context
+            )
         except (AdapterParseError, ValueError):
-            # A router answer outside the route vocabulary degrades to the
-            # least-privileged profile instead of failing the run.
-            return "direct"
-        return coerce_route(getattr(routing, "route", None))
+            return "direct", "none", False
+        raw = getattr(decision, "route", None)
+        route = coerce_route(raw)
+        valid = (
+            isinstance(raw, str)
+            and raw.strip().strip("\"'`").lower().replace("-", "_").replace(" ", "_")
+            in ROUTES
+        )
+        output = getattr(decision, "output_intent", "none")
+        valid = valid and output in {"none", "managed_report"}
+        if route == "artifact":
+            output = "managed_report"
+        return (
+            route,
+            "managed_report" if valid and output == "managed_report" else "none",
+            valid,
+        )
 
     def _synthesize(
         self,
@@ -211,6 +286,9 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         evidence_history: dspy.History | None = None,
         conversation_history: dspy.History | None = None,
         history: dspy.History | None = None,
+        evidence_outcome: dict[str, str] | None = None,
+        output_intent: str = "none",
+        current_run_start: int | None = None,
     ) -> dspy.Prediction:
         """Write the public fields from the evidence the loop gathered.
 
@@ -226,10 +304,24 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         if conv_hist is None and ev_hist is not None:
             conv_hist = dspy.History(messages=_extract_conversation_turns(ev_hist))
         history_arg = conv_hist or dspy.History(messages=[])
+        evidence_json = _evidence_json(ev_hist, current_run_start=current_run_start)
+        if evidence_outcome and evidence_outcome["status"] != "complete":
+            evidence_json = bounded_json(
+                [
+                    {
+                        "tool": "evidence_outcome",
+                        "result": evidence_outcome,
+                        "is_error": True,
+                    },
+                    *json.loads(evidence_json),
+                ],
+                max_chars=_MAX_EVIDENCE_CHARS,
+            )
         with dspy.context(adapter=dspy.ChatAdapter()):
             return self.synthesizer(
                 user_request=user_request,
-                evidence_json=_evidence_json(ev_hist),
+                evidence_json=evidence_json,
+                output_intent=output_intent,
                 history=history_arg,
             )
 
@@ -268,7 +360,10 @@ def _extract_conversation_turns(history: dspy.History | None) -> list[dict[str, 
 
 
 def _evidence_json(
-    history: dspy.History | None, *, max_chars: int = _MAX_EVIDENCE_CHARS
+    history: dspy.History | None,
+    *,
+    max_chars: int = _MAX_EVIDENCE_CHARS,
+    current_run_start: int | None = None,
 ) -> str:
     """Render bounded, user-safe evidence from the loop's tool observations.
 
@@ -286,8 +381,13 @@ def _evidence_json(
     if history is None:
         return "[]"
     items: list[dict[str, Any]] = []
-    for message in getattr(history, "messages", None) or []:
-        for name, value, is_error in _message_tool_results(message):
+    messages = getattr(history, "messages", None) or []
+    for message_index in range(len(messages) - 1, -1, -1):
+        results = _message_tool_results(messages[message_index])
+        for result_index in range(len(results) - 1, -1, -1):
+            name, value, is_error = results[result_index]
+            if name == "submit":
+                continue
             items.append(
                 {
                     "tool": name,
@@ -295,9 +395,31 @@ def _evidence_json(
                     if isinstance(value, (str, int, float, bool))
                     else json.dumps(value, default=str),
                     "is_error": is_error,
+                    **(
+                        {
+                            "scope": "current_run"
+                            if message_index >= current_run_start
+                            else "prior_turn",
+                            "observation_index": [message_index, result_index],
+                        }
+                        if current_run_start is not None
+                        else {}
+                    ),
                 }
             )
-    return bounded_json(items, max_chars=max_chars)
+    full = json.dumps(items, separators=(",", ":"), default=str)
+    if len(full) <= max_chars:
+        return full
+    marker = {
+        "tool": "evidence_selection",
+        "result": "Older evidence was truncated; newest observations take priority.",
+        "is_error": False,
+    }
+    marker_cost = len(json.dumps(marker, separators=(",", ":"))) + 1
+    if max_chars < marker_cost + 4:
+        return bounded_json(items, max_chars=max_chars)
+    selected = json.loads(bounded_json(items, max_chars=max_chars - marker_cost))
+    return json.dumps([*selected, marker], ensure_ascii=False, separators=(",", ":"))
 
 
 def _message_tool_results(message: Any) -> list[tuple[Any, Any, bool]]:

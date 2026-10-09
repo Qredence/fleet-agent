@@ -9,11 +9,13 @@ Two modes (FLEET_AGENT_AGENT_MODE):
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import cast
+from typing import Any, cast
 
 from ag_ui.core import RunAgentInput
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
 from app.agent.engine import EngineBuilder
 from app.agent.provider import ProviderOverrideError, parse_provider_override
@@ -22,6 +24,7 @@ from app.agui.run_coordinator import RunCoordinator
 from app.api.deps import get_sessions
 from app.contracts.agent_capabilities import AgentCapabilities
 from app.contracts.error_codes import ERROR_MESSAGES
+from app.kernel.run_input import validate_user_attachments, validate_user_content
 from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.persistence.run_persistence import (
     ReservationErrorCode,
@@ -81,11 +84,31 @@ def get_engine_builder(request: Request) -> EngineBuilder:
 async def agent_capabilities(request: Request) -> AgentCapabilities:
     """Report the active run mode without disclosing provider configuration."""
     settings: Settings = request.app.state.settings
-    return AgentCapabilities(agent_mode=settings.agent_mode)
+    return AgentCapabilities(
+        agent_mode=settings.agent_mode, supported_content_types=["text"]
+    )
 
 
 @router.post("/agent")
-async def run_agent(input_data: RunAgentInput, request: Request) -> StreamingResponse:
+async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse:
+    messages = body.get("messages", [])
+    for message in messages if isinstance(messages, list) else []:
+        if isinstance(message, dict) and message.get("role") == "user":
+            try:
+                validate_user_content(message.get("content"))
+                validate_user_attachments(message.get("attachments"))
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "unsupported_input_type",
+                        "message": ERROR_MESSAGES["unsupported_input_type"],
+                    },
+                ) from None
+    try:
+        input_data = RunAgentInput.model_validate(body)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors(), body=body) from None
     settings: Settings = request.app.state.settings
     accept = request.headers.get("accept")
 

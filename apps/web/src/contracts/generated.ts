@@ -20,7 +20,7 @@ export interface AgentWorkspaceState {
   /**
    * Contract version. Any breaking shape change increments it.
    */
-  schemaVersion: 1;
+  schemaVersion: 2;
   threadId: string;
   run: Run;
   steps: ProcessStep[];
@@ -49,6 +49,10 @@ export interface Run {
    */
   errorCode?: string;
   toolCallCount: number;
+  saveStatus: "pending" | "saved" | "failed" | "unknown";
+  evidenceStatus?: "complete" | "partial" | "insufficient";
+  evidenceStopReason?: string;
+  programVersion?: string;
 }
 export interface ProcessStep {
   id: string;

@@ -19,7 +19,7 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 1,
+      "const": 2,
       "description": "Contract version. Any breaking shape change increments it."
     },
     "threadId": {
@@ -31,7 +31,8 @@
       "required": [
         "id",
         "status",
-        "toolCallCount"
+        "toolCallCount",
+        "saveStatus"
       ],
       "properties": {
         "id": {
@@ -72,6 +73,31 @@
         "toolCallCount": {
           "type": "integer",
           "minimum": 0
+        },
+        "saveStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "saved",
+            "failed",
+            "unknown"
+          ]
+        },
+        "evidenceStatus": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "insufficient"
+          ]
+        },
+        "evidenceStopReason": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "programVersion": {
+          "type": "string",
+          "maxLength": 128
         }
       },
       "title": "Run"

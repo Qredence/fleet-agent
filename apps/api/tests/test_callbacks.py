@@ -234,10 +234,12 @@ async def test_callback_emits_bounded_web_search_and_source_projections():
     assert web_events[0].value["searching"] is True
     assert web_events[1].value["searching"] is False
     assert web_events[1].value["results"] == [
-        {"title": "Official docs", "domain": "example.com"}
+        {"sourceId": "w1", "title": "Official docs", "domain": "example.com"}
     ]
     assert source_events[0].value == {
         "schemaVersion": 1,
-        "sources": [{"title": "Official docs", "domain": "example.com"}],
+        "sources": [
+            {"sourceId": "w1", "title": "Official docs", "domain": "example.com"}
+        ],
     }
     assert "secret" not in str(web_events[0].value)

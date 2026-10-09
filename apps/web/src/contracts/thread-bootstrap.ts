@@ -12,7 +12,7 @@ export interface ThreadBootstrap {
   /**
    * Contract version. Any breaking shape change increments it.
    */
-  schemaVersion: 1;
+  schemaVersion: 2;
   thread: ThreadOut;
   messageRepository: MessageRepository;
   /**
@@ -28,6 +28,16 @@ export interface ThreadBootstrap {
     [k: string]: unknown;
   } | null;
   latestRun: LatestRun | null;
+  cards?: {
+    /**
+     * @maxItems 32
+     *
+     * Items: InlineCard envelope validated against inline-card.schema.json.
+     */
+    [k: string]: {
+      [k: string]: unknown;
+    }[];
+  };
 }
 export interface ThreadOut {
   id: string;

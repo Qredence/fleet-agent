@@ -25,7 +25,7 @@ def test_routing_score_matches_the_gepa_metric() -> None:
     example = next(e for e in ROUTING_EXAMPLES if e.expected_route == "workspace_read")
 
     assert routing_score(example, dspy.Prediction(route="workspace_read")) == 1.0
-    assert routing_score(example, dspy.Prediction(route="workspace_shell")) == 0.35
+    assert routing_score(example, dspy.Prediction(route="workspace_shell")) == 0.0
     assert routing_score(example, dspy.Prediction(route="direct")) == 0.0
     assert routing_score(example, dspy.Prediction(route="workspace_read")) == float(
         routing_metric(example, dspy.Prediction(route="workspace_read")).score
@@ -88,7 +88,7 @@ def test_empty_example_set_scores_zero_without_calling_the_program() -> None:
 
 
 def test_as_tuple_keeps_the_optimizer_harness_shape() -> None:
-    miss = ("q", "direct", "research", 0.35)
+    miss = ("q", "direct", "research", 0.0)
     scored = RoutingScore(mean=0.5, misses=[miss], mean_latency_s=0.25)
 
     assert scored.as_tuple() == (0.5, [miss], 0.25)
@@ -121,8 +121,9 @@ def test_production_router_passes_noncanonical_strings_to_coercion() -> None:
     scored = score_router(dspy.Predict(ToolRoutingSignature), lm, examples)
 
     assert scored.failures == 0
-    assert scored.mean == 1.0
-    assert scored.misses == []
+    assert scored.mean == 0.75
+    assert len(scored.misses) == 1
+    assert scored.metrics["invalid_output_rate"] == 0.25
 
 
 def test_unconfigured_eval_does_not_borrow_legacy_credentials(monkeypatch):
@@ -131,3 +132,42 @@ def test_unconfigured_eval_does_not_borrow_legacy_credentials(monkeypatch):
 
     monkeypatch.setattr("app.settings.get_settings", lambda: Settings())
     assert _resolve_lm() is None
+
+
+def test_unauthorized_tool_exposure_is_a_hard_failure_even_with_correct_route():
+    from evals.agent_tool_routing import routing_metric
+
+    gold = dspy.Example(
+        user_request="Read a file",
+        expected_route="workspace_read",
+        authorized_tools=["read"],
+    )
+    verdict = routing_metric(
+        gold,
+        dspy.Prediction(route="workspace_read", exposed_tools=["read", "bash"]),
+    )
+    assert verdict.score == 0
+    assert verdict.authorization_failure == 1
+
+
+def test_sufficiency_uses_exposed_tool_metadata_when_available():
+    from evals.agent_tool_routing import routing_metric
+
+    gold = dspy.Example(
+        user_request="Read known content",
+        expected_route="workspace_read",
+        required_tools=["read"],
+        authorized_tools=["read"],
+    )
+    assert (
+        routing_metric(
+            gold, dspy.Prediction(route="workspace_read", exposed_tools=[])
+        ).capability_sufficiency
+        == 0
+    )
+    assert (
+        routing_metric(
+            gold, dspy.Prediction(route="workspace_read", exposed_tools=["read"])
+        ).capability_sufficiency
+        == 1
+    )

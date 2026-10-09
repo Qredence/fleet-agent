@@ -53,7 +53,7 @@ const placeholderThread: ThreadOut = {
 }
 
 const bootstrap: ThreadBootstrap = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   thread: placeholderThread,
   messageRepository: { headId: null, messages: [] },
   messages: [],

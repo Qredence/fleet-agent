@@ -21,7 +21,7 @@ async def test_capabilities_report_mode_and_require_configured_auth(mode):
         )
     assert denied.status_code == 401
     assert allowed.status_code == 200
-    assert allowed.json() == {"agent_mode": mode}
+    assert allowed.json() == {"agent_mode": mode, "supported_content_types": ["text"]}
 
 
 @pytest.mark.parametrize(

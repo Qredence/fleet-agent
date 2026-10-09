@@ -6,6 +6,7 @@ import logging
 from contextlib import ExitStack
 
 import dspy
+from dspy.utils.callback import BaseCallback
 
 from app.agent.approval import offered_tool_names
 from app.agent.callbacks import AgUiRunCallback
@@ -18,7 +19,7 @@ from app.agent.provider import (
     OPENROUTER_APP_TITLE,
     ProviderOverride,
 )
-from app.agent.routing import ToolRoute, read_router_state
+from app.agent.routing import ROUTE_CAPABILITIES, ToolRoute, read_router_state
 from app.agent.tool_registry import (
     TOOL_SPECS,
     ToolCapability,
@@ -142,13 +143,6 @@ def build_tool_profiles(
     model cannot be talked into calling it.
     """
     offered = offered_tool_names(registry.approval_policy(), approved)
-    research: set[ToolCapability] = {"retrieval", "utility"}
-    workspace_read = set(research)
-    workspace_read.add("workspace_read")
-    workspace_write = set(workspace_read)
-    workspace_write.add("workspace_write")
-    workspace_shell = set(workspace_write)
-    workspace_shell.add("shell")
 
     def for_capabilities(capabilities: set[ToolCapability]) -> list[dspy.Tool]:
         return [
@@ -158,12 +152,8 @@ def build_tool_profiles(
         ]
 
     return {
-        "direct": [],
-        "research": for_capabilities(research),
-        "artifact": for_capabilities(research | {"artifact"}),
-        "workspace_read": for_capabilities(workspace_read),
-        "workspace_write": for_capabilities(workspace_write),
-        "workspace_shell": for_capabilities(workspace_shell),
+        route: for_capabilities(set(capabilities))
+        for route, capabilities in ROUTE_CAPABILITIES.items()
     }
 
 
@@ -204,6 +194,7 @@ def make_engine_builder(
     settings: Settings,
     *,
     storage: ArtifactStorage,
+    telemetry_callback: BaseCallback | None = None,
 ) -> EngineBuilder:
     """Create run-scoped programs sharing immutable tool configuration.
 
@@ -291,7 +282,13 @@ def make_engine_builder(
                 program_factory=program_factory,
                 lm=lm,
                 adapter=adapter,
-                callbacks=[callback],
+                callbacks=[
+                    callback,
+                    *([telemetry_callback] if telemetry_callback else []),
+                ],
+                export_report=lambda context, result: report_tool.export(
+                    context.run_id, result.answer or ""
+                ),
                 cleanup=resources.pop_all().close,
             )
 

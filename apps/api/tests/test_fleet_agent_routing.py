@@ -195,7 +195,9 @@ def test_json_router_literal_value_error_falls_back_to_direct():
 
 def test_json_router_surface_noise_coerces_to_valid_route():
     program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
-    lm = ScriptedLM([{"content": '{"route": "  \'WORKSPACE_WRITE\'  "}'}])
+    lm = ScriptedLM(
+        [{"content": '{"route": "  \'WORKSPACE_WRITE\'  ", "output_intent": "none"}'}]
+    )
 
     with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
         assert program._select_route("write new tests") == "workspace_write"
@@ -236,7 +238,13 @@ def test_direct_route_keeps_dict_history_evidence(monkeypatch):
 
     assert prediction.answer == "used prior evidence"
     assert json.loads(captured["evidence_json"]) == [
-        {"tool": "search", "result": "prior fact", "is_error": False}
+        {
+            "tool": "search",
+            "result": "prior fact",
+            "is_error": False,
+            "scope": "prior_turn",
+            "observation_index": [0, 0],
+        }
     ]
 
 
@@ -293,3 +301,141 @@ def test_wildcard_approval_offers_every_gated_tool() -> None:
         "write",
     }
     assert "write" in {tool.name for tool in profiles["workspace_write"]}
+
+
+async def test_compound_workspace_report_keeps_evidence_and_managed_export(tmp_path):
+    from app.agent.engine import AgentRunContext, DspyAgentEngine
+    from tests.helpers.scripted_lm import evidence_end, router_call, synthesis_call
+
+    profiles = build_tool_profiles(_registry())
+    program = FleetAgent(tool_profiles=profiles, max_iters=3)
+    # The model selects evidence and output in one routing prediction.
+    route = router_call("workspace_read")
+    route["content"] = json.dumps(
+        {"route": "workspace_read", "output_intent": "managed_report"}
+    )
+    exported = []
+    engine = DspyAgentEngine(
+        program_factory=lambda: program,
+        lm=ScriptedLM(
+            [
+                route,
+                [{"name": "ls", "args": {"path": "known-workspace"}}],
+                evidence_end(),
+                synthesis_call(answer="Inspected known-workspace."),
+            ]
+        ),
+        adapter=dspy.JSONAdapter(),
+        export_report=lambda context, result: exported.append(
+            (context.run_id, result.answer)
+        ),
+    )
+    result = await engine.run(
+        user_request="Inspect the workspace and make a report",
+        history=None,
+        context=AgentRunContext(thread_id="compound", run_id="report-run"),
+    )
+    assert result.status == "completed"
+    assert result.output_intent == "managed_report"
+    assert result.evidence_status == "complete"
+    assert exported == [("report-run", "Inspected known-workspace.")]
+    assert "write" not in program.tool_names["workspace_read"]
+
+
+def test_selected_branch_context_and_partial_evidence_survive(monkeypatch):
+    history = dspy.History(
+        messages=[{"user_request": "Inspect project A", "answer": "A has two modules"}]
+    )
+    program = FleetAgent(tool_profiles=build_tool_profiles(_registry()))
+    captured = {}
+
+    def route(**kwargs):
+        captured.update(kwargs)
+        return dspy.Prediction(route="workspace_read", output_intent="managed_report")
+
+    monkeypatch.setattr(program.router, "forward", route)
+    monkeypatch.setattr(
+        program.evidence_agents["workspace_read"],
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            history=history, termination_reason="max_iters"
+        ),
+    )
+    monkeypatch.setattr(
+        program.synthesizer,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            answer="Partial report",
+            process_summary="Bounded evidence",
+            key_decisions=[],
+            caveats=[],
+        ),
+    )
+    prediction = program(user_request="Make that a report", history=history)
+    assert "project A" in captured["conversation_context"]
+    assert prediction.evidence_status == "partial"
+    assert prediction.evidence_reason == "max_iters"
+    assert prediction.output_intent == "managed_report"
+
+
+def test_unavailable_workspace_capability_is_insufficient_and_reaches_synthesis(
+    monkeypatch,
+):
+    read_tools = build_tool_profiles(_registry())["workspace_read"]
+    program = FleetAgent(tool_profiles={"workspace_write": read_tools})
+    monkeypatch.setattr(
+        program.router,
+        "forward",
+        lambda **kwargs: dspy.Prediction(route="workspace_write", output_intent="none"),
+    )
+    monkeypatch.setattr(
+        program.evidence_agents["workspace_write"],
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            history=kwargs["history"], termination_reason="submit"
+        ),
+    )
+    captured = {}
+
+    def synth(**kwargs):
+        captured.update(kwargs)
+        return dspy.Prediction(
+            answer="Workspace writes were not approved.",
+            process_summary="No file changed",
+            key_decisions=[],
+            caveats=[],
+        )
+
+    monkeypatch.setattr(program.synthesizer, "forward", synth)
+    result = program(user_request="Update notes.md", history=None)
+    assert result.evidence_status == "insufficient"
+    assert result.evidence_reason == "capability_unavailable"
+    assert "capability_unavailable" in captured["evidence_json"]
+    assert "write" not in program.tool_names["workspace_write"]
+
+
+def test_managed_output_intent_reaches_synthesis_without_claiming_export(monkeypatch):
+    program = FleetAgent(tool_profiles={"direct": []})
+    monkeypatch.setattr(
+        program.router,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            route="direct", output_intent="managed_report"
+        ),
+    )
+    captured = {}
+
+    def synth(**kwargs):
+        captured.update(kwargs)
+        return dspy.Prediction(
+            answer="# Report",
+            process_summary="Formatted prior facts",
+            key_decisions=[],
+            caveats=[],
+        )
+
+    monkeypatch.setattr(program.synthesizer, "forward", synth)
+    result = program(user_request="Make a managed report", history=None)
+    assert captured["output_intent"] == "managed_report"
+    assert result.answer == "# Report"
+    assert result.output_intent == "managed_report"

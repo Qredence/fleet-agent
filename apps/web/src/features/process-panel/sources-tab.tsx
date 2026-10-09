@@ -1,3 +1,4 @@
+import { useWorkspaceStore } from '@/state/workspace-store'
 import { Copy, ExternalLink, FolderSearch } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
@@ -26,6 +27,8 @@ export function SourcesTab({
   sources: AgentSource[]
   toolNamesById?: Map<string, string>
 }) {
+  const selected = useWorkspaceStore((state) => state.selectedSourceId)
+  useEffect(() => { if (selected) document.getElementById(`source-${selected}`)?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
   // Highlight items appended after the current render baseline.
   const baselineRef = useRef(sources.length)
   useEffect(() => {
@@ -49,9 +52,11 @@ export function SourcesTab({
         return (
           <article
             key={source.id}
+            id={`source-${source.id}`}
             aria-label={`source: ${source.title}`}
             className={cn(
               'rounded-lg border p-2.5',
+              selected === source.id && 'ring-2 ring-ring',
               index >= baselineRef.current &&
                 'motion-safe:animate-highlight-fade',
             )}

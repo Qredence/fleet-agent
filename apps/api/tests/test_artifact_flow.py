@@ -143,7 +143,7 @@ async def test_artifact_live_run_end_to_end(db_sessions, tmp_path: Path):
     # Inline CUSTOM artifact event landed in-flight.
     custom = [e for e in events if e["type"] == "CUSTOM" and e["name"] == "artifact"]
     assert len(custom) == 1
-    (artifact_value,) = [e["value"] for e in custom]
+    (artifact_value,) = [e["value"]["data"] for e in custom]
     assert artifact_value["name"] == "state-sync-notes.md"
     assert artifact_value["downloadUrl"] == f"/api/artifacts/{artifact_value['id']}"
 
@@ -222,3 +222,69 @@ async def test_download_rejects_non_ready_artifact(tmp_path: Path, db_sessions):
     ) as client:
         response = await client.get("/api/artifacts/a1")
     assert response.status_code == 404
+
+
+async def test_artifact_persistence_failure_preserves_answer_without_download(tmp_path):
+    from types import SimpleNamespace
+
+    from app.services.artifact_storage import LocalArtifactStorage
+    from tests.test_live_coordinator import apply_state
+
+    class Persistence:
+        async def get_run(self, run_id):
+            return SimpleNamespace(continuation_message_id=None)
+
+        async def get_latest_state(self, *args):
+            return None
+
+        async def get_continuation_history(self, *args):
+            return None
+
+        async def mark_running(self, **kwargs):
+            pass
+
+        async def record_domain_event(self, event, **kwargs):
+            raise RuntimeError("private driver detail")
+
+        async def run_completed(self, **kwargs):
+            return True
+
+    storage = LocalArtifactStorage(tmp_path)
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(
+            {
+                "threadId": "export-thread",
+                "runId": "export-run",
+                "state": None,
+                "messages": [
+                    {"id": "user", "role": "user", "content": "Make a report"}
+                ],
+                "tools": [],
+                "context": [],
+            }
+        ),
+        engine_builder=rich_builder(
+            storage,
+            [
+                [
+                    {
+                        "name": "write_report",
+                        "args": {"title": "Report", "content": "Useful evidence"},
+                    }
+                ],
+                [submit_call(answer="Useful answer")],
+            ],
+        ),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        persistence=Persistence(),
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    state = apply_state(events)
+    assert state["run"]["status"] == "completed"
+    assert state["artifacts"][0]["status"] == "failed"
+    assert "downloadUrl" not in state["artifacts"][0]
+    assert "private driver detail" not in json.dumps(events)
+    assert not any(event.get("name") == "artifact" for event in events)

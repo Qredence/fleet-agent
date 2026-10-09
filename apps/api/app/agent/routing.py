@@ -14,6 +14,8 @@ from typing import Any, Literal, cast
 
 import dspy
 
+from app.agent.tool_registry import ToolCapability
+
 logger = logging.getLogger(__name__)
 
 ROUTER_STATE_FORMAT = "fleet-agent/router-state@1"
@@ -37,6 +39,19 @@ ROUTES: tuple[ToolRoute, ...] = (
     "workspace_shell",
 )
 
+ROUTE_CAPABILITIES: dict[ToolRoute, frozenset[ToolCapability]] = {
+    "direct": frozenset(),
+    "research": frozenset({"retrieval", "utility"}),
+    "artifact": frozenset({"retrieval", "utility", "artifact"}),
+    "workspace_read": frozenset({"retrieval", "utility", "workspace_read"}),
+    "workspace_write": frozenset(
+        {"retrieval", "utility", "workspace_read", "workspace_write"}
+    ),
+    "workspace_shell": frozenset(
+        {"retrieval", "utility", "workspace_read", "workspace_write", "shell"}
+    ),
+}
+
 _ROUTE_WRAP_CHARS = "\"'`"
 """Quotes LMs sometimes wrap around a route token."""
 
@@ -48,7 +63,10 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     direct: no external information or action is needed. Answer from your own
     knowledge.
     research: documentation, web information, time, or other read-only evidence.
-    artifact: the request explicitly asks to create a managed report or artifact.
+    artifact: research evidence for a managed report, without workspace inspection.
+    For workspace-to-report tasks select workspace_read (or an explicitly
+    required mutation route), and output_intent=managed_report. Report export
+    does not require workspace mutation privileges.
     workspace_read: repository files must be inspected without modification.
     workspace_write: repository files must be created, replaced, or edited.
     workspace_shell: commands, tests, builds, scripts, or shell operations are
@@ -67,6 +85,18 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     Answering a knowledge question correctly does not require gathering
     evidence, so do not upgrade it to research.
 
+    The conversation context contains available branch-local evidence. A
+    follow-up that only reformats or exports a previous answer uses direct;
+    do not inspect earlier named files again unless the current request asks
+    for a new check, correction, refresh, or change.
+    A standalone report requiring evidence that is not already supplied uses
+    artifact to gather research. Do not treat a request to create a report as
+    a general knowledge explanation merely because its topic is familiar.
+    Read-only file searches and listings use workspace_read when the request
+    asks for findings; workspace_shell requires actual command execution.
+    The verb "report" can mean explain findings in chat; output_intent remains
+    none unless the user asks to create/export a report or downloadable file.
+
     Deciding between workspace_write and workspace_shell: the managed file
     tools can create, read, and edit file contents, but none of them can
     delete, rename, or move a file — only the shell can. So a request to
@@ -75,6 +105,16 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     emptying the text) stays workspace_write.
     """
 
+    conversation_context: str = dspy.InputField(
+        desc="Bounded selected-branch conversation context, newest turns first.",
+        default="",
+    )
+    output_intent: str = dspy.OutputField(
+        desc=(
+            "none or managed_report. Select managed_report for a requested "
+            "downloadable report; select its evidence route independently."
+        )
+    )
     user_request: str = dspy.InputField(desc="The user's current request.")
     route: str = dspy.OutputField(
         desc="The minimum capability profile required for the task."

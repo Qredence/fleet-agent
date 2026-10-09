@@ -127,6 +127,7 @@ class RunsRepository:
                     {
                         "status": "failed",
                         "terminationReason": "server_restart",
+                        "saveStatus": "saved",
                         "errorCode": "internal_error",
                     }
                 )
