@@ -12,9 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import LOCAL_OWNER, get_sessions, require_project, require_thread
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.cards import settled_cards
-from app.contracts.error_codes import ERROR_MESSAGES
+from app.contracts.constants import ERROR_MESSAGES, TERMINATION_REASONS
 from app.contracts.message_feedback import MessageFeedback
-from app.contracts.termination_reasons import TERMINATION_REASONS
 from app.contracts.thread_bootstrap import ThreadBootstrap, ThreadOut
 from app.kernel.content_safety import scrub_json_strings, scrub_public_text
 from app.kernel.history_safety import MessageWrite, sanitize_message_content

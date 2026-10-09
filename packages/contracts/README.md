@@ -12,7 +12,7 @@ the React frontend.
 - `thread-bootstrap.schema.json` — `ThreadBootstrap` v1, the
   `GET /api/threads/{id}/bootstrap` restoration envelope.
 - `error-codes.json` — stable public error codes and their safe messages.
-  The backend loads it at import (`app/contracts/error_codes.py`); the web
+  The backend loads it at import (`app/contracts/constants.py`); the web
   imports it directly where codes are rendered.
 - `termination-reasons.json` — the canonical public run termination reasons.
   The backend derives its safe-set filtering from it; the web's presentation

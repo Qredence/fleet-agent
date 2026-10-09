@@ -23,7 +23,7 @@ from app.agui.live_coordinator import LiveDSPyCoordinator
 from app.agui.run_coordinator import RunCoordinator
 from app.api.deps import get_sessions
 from app.contracts.agent_capabilities import AgentCapabilities
-from app.contracts.error_codes import ERROR_MESSAGES
+from app.contracts.constants import ERROR_MESSAGES
 from app.kernel.run_input import validate_user_attachments, validate_user_content
 from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.persistence.run_persistence import (

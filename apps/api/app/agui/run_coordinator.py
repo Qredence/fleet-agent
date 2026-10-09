@@ -9,6 +9,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from dataclasses import dataclass
 from typing import Any
 
 from ag_ui.core import (
@@ -21,9 +22,16 @@ from ag_ui.core import (
 )
 from ag_ui.encoder import EventEncoder
 
-from app.contracts.replay import TimedEvent
-
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TimedEvent:
+    """One fixture line: emit ``event`` ``at_ms`` after the stream starts."""
+
+    at_ms: int
+    event: BaseEvent
+
 
 _TERMINAL_EVENTS = {EventType.RUN_FINISHED, EventType.RUN_ERROR}
 

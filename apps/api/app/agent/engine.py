@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import partial
@@ -19,13 +19,13 @@ from typing import Any, Literal, Protocol
 
 import anyio
 import dspy
+from dspy.streaming import StreamListener
 from dspy.streaming.messages import StreamResponse
 from dspy.utils.callback import BaseCallback
 from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 
 from app.agent.event_bus import RunEventBus
 from app.agent.provider import ProviderOverride
-from app.agent.synthesis_stream import synthesis_stream_listeners
 from app.kernel.content_safety import (
     StreamingScrubber,
     scrub_public_lines,
@@ -33,6 +33,28 @@ from app.kernel.content_safety import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class SynthesisStreamListener(StreamListener):  # type: ignore[misc]
+    """StreamListener pinned to ChatAdapter field boundaries.
+
+    The synthesis call runs under a scoped ``dspy.context(adapter=ChatAdapter())``
+    inside the program's worker thread (ChatAdapter's ``[[ ## field ## ]]``
+    sections give exact, boilerplate-free boundaries). The stream consumer task
+    that calls ``receive`` runs on the event loop and cannot see that
+    thread-local scope, so the adapter is pinned here explicitly: otherwise the
+    listener would parse ChatAdapter sections with the ambient JSONAdapter's
+    identifiers and never detect a field boundary.
+    """
+
+    def receive(self, chunk: Any) -> Any:
+        with dspy.context(adapter=dspy.ChatAdapter()):
+            return super().receive(chunk)
+
+
+def synthesis_stream_listeners(fields: Sequence[str]) -> list[SynthesisStreamListener]:
+    """Build one pinned listener per synthesis output field."""
+    return [SynthesisStreamListener(signature_field_name=field) for field in fields]
 
 
 @dataclass(frozen=True)

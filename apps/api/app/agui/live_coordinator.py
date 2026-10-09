@@ -34,6 +34,7 @@ from app.agent.event_bus import DONE, RunEventBus
 from app.agent.provider import ProviderOverride
 from app.agui.event_mapper import chunk_text, map_domain_event
 from app.agui.trace_reducer import TraceReducer
+from app.contracts.constants import public_error
 from app.contracts.domain import (
     ArtifactFailed,
     ArtifactReady,
@@ -44,7 +45,6 @@ from app.contracts.domain import (
     ToolCompleted,
     ToolFailed,
 )
-from app.contracts.error_codes import public_error
 from app.kernel.run_input import history_from_agui_messages, last_user_text
 from app.persistence.run_persistence import RunPersistence
 from app.services.metrics import MetricsRegistry

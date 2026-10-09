@@ -12,8 +12,7 @@ from urllib.parse import urlsplit
 
 from dspy.utils.callback import BaseCallback
 
-from app.agent.cancel_token import RunCancelToken
-from app.agent.event_bus import RunEventBus
+from app.agent.event_bus import RunCancelToken, RunEventBus
 from app.agent.instrumented import preview, public_tool_args, public_tool_args_json
 from app.contracts.domain import (
     InlineDataEvent,
