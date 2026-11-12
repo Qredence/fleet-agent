@@ -93,7 +93,7 @@ def test_routed_program_builds_router_and_react_children_in_init():
 
     assert isinstance(program.router, dspy.Predict)
     assert all(
-        isinstance(program.evidence_agents[route], dspy.ReActV2)
+        isinstance(program.evidence_agents[route], dspy.ReAct)
         for route in ROUTES
         if route not in {"direct"}
     )

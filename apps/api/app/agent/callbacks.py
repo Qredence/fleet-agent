@@ -57,7 +57,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         inputs: dict[str, Any],
     ) -> None:
         name = getattr(instance, "name", getattr(instance, "__name__", "tool"))
-        # The submit tool is ReActV2's internal completion mechanism.
+        # The submit tool is ReAct's internal completion mechanism.
         if name == "submit":
             return
 

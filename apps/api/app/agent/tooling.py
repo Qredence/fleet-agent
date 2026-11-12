@@ -21,7 +21,7 @@ TOOL_NAME_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 """Canonical model-visible tool name rule shared by all layers."""
 
 RESERVED_TOOL_NAMES = frozenset({"submit"})
-"""Tool names owned by ReActV2 internals; user tools must not use them."""
+"""Tool names owned by ReAct internals; user tools must not use them."""
 
 _TOOL_NAME_RE = re.compile(TOOL_NAME_PATTERN)
 
@@ -102,7 +102,7 @@ def _validate_dspy_tool(tool: dspy.Tool) -> None:
         raise TypeError("dspy.Tool name must be a string")
     name = _validate_tool_name(tool.name)
     if name in RESERVED_TOOL_NAMES:
-        raise ValueError(f"tool name {name!r} is reserved by ReActV2")
+        raise ValueError(f"tool name {name!r} is reserved by ReAct")
     if not str(tool.desc or "").strip():
         raise ValueError(f"tool {name!r} must have a description or docstring")
     unsupported = _unsupported_parameters(tool.func)

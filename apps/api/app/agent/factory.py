@@ -136,7 +136,7 @@ def build_tool_profiles(
     registry: ToolRegistry,
     approved: frozenset[str] | None = None,
 ) -> dict[ToolRoute, list[dspy.Tool]]:
-    """Build the least-privileged capability lattice for routed ReActV2.
+    """Build the least-privileged capability lattice for routed ReAct.
 
     Tools whose policy requires approval are dropped unless this run authorized
     them, so a gated tool is never merely declined - it is never offered, and the
@@ -271,7 +271,7 @@ def make_engine_builder(
             callback = AgUiRunCallback(bus=bus, cancel_token=bus.cancel_token)
 
             def program_factory() -> FleetAgent:
-                """The routed ReActV2 program over the least-privileged profiles."""
+                """The routed ReAct program over the least-privileged profiles."""
                 return FleetAgent(
                     tool_profiles=profiles,
                     max_iters=settings.llm_max_iters,

@@ -88,9 +88,11 @@ jobs:
           name: Audit API dependencies
           # Dependabot reads the GitHub advisory DB; pip-audit reads PyPI/OSV.
           # They disagree, so this gate is deliberately independent. Accepted
-          # risk: PYSEC-2026-2447 (diskcache pickle deserialization, pulled in
-          # by dspy) has no fixed release and needs local write access to the
-          # cache directory. Drop the ignore once upstream publishes a fix.
+          # risk: PYSEC-2026-2447 (diskcache pickle deserialization, requiring
+          # local write access to the cache directory). diskcache is still a
+          # direct dependency of dspy (3.5.0 requires diskcache>=5.6.0) and
+          # 5.6.3 is the newest release, so no fixed version exists to upgrade
+          # to. Drop the ignore once upstream publishes a fix.
           command: |
             cd apps/api
             uv export --frozen --no-emit-project --no-hashes --format requirements-txt > /tmp/requirements-audit.txt

@@ -92,7 +92,7 @@ Prefer native:
 - `Signature`;
 - `Module`;
 - `Predict`;
-- `ReActV2`;
+- `ReAct`;
 - streaming;
 - `Evaluate`;
 - GEPA;

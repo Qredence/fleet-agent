@@ -51,7 +51,7 @@ class Settings(BaseSettings):
         default=6,
         ge=1,
         le=25,
-        description="Hard bound on ReActV2 loop iterations per run.",
+        description="Hard bound on ReAct loop iterations per run.",
     )
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     llm_native_function_calling: bool = Field(

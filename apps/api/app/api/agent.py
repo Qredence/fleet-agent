@@ -2,7 +2,7 @@
 
 Two modes (FLEET_AGENT_AGENT_MODE):
 - "fixtures" (dev/CI default): replays the canonical NDJSON mock streams,
-- "engine" (production): LiveDSPyCoordinator runs the real DSPy ReActV2
+- "engine" (production): LiveDSPyCoordinator runs the real DSPy ReAct
   bridge with instrumented tools, persisting runs/messages/state/history.
 """
 

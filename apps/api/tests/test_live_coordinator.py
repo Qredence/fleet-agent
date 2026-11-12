@@ -29,8 +29,8 @@ def scripted_builder(steps, tools=None, max_iters=4):
     ):
         del provider_override, approved
 
-        def program_factory() -> dspy.ReActV2:
-            return dspy.ReActV2(AgentSignature, tools=base_tools, max_iters=max_iters)
+        def program_factory() -> dspy.ReAct:
+            return dspy.ReAct(AgentSignature, tools=base_tools, max_iters=max_iters)
 
         return DspyAgentEngine(
             program_factory=program_factory,
@@ -273,8 +273,8 @@ async def test_web_search_and_sources_are_transcript_custom_events():
         del thread_id
         callback = AgUiRunCallback(bus=bus)
 
-        def program_factory() -> dspy.ReActV2:
-            return dspy.ReActV2(
+        def program_factory() -> dspy.ReAct:
+            return dspy.ReAct(
                 AgentSignature,
                 tools=[web_search],
                 max_iters=2,
@@ -474,6 +474,8 @@ async def test_streaming_coordinator_emits_answer_once_before_run_finished():
     assert types[-1] == "RUN_FINISHED"
     # Raw reasoning never crosses the wire.
     assert all("next_thought" not in json.dumps(e) for e in events)
+    # DSPy 3.5's injected `turn_budget` is loop scaffolding and stays server-side.
+    assert all("turn_budget" not in json.dumps(e) for e in events)
     # The synthesis step ends up with the model's own summary.
     state = apply_state(events)
     synthesis = next(s for s in state["steps"] if s["id"] == "step-synthesis")

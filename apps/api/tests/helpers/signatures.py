@@ -1,8 +1,8 @@
-"""The reference ReActV2 task contract used by the contract tests.
+"""The reference ``dspy.ReAct`` task contract used by the contract tests.
 
 This is not on the production request path: the live evidence loop builds one
 signature per capability profile from ``app/agent/agents/prompts/*.md``. It stays
-here so the ReActV2-level contract tests (submit-tool shape, adapter behaviour,
+here so the ``dspy.ReAct``-level contract tests (submit-tool shape, adapter behaviour,
 tool-call coercion, streaming) exercise a stable signature.
 
 Its tool-use policy is the SAME Markdown the live loop inherits, so the text has

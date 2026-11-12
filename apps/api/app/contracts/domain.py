@@ -104,7 +104,7 @@ class StepFailed(DomainEvent):
 class FinalFieldsReady(DomainEvent):
     """The finish tool just delivered the public answer/summary.
 
-    Emitted the moment ReActV2's submit tool executes, so the browser sees
+    Emitted the moment ReAct's submit tool executes, so the browser sees
     the answer before the run settles. Carries only AgentSignature output
     fields — never raw reasoning or provider payloads.
     """

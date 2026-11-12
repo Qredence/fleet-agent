@@ -1,7 +1,7 @@
-"""Typed tools exposed to ReActV2.
+"""Typed tools exposed to ReAct.
 
 Rules (plan 6.4): synchronous, simple domain returns, bounded strings,
-controlled failures (raise -> ReActV2 converts to an error observation).
+controlled failures (raise -> ReAct converts to an error observation).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class SearchDocsTool:
     """search_docs as a callable object so the instrumented wrapper can read
     the sources it produced (per-run instance — no cross-run leakage).
 
-    `__name__`/`__doc__` are set explicitly: ReActV2 and the instrumented
+    `__name__`/`__doc__` are set explicitly: ReAct and the instrumented
     wrapper introspect plain functions, and callable objects don't carry
     those attributes by default.
     """

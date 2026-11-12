@@ -4,7 +4,7 @@ Two-stage pattern keeps context bounded: `web_search` returns numbered,
 id-tagged results (title, url, excerpt); `fetch_page` retrieves the full
 extracted text of one earlier result by id — no hallucinated URLs, no
 unbounded pages. Synchronous and typed per the tool rules; failures raise
-so ReActV2 converts them into error observations. Error messages are safe:
+so ReAct converts them into error observations. Error messages are safe:
 they never include the API key or raw provider responses.
 """
 

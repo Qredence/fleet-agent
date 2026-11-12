@@ -56,11 +56,11 @@ CORPUS: list[dict[str, str | None]] = [
     },
     {
         "id": "doc-reactv2-termination",
-        "title": "DSPy ReActV2 termination",
+        "title": "DSPy ReAct termination",
         "uri": "https://dspy.ai/diving-deeper/react/",
         "source_type": "web",
         "text": (
-            "ReActV2 finishes via the internal submit tool with typed outputs, "
+            "ReAct finishes via the internal submit tool with typed outputs, "
             "or falls back to a forced submission on max_iters, empty tool "
             "calls, parse errors, or context window exhaustion. A failed forced "
             "submission returns history and termination_reason without the "

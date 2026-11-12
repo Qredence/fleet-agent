@@ -169,7 +169,7 @@ def slow_engine_app(db_sessions):
         tools = [encoder_side]
 
         def factory():
-            return dspy.ReActV2(AgentSignature, tools=tools, max_iters=3)
+            return dspy.ReAct(AgentSignature, tools=tools, max_iters=3)
 
         return DspyAgentEngine(
             program_factory=factory,
@@ -239,7 +239,7 @@ async def test_disconnect_marks_run_cancelled(db_sessions):
         tools = [SearchDocsTool()]
 
         def factory():
-            return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
+            return dspy.ReAct(AgentSignature, tools=tools, max_iters=4)
 
         return DspyAgentEngine(
             program_factory=factory,
@@ -297,7 +297,7 @@ async def test_run_times_out_with_public_code():
         tools = [sleepy]
 
         def factory():
-            return dspy.ReActV2(AgentSignature, tools=tools, max_iters=4)
+            return dspy.ReAct(AgentSignature, tools=tools, max_iters=4)
 
         return DspyAgentEngine(
             program_factory=factory,

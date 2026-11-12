@@ -3,7 +3,7 @@
 Prompt text lives in ``app/agent/agents/prompts/*.md`` so a reviewer reads prose
 instead of a docstring. ``build_signature`` turns one Markdown body (with the
 shared ``policy.md`` appended) and typed fields into a signature class of its
-own; the two nodes the program needs are plain ``dspy.ReActV2`` /
+own; the two nodes the program needs are plain ``dspy.ReAct`` /
 ``dspy.Predict`` over those classes.
 
 Only the parts the spec layer could not express are left in Python, with the
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import cast
 
 import dspy
+from pydantic.fields import FieldInfo
 
 AGENTS_DIR = Path(__file__).resolve().parent / "agents"
 PROMPTS_DIR = AGENTS_DIR / "prompts"
@@ -49,7 +50,7 @@ def _policy_text() -> str:
 
 
 def build_signature(
-    fields: Mapping[str, tuple[object, dspy.Field]],
+    fields: Mapping[str, tuple[object, FieldInfo]],
     instructions: str,
     *,
     signature_name: str,
@@ -136,7 +137,7 @@ def build_synthesizer() -> dspy.Module:
 
 
 def build_gatherer(tools: Sequence[dspy.Tool], max_iters: int) -> dspy.Module:
-    """Build the evidence loop: one ``ReActV2`` over the Markdown contract.
+    """Build the evidence loop: one ``ReAct`` over the Markdown contract.
 
     The run's least-privilege profile supplies the tools, so a route still
     cannot reach a tool outside its profile. ``max_iters`` binds here -
@@ -145,4 +146,4 @@ def build_gatherer(tools: Sequence[dspy.Tool], max_iters: int) -> dspy.Module:
     event bus, a thread id); the signature class itself is shared, which is
     safe now that no optimizer writes back into it.
     """
-    return dspy.ReActV2(_evidence_signature(), tools=list(tools), max_iters=max_iters)
+    return dspy.ReAct(_evidence_signature(), tools=list(tools), max_iters=max_iters)

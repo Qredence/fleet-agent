@@ -17,7 +17,7 @@ from app.contracts.domain import (
     ToolFailed,
     ToolStarted,
 )
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from tests.helpers.scripted_lm import RecordingScriptedLM, ScriptedLM, submit_call
 from tests.helpers.signatures import AgentSignature
 
 
@@ -47,7 +47,7 @@ async def test_callback_publishes_tool_started_and_completed():
             [submit_call(answer="finished")],
         ]
     )
-    agent = dspy.ReActV2(AgentSignature, tools=[simple_tool], max_iters=2)
+    agent = dspy.ReAct(AgentSignature, tools=[simple_tool], max_iters=2)
 
     def run_sync() -> dspy.Prediction:
         with dspy.context(
@@ -87,7 +87,7 @@ async def test_callback_publishes_tool_failed_on_exception():
             [submit_call(answer="recovered after failure")],
         ]
     )
-    agent = dspy.ReActV2(AgentSignature, tools=[error_tool], max_iters=2)
+    agent = dspy.ReAct(AgentSignature, tools=[error_tool], max_iters=2)
 
     def run_sync() -> dspy.Prediction:
         with dspy.context(
@@ -121,7 +121,7 @@ async def test_callback_emits_source_discovered():
             [submit_call(answer="found docs")],
         ]
     )
-    agent = dspy.ReActV2(AgentSignature, tools=[docs_tool], max_iters=2)
+    agent = dspy.ReAct(AgentSignature, tools=[docs_tool], max_iters=2)
 
     def run_sync() -> dspy.Prediction:
         with dspy.context(
@@ -157,19 +157,14 @@ async def test_callback_respects_cancel_token():
         tool_calls.append(query)
         return "result"
 
-    class CancellingLM(ScriptedLM):
-        def __call__(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-            response = super().__call__(prompt=prompt, messages=messages, **kwargs)
-            cancel_token.cancel()
-            return response
-
-    lm = CancellingLM(
+    lm = RecordingScriptedLM(
         [
             [{"name": "blocked_tool", "args": {"query": "test"}}],
             [submit_call(answer="done")],
-        ]
+        ],
+        after_response=cancel_token.cancel,
     )
-    agent = dspy.ReActV2(AgentSignature, tools=[blocked_tool], max_iters=2)
+    agent = dspy.ReAct(AgentSignature, tools=[blocked_tool], max_iters=2)
 
     def run_sync() -> dspy.Prediction:
         with dspy.context(

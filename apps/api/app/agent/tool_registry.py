@@ -12,7 +12,7 @@ different text in the Tools page than the model received.
 
 Only genuinely enforced policy lives here. ``idempotent``, ``timeout_seconds``
 and ``max_output_chars`` were dropped because nothing on the live path read
-them: ReActV2 is handed raw ``dspy.Tool`` objects, so the registry's own
+them: ReAct is handed raw ``dspy.Tool`` objects, so the registry's own
 execution wrapper never ran.
 """
 
@@ -300,7 +300,7 @@ class ToolRegistry:
         if is_async_tool(tool):
             raise TypeError(
                 f"tool {metadata.name!r} is async, but ToolRegistry and the "
-                "DSPy 3.4.0 ReActV2 path execute tools synchronously"
+                "DSPy 3.5 ReAct path execute tools synchronously"
             )
 
         self._tools[metadata.name] = RegisteredTool(tool=tool, metadata=metadata)
@@ -328,7 +328,7 @@ class ToolRegistry:
         """Return the exact tools available to one DSPy program.
 
         ``allowed_names`` is the safe dynamic-selection mechanism: the server
-        decides which trusted tools are available, then ReActV2 decides which of
+        decides which trusted tools are available, then ReAct decides which of
         those tools to invoke. It never generates executable Python at runtime.
         """
         allowed = set(allowed_names) if allowed_names is not None else None

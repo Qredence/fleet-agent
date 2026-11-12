@@ -1,9 +1,14 @@
-"""DSPy contract tests: pin the dspy==3.4.* assumptions the backend relies on.
+"""DSPy contract tests: pin the dspy==3.5.* assumptions the backend relies on.
 
 These are tripwires, not behavior tests. When one fails after a dependency
 bump, the failure message should say which invariant broke and what to do
 (see the DSPy invariants in AGENTS.md). Provider-free: ScriptedLM/DummyLM,
 no DB, no .env.
+
+Loop name (D1): the shipped loop is ``dspy.ReAct``. ``dspy.ReActV2`` survives
+only as a deprecated subclass that DSPy removes in 3.6, so nothing here names
+it; the behavior guard that the shipping gatherer really is a ``dspy.ReAct``
+over the Markdown contract lives in test_agent_construction.py.
 """
 
 import asyncio
@@ -27,25 +32,7 @@ CTX = AgentRunContext(thread_id="t-1", run_id="r-1")
 
 
 # ---------------------------------------------------------------------------
-# 1. ReActV2 alias guard — dspy.ReActV2 is removed in 3.6 (rename to
-#    dspy.ReAct required on upgrade; legacy dspy.ReAct has DIFFERENT behavior).
-# ---------------------------------------------------------------------------
-
-
-def test_react_v2_alias_still_exists():
-    if not hasattr(dspy, "ReActV2"):
-        pytest.fail(
-            "dspy.ReActV2 is gone from this dspy version. DSPy removes the "
-            "ReActV2 alias in 3.6 and renames the module to dspy.ReAct — "
-            "update app/agent/engine.py + factory.py to the new name and "
-            "re-audit termination reasons. Do NOT let the code fall back to "
-            "the legacy dspy.ReAct silently."
-        )
-    assert dspy.ReActV2 is not getattr(dspy, "ReAct", None)
-
-
-# ---------------------------------------------------------------------------
-# 2. Tool schema fidelity — what the model sees must stay typed.
+# 1. Tool schema fidelity — what the model sees must stay typed.
 #    The engine builds every tool through create_dspy_tool, so these pin the
 #    schemas the model actually receives.
 # ---------------------------------------------------------------------------
@@ -102,18 +89,26 @@ def test_constructed_tool_keeps_return_annotation():
 
 
 def test_native_function_call_descriptor_is_wellformed():
-    """Adapters send format_as_litellm_function_call() verbatim on the wire."""
+    """Adapters send ``Tool.as_function_tool()`` verbatim on the wire.
+
+    DSPy 3.5 replaced ``format_as_litellm_function_call()`` (a nested dict) with
+    a typed ``lm15.FunctionTool`` model, so the wire contract is the model's
+    fields rather than dict keys.
+    """
     search = Tool(SearchDocsTool())
-    descriptor = search.format_as_litellm_function_call()
-    assert descriptor["type"] == "function"
-    assert descriptor["function"]["name"] == "search_docs"
-    assert descriptor["function"]["parameters"]["properties"] == {
-        "query": {"type": "string"}
+    function_tool = search.as_function_tool()
+
+    assert function_tool.type == "function"
+    assert function_tool.name == "search_docs"
+    assert function_tool.parameters == {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
     }
 
 
 # ---------------------------------------------------------------------------
-# 3. Tool arg validation — dspy.Tool validates args against the schema before
+# 2. Tool arg validation — dspy.Tool validates args against the schema before
 #    execution; degraded Any schemas skip this silently.
 # ---------------------------------------------------------------------------
 
@@ -125,7 +120,7 @@ def test_tool_rejects_args_violating_schema():
 
 
 # ---------------------------------------------------------------------------
-# 4. ReActV2 structure guards.
+# 3. ReAct structure guards.
 # ---------------------------------------------------------------------------
 
 
@@ -135,26 +130,26 @@ def test_user_tool_named_submit_is_rejected():
         return "nope"
 
     with pytest.raises(ValueError, match="submit"):
-        dspy.ReActV2(AgentSignature, tools=[submit], max_iters=2)
+        dspy.ReAct(AgentSignature, tools=[submit], max_iters=2)
 
 
 def test_submit_tool_exposes_all_signature_outputs_in_order():
-    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
+    agent = dspy.ReAct(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     submit_tool = agent.tools["submit"]
     expected = list(AgentSignature.output_fields)  # order is model-visible
     assert list(submit_tool.args) == expected
 
 
-def test_reactv2_wraps_inputs_as_optional():
-    """ReActV2's internal signature makes every user input `| None` so the
+def test_react_wraps_inputs_as_optional():
+    """ReAct's internal signature makes every user input `| None` so the
     loop can drop them across turns."""
-    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
+    agent = dspy.ReAct(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     user_request = agent.react.signature.input_fields["user_request"]
     assert type(None) in get_args(user_request.annotation)
 
 
 # ---------------------------------------------------------------------------
-# 5. Signature contract — docstring IS the instructions; field names/order are
+# 4. Signature contract — docstring IS the instructions; field names/order are
 #    part of the program's public interface (optimizers never rename them).
 # ---------------------------------------------------------------------------
 
@@ -175,7 +170,7 @@ def test_agent_signature_contract():
 
 
 # ---------------------------------------------------------------------------
-# 6. Adapter behavior pin — empty_tool_calls is only reachable with a
+# 5. Adapter behavior pin — empty_tool_calls is only reachable with a
 #    NON-native adapter; under native function calling the same model turn
 #    surfaces as parse_error instead.
 # ---------------------------------------------------------------------------
@@ -184,8 +179,8 @@ def test_agent_signature_contract():
 def _make_engine(steps: list, *, use_native: bool) -> DspyAgentEngine:
     lm = ScriptedLM(steps)
 
-    def factory() -> dspy.ReActV2:
-        return dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=3)
+    def factory() -> dspy.ReAct:
+        return dspy.ReAct(AgentSignature, tools=[SearchDocsTool()], max_iters=3)
 
     return DspyAgentEngine(
         program_factory=factory,
@@ -196,7 +191,7 @@ def _make_engine(steps: list, *, use_native: bool) -> DspyAgentEngine:
 
 async def test_empty_tool_calls_only_with_non_native_adapter():
     # Content parses as a complete non-native output object whose tool_calls
-    # list is empty -> ReActV2 breaks with empty_tool_calls.
+    # list is empty -> ReAct breaks with empty_tool_calls.
     content_turn = {
         "calls": [],
         "content": json.dumps({"next_thought": "", "tool_calls": []}),
@@ -219,7 +214,7 @@ async def test_empty_tool_calls_only_with_non_native_adapter():
 
 
 # ---------------------------------------------------------------------------
-# 7. Termination matrix — every reason ReActV2 can emit maps to the public
+# 6. Termination matrix — every reason ReAct can emit maps to the public
 #    error taxonomy (or completes).
 # ---------------------------------------------------------------------------
 
@@ -241,7 +236,7 @@ def test_unknown_termination_reason_falls_back_to_agent_no_output():
 
 
 # ---------------------------------------------------------------------------
-# 8. Usage contract — keys and types of AgentRunResult.usage.
+# 7. Usage contract — keys and types of AgentRunResult.usage.
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +264,7 @@ async def test_usage_keys_are_exact_and_summed():
 
 
 # ---------------------------------------------------------------------------
-# 9. Context isolation — concurrent runs must not bleed LM config or usage.
+# 8. Context isolation — concurrent runs must not bleed LM config or usage.
 # ---------------------------------------------------------------------------
 
 
@@ -278,8 +273,8 @@ async def test_concurrent_runs_isolate_lm_and_usage():
         lm = ScriptedLM(steps)
         lm.model = f"scripted-{id(steps)}"  # distinct usage key per engine
 
-        def factory() -> dspy.ReActV2:
-            return dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=2)
+        def factory() -> dspy.ReAct:
+            return dspy.ReAct(AgentSignature, tools=[SearchDocsTool()], max_iters=2)
 
         return DspyAgentEngine(
             program_factory=factory,
@@ -307,7 +302,7 @@ async def test_concurrent_runs_isolate_lm_and_usage():
 
 
 # ---------------------------------------------------------------------------
-# 10. Sync-tools invariant — ReActV2 executes tools synchronously; an async
+# 9. Sync-tools invariant — ReAct executes tools synchronously; an async
 #     tool raises instead of deadlocking. Future MCP bridging MUST go through
 #     an async entry point (Tool.from_mcp_tool is async-only).
 # ---------------------------------------------------------------------------
@@ -325,10 +320,10 @@ async def test_async_tool_raises_under_sync_loop():
         [[{"name": "fetch_thing", "args": {"query": "x"}}]],
         use_native=True,
     )
-    engine._program_factory = lambda: dspy.ReActV2(
+    engine._program_factory = lambda: dspy.ReAct(
         AgentSignature, tools=[fetch_thing], max_iters=2
     )
-    # ReActV2 converts the raised ValueError into an error observation; the
+    # ReAct converts the raised ValueError into an error observation; the
     # dangling coroutine warning is the expected artifact of the refusal.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -339,7 +334,7 @@ async def test_async_tool_raises_under_sync_loop():
 
 
 # ---------------------------------------------------------------------------
-# 11. History round-trip — persisted continuation format stays JSON-safe and
+# 10. History round-trip — persisted continuation format stays JSON-safe and
 #     server-side only.
 # ---------------------------------------------------------------------------
 
@@ -367,12 +362,12 @@ async def test_history_round_trips_through_json_and_continues():
 
 
 def test_reasoning_field_never_reaches_public_result():
-    """CoT boundary, structurally pinned: `next_thought` (the ReActV2
+    """CoT boundary, structurally pinned: `next_thought` (the ReAct
     Reasoning output field) exists on the loop's internal signature and in
     history events server-side. AgentRunResult carries `history` as a
     documented SERVER-ONLY field (never serialized to clients — enforced by
     test_dspy_engine.py), but no public field can carry raw reasoning."""
-    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
+    agent = dspy.ReAct(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     assert "next_thought" in agent.react.signature.output_fields
 
     from app.agent.engine import AgentRunResult
@@ -382,8 +377,53 @@ def test_reasoning_field_never_reaches_public_result():
     assert "history" in AgentRunResult.__dataclass_fields__
 
 
+async def test_turn_budget_stays_server_side():
+    """DSPy 3.5 injects a ``turn_budget`` input into every history event.
+
+    It is loop scaffolding for the server: it may persist in ``History`` for
+    replay fidelity, but it must never reach a public answer field, the
+    synthesizer's ``evidence_json``, or any client-facing projection.
+    """
+    from app.agent.program import _evidence_json
+
+    engine = _make_engine(
+        [
+            [{"name": "search_docs", "args": {"query": "x"}}],
+            [submit_call(answer="Done.")],
+        ],
+        use_native=True,
+    )
+    result = await engine.run(user_request="hi", history=None, context=CTX)
+
+    # The 3.5 loop really did inject it …
+    first_turn = result.history.messages[0]
+    assert "turn_budget" in first_turn
+    assert "Turn 1 of" in first_turn["turn_budget"]
+
+    # … and it stays out of every public projection the UI or an evaluator sees.
+    public = json.dumps(
+        {
+            "answer": result.answer,
+            "process_summary": result.process_summary,
+            "key_decisions": result.key_decisions,
+            "caveats": result.caveats,
+            "termination_reason": result.termination_reason,
+            "evidence_status": result.evidence_status,
+            "evidence_reason": result.evidence_reason,
+            "output_intent": result.output_intent,
+            "usage": result.usage,
+        }
+    )
+    assert "turn_budget" not in public
+    evidence = json.loads(_evidence_json(result.history))
+    assert evidence, "the run gathered evidence"
+    for entry in evidence:
+        assert "turn_budget" not in entry
+        assert "next_thought" not in entry
+
+
 # ---------------------------------------------------------------------------
-# 12. Factory wiring — production engine uses native calling + no cache so
+# 11. Factory wiring — production engine uses native calling + no cache so
 #     runs are reproducible and isolated.
 # ---------------------------------------------------------------------------
 
