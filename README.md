@@ -171,19 +171,29 @@ Open <http://localhost:5173>. The API docs are at
 <http://localhost:8000/docs>; health checks are available at `/health` and
 `/ready`.
 
-If the API uses another port, set the matching browser origin before starting
-Vite, for example:
+If the API uses another port, pass it to `fastapi dev` before starting Vite.
+Use `--port` with no `--` separator: pnpm appends extra arguments to the end of
+the script string, so `pnpm dev:api -- --port 8001` forwards a literal `--` and
+fails with "Got unexpected extra argument(s)". `PORT` (which `fastapi dev` reads
+as a fallback) works too:
 
 ```bash
-pnpm dev:api -- --port 8001
-VITE_API_BASE_URL=http://localhost:8001 pnpm dev:web
+pnpm dev:api --port 8001
+VITE_API_PORT=8001 pnpm dev:web
 ```
+
+Point the web app at the port rather than at the API origin directly, so the
+browser keeps talking to the Vite dev server and its `/api` proxy stays on the
+page's own origin (see the proxy note below). To bypass the proxy and call the
+API cross-origin instead, set `VITE_API_BASE_URL=http://localhost:8001` and add
+that exact origin to `FLEET_AGENT_CORS_ORIGINS`.
 
 If the web app uses a different origin or port, add that exact origin to
 `FLEET_AGENT_CORS_ORIGINS` in `apps/api/.env`. Wildcard CORS is not supported.
 
 The Vite dev server proxies `/api` to `http://127.0.0.1:8000`, so the browser
-can call the API on the page's own origin instead of a second origin. Amp orbs
+can call the API on the page's own origin instead of a second origin. Set
+`VITE_API_PORT` when the API runs on a different port. Amp orbs
 rely on that: `.amp/services.yaml` exposes the web dev server as a single
 portal and leaves the API on loopback, with `VITE_API_BASE_URL` set to the
 portal's own origin. Same-origin requests need no CORS entry.
@@ -244,7 +254,7 @@ file. The checked-in example contains the complete list. Common settings are:
 | `FLEET_AGENT_WORKSPACE_ROOT` | Explicit filesystem root for workspace tools; development defaults to the repository root. |
 | `FLEET_AGENT_WORKSPACE_WRITE_TOOLS_ENABLED` | Enables `write` and `edit`; off by default. |
 | `FLEET_AGENT_WORKSPACE_BASH_TOOL_ENABLED` | Enables bounded `bash`; off by default. |
-| `FLEET_AGENT_API_KEY` | Optional shared `X-API-Key` for `/api/*`. |
+| `FLEET_AGENT_API_KEY` | Optional shared `X-API-Key` for every path except `/health` and `/ready`, including `/docs`. |
 
 The web app reads `VITE_API_BASE_URL` for the API origin and `VITE_API_KEY` when
 the API requires a shared key. `VITE_*` values are bundled into the browser;
