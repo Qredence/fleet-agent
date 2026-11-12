@@ -57,52 +57,64 @@ _ROUTE_WRAP_CHARS = "\"'`"
 
 
 class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
-    """
-    Select the smallest capability profile needed to resolve the request.
+    """Select the least-privileged route that can fulfill the current request.
 
-    direct: no external information or action is needed. Answer from your own
-    knowledge.
-    research: documentation, web information, time, or other read-only evidence.
-    artifact: research evidence for a managed report, without workspace inspection.
-    For workspace-to-report tasks select workspace_read (or an explicitly
-    required mutation route), and output_intent=managed_report. Report export
-    does not require workspace mutation privileges.
-    workspace_read: repository files must be inspected without modification.
-    workspace_write: repository files must be created, replaced, or edited.
-    workspace_shell: commands, tests, builds, scripts, or shell operations are
-    explicitly required.
+    Choose exactly one route: direct, research, artifact, workspace_read,
+    workspace_write, or workspace_shell.
 
-    Prefer the least-privileged profile. Do not select a mutating profile merely
-    because the user discusses code, commands, editing, or files conceptually.
+    Route definitions:
+    - direct: Answer from the conversation or your own knowledge; no external
+      lookup, repository inspection, or action is needed.
+    - research: Obtain read-only evidence from the web, product documentation,
+      current-time sources, or other external sources. Searching or fetching
+      product documentation is research, not repository inspection.
+    - artifact: Gather external research evidence to create or export a managed
+      report. Use this when the user requests a standalone managed report and
+      the needed evidence is not already supplied. Do not inspect the workspace
+      unless the user also asks for repository evidence.
+    - workspace_read: Inspect actual repository files, source trees, or test
+      suites without changing them.
+    - workspace_write: Create, replace, or edit repository file contents.
+    - workspace_shell: Run commands, tests, builds, scripts, or other shell
+      operations; also use it to delete, rename, or move files.
 
-    Deciding between direct and research: questions that ask you to explain,
-    summarize, compare, translate, or describe a concept, term, framework, or
-    tool are answerable from your own knowledge — choose direct — unless the
-    request explicitly needs outside or up-to-date evidence (a web search, a
-    documentation fetch, a lookup, the current time, or recent publications)
-    or must inspect this repository's actual files (a named file path, or
-    references to files in the repo, the source tree, or the test suite).
-    Answering a knowledge question correctly does not require gathering
-    evidence, so do not upgrade it to research.
+    Decision rules:
+    1. Use direct for ordinary knowledge questions: explaining, summarizing,
+       comparing, translating, or describing a concept, term, framework, or
+       tool. Do not use research merely because external evidence could
+       improve an answer.
+    2. Use research when the request explicitly needs a web search,
+       documentation lookup or fetch, current time, recent publications, or
+       other up-to-date/external evidence. A request about product
+       documentation remains research even if it mentions documentation,
+       manuals, or guides; it is not workspace_read unless it asks to inspect
+       files in this repository.
+    3. Use workspace_read only when the request requires findings from actual
+       repository contents, for example when it names a repository file or asks
+       about this repo, its source tree, or its test suite. A general question
+       about a tool or its documentation does not qualify.
+    4. Use artifact for a requested managed report or downloadable report that
+       requires new external research. For a report based on repository
+       contents, use workspace_read (or the explicitly required mutation
+       route) and set output_intent=managed_report. Exporting a report does not
+       itself require workspace mutation privileges.
+    5. Use workspace_write only when repository file contents must be created,
+       replaced, or edited. Editing or emptying content within a file is
+       workspace_write.
+    6. Use workspace_shell only when shell execution is explicitly required, or
+       an existing file must be deleted, renamed, or moved. Read-only file
+       searches and listings requested for findings use workspace_read, not
+       workspace_shell.
+    7. Do not infer a need for mutation or shell access merely because the user
+       discusses code, commands, editing, or files conceptually. Choose the
+       smallest profile that satisfies the actual request.
 
-    The conversation context contains available branch-local evidence. A
-    follow-up that only reformats or exports a previous answer uses direct;
-    do not inspect earlier named files again unless the current request asks
-    for a new check, correction, refresh, or change.
-    A standalone report requiring evidence that is not already supplied uses
-    artifact to gather research. Do not treat a request to create a report as
-    a general knowledge explanation merely because its topic is familiar.
-    Read-only file searches and listings use workspace_read when the request
-    asks for findings; workspace_shell requires actual command execution.
-    The verb "report" can mean explain findings in chat; output_intent remains
-    none unless the user asks to create/export a report or downloadable file.
-
-    Deciding between workspace_write and workspace_shell: the managed file
-    tools can create, read, and edit file contents, but none of them can
-    delete, rename, or move a file — only the shell can. So a request to
-    remove, delete, rename, or move an existing file requires workspace_shell.
-    Removing or changing content inside a file (a section, a line, a typo,
-    emptying the text) stays workspace_write.
+    Use conversation context and already-supplied evidence. A follow-up that
+    only reformats or exports a previous answer uses direct; do not re-inspect
+    earlier files unless the current request asks for a new check, correction,
+    refresh, or change. A request to "report" findings in chat is not a request
+    to create a managed report: set output_intent=none unless the user asks for
+    a report artifact or downloadable file.
     """
 
     conversation_context: str = dspy.InputField(
