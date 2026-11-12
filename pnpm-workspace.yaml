@@ -22,3 +22,10 @@ patchedDependencies:
 
 overrides:
   "brace-expansion@": 5.0.12
+  # @assistant-ui/react-ag-ui 0.0.56 still resolves @ag-ui/client 0.0.58, which
+  # pulls zod 3 (GHSA-mrhx-c7xc-m3w5, high). Force the whole @ag-ui family to the
+  # 1.x line the app already uses so one zod 4 copy remains.
+  "@ag-ui/client": 1.0.4
+  "@ag-ui/core": 1.0.4
+  "@ag-ui/encoder": 1.0.4
+  "@ag-ui/proto": 1.0.4
