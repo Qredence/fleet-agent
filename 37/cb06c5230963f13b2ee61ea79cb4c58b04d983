@@ -1,0 +1,14 @@
+README.md
+  h_f276322eb5eb9f 174-178,181-182,185-190,195-196,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37cb06c5230963f13b2ee61ea79cb4c58b04d983",
+  "prompts": {},
+  "humans": {
+    "h_f276322eb5eb9f": {
+      "author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
