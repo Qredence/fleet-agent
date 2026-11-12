@@ -1,0 +1,19 @@
+apps/api/app/agent/routing.py
+  s_cf0b7f74e56c68::t_070e3b3fe46349 60-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7487f8571e49520f9068f63ccbcff3c30e2986e",
+  "prompts": {},
+  "sessions": {
+    "s_cf0b7f74e56c68": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "d79af88e-967b-4a2d-9c05-2ce24c83440d",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
