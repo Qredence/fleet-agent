@@ -210,12 +210,20 @@ def test_live_synthesis_summary_starts_step_with_started_at():
     assert synthesis["publicSummary"] == "Drafting..."
     assert state["run"]["activeStepId"] == "step-synthesis"
 
-    # A second chunk must not restart or duplicate the running step.
+    # A second chunk below the coalescing threshold must not restart or
+    # duplicate the running step, and must not spend a patch: the state takes
+    # every token, the wire catches up once enough characters accumulate.
     started_at = synthesis["startedAt"]
     ops = reducer.live_synthesis_summary("Drafting the rest...")
-    state = _state_after(reducer, wire, ops)
+    assert ops == []
+    assert reducer.state["steps"][-1]["publicSummary"] == "Drafting the rest..."
+
+    # Growth past the threshold reports the accumulated summary in one patch.
+    grown = "Drafting the rest..." + "x" * 200
+    state = _state_after(reducer, wire, reducer.live_synthesis_summary(grown))
     wire.matches(reducer)
     assert state["steps"][-1]["startedAt"] == started_at
+    assert state["steps"][-1]["publicSummary"] == grown
     assert len([s for s in state["steps"] if s["id"] == "step-synthesis"]) == 1
 
     final = _state_after(reducer, wire, reducer.complete_run(successful_result()))
