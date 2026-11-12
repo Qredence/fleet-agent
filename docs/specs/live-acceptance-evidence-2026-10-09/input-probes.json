@@ -1,0 +1,56 @@
+[
+  {
+    "thread_id": "thread_8a9a966b5d76",
+    "repeat": 1,
+    "checks": [
+      {
+        "mixed": false,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      },
+      {
+        "mixed": true,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      }
+    ],
+    "reserved_runs": 0,
+    "historical_image_seeded": true
+  },
+  {
+    "thread_id": "thread_ecfa0da85d96",
+    "repeat": 2,
+    "checks": [
+      {
+        "mixed": false,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      },
+      {
+        "mixed": true,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      }
+    ],
+    "reserved_runs": 0,
+    "historical_image_seeded": true
+  },
+  {
+    "thread_id": "thread_1656305c18d9",
+    "repeat": 3,
+    "checks": [
+      {
+        "mixed": false,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      },
+      {
+        "mixed": true,
+        "http_status": 422,
+        "code": "unsupported_input_type"
+      }
+    ],
+    "reserved_runs": 0,
+    "historical_image_seeded": true
+  }
+]

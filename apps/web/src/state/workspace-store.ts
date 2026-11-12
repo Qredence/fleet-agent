@@ -19,6 +19,8 @@ interface WorkspaceState {
   processSheetOpen: boolean
 
   /** Artifact selected via an inline thread card (transient). */
+  selectedSourceId: string | null
+  setSelectedSourceId: (id: string | null) => void
   selectedArtifactId: string | null
 
   setTheme: (theme: ThemeMode) => void
@@ -81,6 +83,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       processPanelTab: 'activity',
       sidebarSheetOpen: false,
       processSheetOpen: false,
+      selectedSourceId: null,
+      setSelectedSourceId: (id) => set({ selectedSourceId: id }),
       selectedArtifactId: null,
 
       setTheme: (theme) => {

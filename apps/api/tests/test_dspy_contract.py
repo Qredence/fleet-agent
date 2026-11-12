@@ -17,7 +17,7 @@ from dspy.adapters.types.tool import Tool
 from app.agent.engine import AgentRunContext, DspyAgentEngine
 from app.agent.factory import build_dspy_engine
 from app.agent.tooling import create_dspy_tool
-from app.agent.tools import get_current_time, search_docs
+from app.agent.tools import get_current_time
 from app.agent.tools.docs import SearchDocsTool
 from app.agent.tools.report import WriteReportTool
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
@@ -70,7 +70,6 @@ def _production_tools() -> list[Tool]:
         max_bytes=1024,
     )
     return [
-        create_dspy_tool(search_docs, name="search_docs"),
         create_dspy_tool(get_current_time, name="get_current_time"),
         create_dspy_tool(SearchDocsTool(), name="search_docs"),
         create_dspy_tool(report, name="write_report"),
@@ -104,7 +103,7 @@ def test_constructed_tool_keeps_return_annotation():
 
 def test_native_function_call_descriptor_is_wellformed():
     """Adapters send format_as_litellm_function_call() verbatim on the wire."""
-    search = Tool(search_docs)
+    search = Tool(SearchDocsTool())
     descriptor = search.format_as_litellm_function_call()
     assert descriptor["type"] == "function"
     assert descriptor["function"]["name"] == "search_docs"
@@ -140,7 +139,7 @@ def test_user_tool_named_submit_is_rejected():
 
 
 def test_submit_tool_exposes_all_signature_outputs_in_order():
-    agent = dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=1)
+    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     submit_tool = agent.tools["submit"]
     expected = list(AgentSignature.output_fields)  # order is model-visible
     assert list(submit_tool.args) == expected
@@ -149,7 +148,7 @@ def test_submit_tool_exposes_all_signature_outputs_in_order():
 def test_reactv2_wraps_inputs_as_optional():
     """ReActV2's internal signature makes every user input `| None` so the
     loop can drop them across turns."""
-    agent = dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=1)
+    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     user_request = agent.react.signature.input_fields["user_request"]
     assert type(None) in get_args(user_request.annotation)
 
@@ -186,7 +185,7 @@ def _make_engine(steps: list, *, use_native: bool) -> DspyAgentEngine:
     lm = ScriptedLM(steps)
 
     def factory() -> dspy.ReActV2:
-        return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=3)
+        return dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=3)
 
     return DspyAgentEngine(
         program_factory=factory,
@@ -280,7 +279,7 @@ async def test_concurrent_runs_isolate_lm_and_usage():
         lm.model = f"scripted-{id(steps)}"  # distinct usage key per engine
 
         def factory() -> dspy.ReActV2:
-            return dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=2)
+            return dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=2)
 
         return DspyAgentEngine(
             program_factory=factory,
@@ -373,7 +372,7 @@ def test_reasoning_field_never_reaches_public_result():
     history events server-side. AgentRunResult carries `history` as a
     documented SERVER-ONLY field (never serialized to clients — enforced by
     test_dspy_engine.py), but no public field can carry raw reasoning."""
-    agent = dspy.ReActV2(AgentSignature, tools=[search_docs], max_iters=1)
+    agent = dspy.ReActV2(AgentSignature, tools=[SearchDocsTool()], max_iters=1)
     assert "next_thought" in agent.react.signature.output_fields
 
     from app.agent.engine import AgentRunResult

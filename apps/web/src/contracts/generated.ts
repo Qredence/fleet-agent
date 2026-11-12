@@ -20,7 +20,7 @@ export interface AgentWorkspaceState {
   /**
    * Contract version. Any breaking shape change increments it.
    */
-  schemaVersion: 1;
+  schemaVersion: 2;
   threadId: string;
   run: Run;
   steps: ProcessStep[];
@@ -41,7 +41,7 @@ export interface Run {
   finishedAt?: string;
   activeStepId?: string;
   /**
-   * DSPy ReActV2 termination reason, e.g. submit, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded.
+   * Why the run stopped: submit, synthesis, forced_submit, max_iters, empty_tool_calls, parse_error, context_window_exceeded, failed, timeout, cancelled, or server_restart.
    */
   terminationReason?: string;
   /**
@@ -49,6 +49,10 @@ export interface Run {
    */
   errorCode?: string;
   toolCallCount: number;
+  saveStatus: "pending" | "saved" | "failed" | "unknown";
+  evidenceStatus?: "complete" | "partial" | "insufficient";
+  evidenceStopReason?: string;
+  programVersion?: string;
 }
 export interface ProcessStep {
   id: string;

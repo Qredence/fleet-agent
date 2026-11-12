@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentCapabilities(BaseModel):
@@ -13,3 +13,6 @@ class AgentCapabilities(BaseModel):
         extra="forbid",
     )
     agent_mode: Literal["fixtures", "engine"]
+    supported_content_types: list[Literal["text"]] = Field(
+        ..., max_length=1, min_length=1
+    )

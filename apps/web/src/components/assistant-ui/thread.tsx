@@ -1,3 +1,7 @@
+import { MessageFeedbackControls } from "@/features/agent-runtime/message-feedback-controls";
+import { supportsTextFile } from "@/features/agent-runtime/text-attachments";
+import { RunSaveNotice } from '@/features/agent-runtime/run-save-notice';
+import { ToolPermissions } from '@/features/agent-runtime/tool-permissions';
 "use client";
 
 import {
@@ -45,6 +49,7 @@ import {
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useAuiEvent,
 } from "@assistant-ui/react";
 import {
   ArrowUpIcon,
@@ -63,8 +68,6 @@ import {
   SparklesIcon,
   SquareIcon,
   TerminalIcon,
-  ThumbsDown,
-  ThumbsUp,
 } from "lucide-react";
 import {
   ComposerModelPicker,
@@ -75,6 +78,7 @@ import {
 import {
   createContext,
   useContext,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -250,12 +254,13 @@ const ThreadRoot: FC<{
 const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext);
+  const messageId = useAuiState((s) => s.message.id);
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
-  return <AssistantMessageComponent />;
+  return <AssistantMessageComponent key={messageId} />;
 };
 
 const ThreadWelcome: FC = () => {
@@ -327,9 +332,21 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
 }) => {
   const shape = useShape();
   const readiness = useRunReadiness();
+  const [inputError, setInputError] = useState(false);
+  useAuiEvent("composer.attachmentAddError", () => setInputError(true));
+  const rejectUnsupportedFiles = (files: File[], event: { preventDefault(): void; stopPropagation(): void }) => {
+    if (files.some((file) => !supportsTextFile(file))) {
+      event.preventDefault();
+      event.stopPropagation();
+      setInputError(true);
+    } else if (files.length) setInputError(false);
+  };
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
-      <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col overflow-visible">
+      <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col overflow-visible"
+        onPasteCapture={(event) => rejectUnsupportedFiles(Array.from(event.clipboardData?.files ?? []), event)}
+        onDropCapture={(event) => rejectUnsupportedFiles(Array.from(event.dataTransfer?.files ?? []), event)}>
+        {inputError && <p role="alert" className="px-3 text-xs text-muted-foreground">The attachment was rejected. Only text files are supported.</p>}
         <ComposerTriggerPopovers workspaceContext={workspaceContext} />
         <ComposerPrimitive.AttachmentDropzone
           render={
@@ -371,9 +388,11 @@ const ComposerAction: FC = () => {
       <div className="flex min-w-0 items-center gap-1.5">
         <ComposerAddAttachment />
         <ComposerModelPicker />
+        <ToolPermissions />
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+        <RunSaveNotice />
         <ComposerContextIndicator />
 
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
@@ -600,31 +619,7 @@ const AssistantActionBar: FC = () => {
         </AuiIf>
       </ActionBarPrimitive.Copy>
 
-      <ActionBarPrimitive.FeedbackPositive
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 rounded-md text-muted-foreground hover:bg-surface-2 hover:text-foreground data-[submitted]:text-primary transition-colors"
-            aria-label="Good response"
-          />
-        }
-      >
-        <ThumbsUp className="size-3.5" />
-      </ActionBarPrimitive.FeedbackPositive>
-
-      <ActionBarPrimitive.FeedbackNegative
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 rounded-md text-muted-foreground hover:bg-surface-2 hover:text-foreground data-[submitted]:text-destructive transition-colors"
-            aria-label="Bad response"
-          />
-        }
-      >
-        <ThumbsDown className="size-3.5" />
-      </ActionBarPrimitive.FeedbackNegative>
+      <MessageFeedbackControls />
 
       <ActionBarPrimitive.Reload
         render={

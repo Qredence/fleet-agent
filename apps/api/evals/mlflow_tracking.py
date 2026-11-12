@@ -21,6 +21,7 @@ from typing import Any
 
 import dspy
 
+from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, coerce_route
 from app.services.mlflow_observability import connect, ensure_experiment
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ def log_routing_score(
     dataset_name: str | None = None,
     dataset_version: int | None = None,
     dataset_digest: str | None = None,
+    dimensions: dict[str, float] | None = None,
 ) -> str | None:
     """Log one scored routing-eval run (misses land as a JSON artifact).
 
@@ -155,8 +157,14 @@ def log_routing_score(
             tags["fleet.dataset.version"] = str(dataset_version)
         if dataset_digest:
             tags["fleet.dataset.digest"] = dataset_digest
-        under = sum(1 for miss in misses if miss[3] == 0.0)
-        over = len(misses) - under
+        over = sum(
+            1
+            for _, expected, actual, _ in misses
+            if actual in ROUTES
+            and ROUTE_CAPABILITIES[coerce_route(expected)]
+            <= ROUTE_CAPABILITIES[coerce_route(actual)]
+        )
+        under = len(misses) - over
         with mlflow.start_run(run_name="routing-score") as run:
             mlflow.set_tags(tags)
             mlflow.log_params(
@@ -167,6 +175,7 @@ def log_routing_score(
             )
             mlflow.log_metrics(
                 {
+                    **(dimensions or {}),
                     "mean_score": mean,
                     "misses": len(misses),
                     "under_selected": under,

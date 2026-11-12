@@ -1,0 +1,91 @@
+{
+  "corpus_version": "product-routing@2",
+  "examples": 8,
+  "model_identity": "fleet-gateway/system.ai.deepseek-v4-1-flash",
+  "dspy_version": "3.4.0",
+  "task_success": "Measured independently by deterministic execution tests",
+  "route_exact": 0.625,
+  "intent_exact": 0.875,
+  "cases": [
+    {
+      "group_id": "readme-report",
+      "request": "Inspect README.md and produce a downloadable report",
+      "expected_route": "workspace_read",
+      "actual_route": "workspace_read",
+      "route_exact": 1.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "readme-report",
+      "request": "Make that README analysis a report",
+      "expected_route": "direct",
+      "actual_route": "workspace_read",
+      "route_exact": 0.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "package-scripts",
+      "request": "Inspect package.json and report the available scripts",
+      "expected_route": "workspace_read",
+      "actual_route": "workspace_read",
+      "route_exact": 1.0,
+      "intent_exact": false,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "package-scripts",
+      "request": "Export that script analysis as a downloadable report",
+      "expected_route": "direct",
+      "actual_route": "workspace_read",
+      "route_exact": 0.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "replay-report",
+      "request": "Search the documentation for state replay and create a report artifact",
+      "expected_route": "artifact",
+      "actual_route": "artifact",
+      "route_exact": 1.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "replay-report",
+      "request": "Make the state replay findings a report",
+      "expected_route": "direct",
+      "actual_route": "artifact",
+      "route_exact": 0.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "explanation",
+      "request": "Explain managed report exports without creating anything",
+      "expected_route": "direct",
+      "actual_route": "direct",
+      "route_exact": 1.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    },
+    {
+      "group_id": "notes-update",
+      "request": "Update notes.md, then produce a downloadable summary report",
+      "expected_route": "workspace_write",
+      "actual_route": "workspace_write",
+      "route_exact": 1.0,
+      "intent_exact": true,
+      "capability_sufficiency": 1.0,
+      "invalid_output": 0.0
+    }
+  ]
+}

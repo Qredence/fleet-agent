@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 
 from ag_ui.core import RunAgentInput
 
-from app.agui.run_coordinator import RunCoordinator
+from app.agui.run import RunCoordinator
 from app.services.mock_run import load_fixture
 
 

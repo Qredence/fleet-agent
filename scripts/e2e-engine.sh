@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E engine matrix against a REAL provider (Databricks AI Gateway via .env).
+# Supplementary E2E engine matrix against the configured live provider.
 #
 # Requires:
 #   FLEET_AGENT_AGENT_MODE=engine in apps/api/.env
@@ -8,16 +8,27 @@
 #
 # Matrix:
 #   1. create project + thread via REST
-#   2. send search+report request → 2 tool calls, inline artifact card,
+#   2. send search+report request → evidence tools, inline artifact card,
 #      Artifacts tab entry (Ready) with working controlled download
 #   3. continuation probe referencing the previous turn (no new search)
 #   4. reload → messages + process state restored from persistence
 
 set -euo pipefail
 export AGENT_BROWSER_SESSION="${AGENT_BROWSER_SESSION:-fleet-e2e-engine}"
-API_BASE="${API_BASE:-http://localhost:8000}"
+API_BASE="${API_BASE:-http://localhost:8001}"
 WEB_BASE="${WEB_BASE:-http://localhost:5173}"
 AB="${AB:-npx agent-browser}"
+# Start the frontend with matching VITE_API_BASE_URL and VITE_API_KEY.
+# API_BASE/WEB_BASE select services; FLEET_AGENT_API_KEY authenticates REST probes.
+
+# Keep authentication headers out of output and browser navigation URLs.
+curl() {
+  if [[ -n "${FLEET_AGENT_API_KEY:-}" ]]; then
+    command curl -H "X-API-Key: ${FLEET_AGENT_API_KEY}" "$@"
+  else
+    command curl "$@"
+  fi
+}
 
 note() { printf '\n=== %s ===\n' "$*"; }
 die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -29,6 +40,9 @@ require_grep() {
   }
   printf 'ok: %s\n' "$label"
 }
+
+MODE=$(curl -fsS "$API_BASE/api/agent/capabilities" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent_mode"])')
+[[ "$MODE" == "engine" ]] || die "Expected an explicit engine service at API_BASE"
 
 note "setup: fresh thread via REST"
 BODY=$(curl -sS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E engine"}')
@@ -46,10 +60,9 @@ require_grep "$SNAP" "Message input" "composer present"
 
 TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
 
-note "phase 2: search + write_report live run"
-# The prompt must explicitly request a managed report artifact so the
-# capability router selects the artifact profile (write_report) rather than
-# the workspace_write profile.
+note "phase 2: search + managed report live run"
+# Evidence routing and managed output intent are selected together.
+# The application creates one Markdown report after synthesis.
 $AB fill "$TEXTBOX" "Search the docs for how AG-UI state sync works, then write a short markdown report about it as a managed report artifact." >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB click "$SEND" >/dev/null
@@ -70,14 +83,15 @@ MAIN=$($AB get text "main")
 require_grep "$MAIN" "tool call" "tool calls collapsed in thread"
 
 # The run may still be streaming after the artifact event lands; poll for the
-# settled "Completed" status before asserting.
+# settled "Saved" status before asserting.
 SNAP=""
 for _ in $(seq 1 40); do
   SNAP=$($AB snapshot -i)
-  grep -q "Completed" <<<"$SNAP" && break
+  grep -q "Saved" <<<"$SNAP" && break
   sleep 1.5
 done
-require_grep "$SNAP" "Completed" "run completed"
+require_grep "$SNAP" "Saved" "terminal persistence committed"
+require_grep "$SNAP" "download artifact:" "authenticated download control present"
 
 note "phase 3: artifact download via controlled URL"
 ARTIFACTS=$(curl -sS "$API_BASE/api/threads/$THREAD_ID/artifacts")
@@ -89,30 +103,33 @@ SIZE=$(wc -c < /tmp/e2e-artifact.md | tr -d ' ')
 printf 'ok: %s (%sB)\n' "download served $DOWNLOAD_URL" "$SIZE"
 
 note "phase 4: continuation across turns (no new search)"
-# The report filename is model-generated; fetch it from the artifact API.
+# The managed report filename is deterministic; verify its resource metadata.
 ARTIFACTS=$(curl -sS "$API_BASE/api/threads/$THREAD_ID/artifacts")
 REPORT_NAME=$(python3 -c "import json,sys;print(json.load(sys.stdin)[0]['filename'])" <<<"$ARTIFACTS" 2>/dev/null || python3 -c "import json,sys;print(json.load(sys.stdin)[0]['name'])" <<<"$ARTIFACTS")
 TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
-$AB fill "$TEXTBOX" "Without searching again: what did you just name that report file, and in one sentence what is its format?" >/dev/null
+$AB fill "$TEXTBOX" "Make that a report using the prior answer, without searching again." >/dev/null
 SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
 $AB click "$SEND" >/dev/null
 
-ANSWER=""
-for _ in $(seq 1 30); do
+# The prior card must not satisfy the follow-up assertion. Wait for a second
+# ready managed artifact, then inspect its owning run's tool count.
+for _ in $(seq 1 40); do
+  ARTIFACTS=$(curl -fsS "$API_BASE/api/threads/$THREAD_ID/artifacts")
+  READY_COUNT=$(python3 -c 'import json,sys; print(sum(a["status"] == "ready" for a in json.load(sys.stdin)))' <<<"$ARTIFACTS")
+  [[ "$READY_COUNT" == "2" ]] && break
   sleep 1.5
-  MAIN=$($AB get text "main")
-  ANSWER_LINE=$(grep -F "$REPORT_NAME" <<<"$MAIN" | tail -1 || true)
-  [[ -n "$ANSWER_LINE" ]] && break
 done
-require_grep "$ANSWER_LINE" "$REPORT_NAME" "continuation answer names the file"
-printf 'ok: %s\n' "continuation answered without re-searching"
+[[ "$READY_COUNT" == "2" ]] || die "follow-up did not create exactly one additional report"
+BOOTSTRAP=$(curl -fsS "$API_BASE/api/threads/$THREAD_ID/bootstrap")
+python3 -c 'import json,sys; s=json.load(sys.stdin)["agentState"]; assert s["run"]["toolCallCount"] == 0' <<<"$BOOTSTRAP" || die "follow-up unnecessarily executed tools"
+printf 'ok: continuation created a distinct report without re-searching\n'
 
 # Wait for the continuation run to settle before reloading; an in-flight run
 # is cancelled on disconnect, which would otherwise be restored as the final
 # process state.
 for _ in $(seq 1 40); do
   SNAP=$($AB snapshot -i)
-  grep -q "Completed" <<<"$SNAP" && break
+  grep -q "Saved" <<<"$SNAP" && break
   sleep 1.5
 done
 
@@ -123,7 +140,7 @@ MAIN=$($AB get text "main")
 require_grep "$MAIN" "Search the docs for how AG-UI state sync works" "user turn restored"
 require_grep "$MAIN" "AG-UI" "assistant content restored"
 SNAP=$($AB snapshot -i -c)
-require_grep "$SNAP" "Completed" "process state restored"
+require_grep "$SNAP" "Saved" "process state restored"
 require_grep "$SNAP" "$REPORT_NAME" "artifact restored in panel"
 
 echo "ALL ENGINE PHASES PASSED"

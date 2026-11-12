@@ -14,10 +14,12 @@ import pytest
 
 from app.agent.provider import MessagesFormat, ResponseFormat
 from app.api.threads import _SAFE_TERMINATION_REASONS, _safe_latest_run_payload
-from app.contracts import paths
-from app.contracts.error_codes import ERROR_MESSAGES
-from app.contracts.paths import load_contract_json
-from app.contracts.termination_reasons import TERMINATION_REASONS
+from app.contracts import constants as contracts
+from app.contracts.constants import (
+    ERROR_MESSAGES,
+    TERMINATION_REASONS,
+    load_contract_json,
+)
 from app.persistence.models import Run
 
 
@@ -63,6 +65,6 @@ def test_missing_contracts_file_names_the_expected_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: object
 ) -> None:
     """A missing contracts package must fail with the path, not a bare OSError."""
-    monkeypatch.setattr(paths, "CONTRACTS_DIR", tmp_path)
+    monkeypatch.setattr(contracts, "CONTRACTS_DIR", tmp_path)
     with pytest.raises(RuntimeError, match="error-codes.json"):
-        paths.load_contract_json("error-codes.json")
+        contracts.load_contract_json("error-codes.json")

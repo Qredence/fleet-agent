@@ -1,0 +1,84 @@
+[
+  {
+    "probe": "exhausted history write",
+    "status": 409,
+    "run_id": "eWL1PPt"
+  },
+  {
+    "probe": "saved history write",
+    "status": 200,
+    "run_id": "kNwmtHL"
+  },
+  {
+    "probe": "legacy_confirmed",
+    "schemaVersion": 2,
+    "run": {
+      "id": "L9i7gCx",
+      "status": "completed",
+      "startedAt": "2026-10-09T01:33:50.867000Z",
+      "finishedAt": "2026-10-09T01:33:54.564000Z",
+      "activeStepId": null,
+      "terminationReason": "synthesis",
+      "errorCode": null,
+      "toolCallCount": 0,
+      "saveStatus": "saved",
+      "evidenceStatus": "complete",
+      "evidenceStopReason": "submit",
+      "programVersion": "fleet-agent@2"
+    }
+  },
+  {
+    "probe": "legacy_unknown",
+    "schemaVersion": 2,
+    "run": {
+      "id": "OGNnjaM",
+      "status": "completed",
+      "startedAt": "2026-10-09T01:33:51.579000Z",
+      "finishedAt": "2026-10-09T01:33:55.378000Z",
+      "activeStepId": null,
+      "terminationReason": "synthesis",
+      "errorCode": null,
+      "toolCallCount": 0,
+      "saveStatus": "unknown",
+      "evidenceStatus": "complete",
+      "evidenceStopReason": "submit",
+      "programVersion": "fleet-agent@2"
+    }
+  },
+  {
+    "probe": "disconnect_before",
+    "schemaVersion": 2,
+    "run": {
+      "id": "CQ0fK7I",
+      "status": "cancelled",
+      "startedAt": "2026-10-09T01:34:39.939000Z",
+      "finishedAt": "2026-10-09T01:34:46.295000Z",
+      "activeStepId": null,
+      "terminationReason": "cancelled",
+      "errorCode": "run_cancelled",
+      "toolCallCount": 3,
+      "saveStatus": "saved",
+      "evidenceStatus": null,
+      "evidenceStopReason": null,
+      "programVersion": "fleet-agent@2"
+    }
+  },
+  {
+    "probe": "disconnect_after",
+    "schemaVersion": 2,
+    "run": {
+      "id": "L7D00Jy",
+      "status": "completed",
+      "startedAt": "2026-10-09T01:34:47.282000Z",
+      "finishedAt": "2026-10-09T01:34:50.447000Z",
+      "activeStepId": null,
+      "terminationReason": "synthesis",
+      "errorCode": null,
+      "toolCallCount": 0,
+      "saveStatus": "saved",
+      "evidenceStatus": "complete",
+      "evidenceStopReason": "submit",
+      "programVersion": "fleet-agent@2"
+    }
+  }
+]

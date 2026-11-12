@@ -1,0 +1,107 @@
+[
+  {
+    "name": "terminal_retry",
+    "thread_id": "thread_d39472fd56c4",
+    "stage": "terminal",
+    "remaining": 1,
+    "browser": {
+      "answer": "42",
+      "saved": true
+    },
+    "result": "passed"
+  },
+  {
+    "name": "terminal_exhausted",
+    "thread_id": "thread_8f949718d8fb",
+    "stage": "terminal",
+    "remaining": 2,
+    "browser": {
+      "answer": "25",
+      "saveFailed": true,
+      "copy": true,
+      "download": true,
+      "reloadText": "Failure final terminal exhausted\n\nWhat is 20 plus 5? Answer briefly.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k"
+    },
+    "result": "passed"
+  },
+  {
+    "name": "artifact_file",
+    "thread_id": "thread_34375c8393c1",
+    "stage": "artifact_file",
+    "remaining": 1,
+    "browser": {
+      "answerPreserved": true,
+      "artifactFailed": true,
+      "downloadButtons": 0
+    },
+    "result": "passed"
+  },
+  {
+    "name": "artifact_metadata",
+    "thread_id": "thread_856b9cb2d9c8",
+    "stage": "artifact_metadata",
+    "remaining": 1,
+    "browser": {
+      "answerPreserved": true,
+      "artifactFailed": true,
+      "downloadButtons": 0
+    },
+    "result": "passed"
+  },
+  {
+    "name": "disconnect_before",
+    "thread_id": "thread_2f9f1e44d62b",
+    "stage": null,
+    "remaining": 0,
+    "browser": {
+      "saved": true,
+      "cancelled": true
+    },
+    "result": "passed"
+  },
+  {
+    "name": "disconnect_after",
+    "thread_id": "thread_ee59dc991bac",
+    "stage": null,
+    "remaining": 0,
+    "browser": {
+      "savedAfterReload": true,
+      "text": "9 plus 9 is 18. Saved after reload."
+    },
+    "result": "passed"
+  },
+  {
+    "name": "legacy_confirmed",
+    "thread_id": "thread_fe7d8e3d8420",
+    "stage": null,
+    "remaining": 0,
+    "browser": {
+      "saved": true,
+      "answer": "15"
+    },
+    "result": "passed"
+  },
+  {
+    "name": "legacy_unknown",
+    "thread_id": "thread_945ca8094a05",
+    "stage": null,
+    "remaining": 0,
+    "browser": {
+      "saved": false,
+      "answer": "17"
+    },
+    "result": "passed"
+  },
+  {
+    "name": "trace_private_failure",
+    "thread_id": "thread_fb3afe349984",
+    "stage": null,
+    "remaining": 0,
+    "browser": {
+      "safeFailure": true,
+      "saved": true,
+      "text": "Trace private failure\n\nWhat is 6 plus 6? Answer briefly.\n\nFleet Agent\nThe agent run failed.\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k"
+    },
+    "result": "passed"
+  }
+]

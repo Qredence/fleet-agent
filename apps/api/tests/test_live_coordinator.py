@@ -9,15 +9,16 @@ import dspy
 from app.agent.callbacks import AgUiRunCallback
 from app.agent.engine import DspyAgentEngine
 from app.agent.event_bus import RunEventBus
-from app.agent.tools import search_docs
-from app.agui.live_coordinator import LiveDSPyCoordinator
+from app.agent.tools import get_current_time
+from app.agent.tools.docs import SearchDocsTool
+from app.agui.run import LiveDSPyCoordinator
 from app.contracts.domain import SourceResult
 from tests.helpers.scripted_lm import ScriptedLM, submit_call
 from tests.helpers.signatures import AgentSignature
 
 
 def scripted_builder(steps, tools=None, max_iters=4):
-    base_tools = tools if tools is not None else [search_docs]
+    base_tools = tools if tools is not None else [SearchDocsTool()]
 
     def build(
         bus: RunEventBus,
@@ -156,6 +157,7 @@ async def test_settlement_failure_after_answer_still_finishes_once():
     assert types[-1] == "RUN_FINISHED"
     assert "database driver detail" not in json.dumps(events)
     assert apply_state(events)["run"]["status"] == "completed"
+    assert apply_state(events)["run"]["saveStatus"] == "failed"
 
 
 async def test_unexpected_failure_still_emits_terminal_when_settlement_fails(caplog):
@@ -308,17 +310,16 @@ async def test_web_search_and_sources_are_transcript_custom_events():
         "sources",
         "web-search",
     ]
-    assert custom[0]["value"]["searching"] is True
-    assert custom[1]["value"]["sources"] == [
-        {"title": "DSPy docs", "domain": "dspy.ai"}
+    assert custom[0]["value"]["data"]["searching"] is True
+    assert custom[1]["value"]["data"]["sources"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai", "sourceId": "w1"}
     ]
-    assert custom[2]["value"]["results"] == [
-        {"title": "DSPy docs", "domain": "dspy.ai"}
+    assert custom[2]["value"]["data"]["results"] == [
+        {"title": "DSPy docs", "domain": "dspy.ai", "sourceId": "w1"}
     ]
 
 
 async def test_every_tool_event_carries_matching_ids():
-    from app.agent.tools import get_current_time
 
     steps = [
         [
@@ -327,7 +328,7 @@ async def test_every_tool_event_carries_matching_ids():
         ],
         [submit_call()],
     ]
-    events = await collect(steps, tools=[search_docs, get_current_time])
+    events = await collect(steps, tools=[SearchDocsTool(), get_current_time])
     starts = [e for e in events if e["type"] == "TOOL_CALL_START"]
     results = {e["toolCallId"] for e in events if e["type"] == "TOOL_CALL_RESULT"}
     assert len(starts) == 2

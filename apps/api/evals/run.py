@@ -39,6 +39,7 @@ from typing import Any
 
 import dspy
 
+from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, coerce_route
 from evals.agent_tool_routing import (
     CANONICAL_ROUTING_EXAMPLES,
     COERCE_EDGE_CASES,
@@ -159,12 +160,21 @@ def _run_mlflow_eval(lm: dspy.BaseLM, judge_model: str | None) -> None:
 
 def _print_routing_report(scored: RoutingScore) -> None:
     per_route: Counter[str] = Counter()
-    for _request, expected, _actual, score in scored.misses:
-        bucket = "under-selected" if score == 0.0 else "over-selected"
+    for _request, expected, actual, _score in scored.misses:
+        bucket = (
+            "invalid-output"
+            if actual not in ROUTES
+            else "over-selected"
+            if ROUTE_CAPABILITIES[coerce_route(expected)]
+            <= ROUTE_CAPABILITIES[coerce_route(actual)]
+            else "under-selected"
+        )
         per_route[f"{expected} ({bucket})"] += 1
 
     total = len(ROUTING_EXAMPLES)
     print(f"routing suite: {total} examples, mean score {scored.mean:.3f}")
+    for name, value in sorted(scored.metrics.items()):
+        print(f"  {name}: {value:.3f}")
     if scored.failures:
         # dspy.Evaluate scores a raised example 0 and keeps going, so a gateway
         # error looks like a wrong route in the mean. Say which it was.
@@ -263,6 +273,7 @@ def _run_routing(
         total=len(ROUTING_EXAMPLES),
         min_accuracy=min_accuracy,
         failures=scored.failures,
+        dimensions=scored.metrics,
         **(reference or {}),
     )
     if run_id:

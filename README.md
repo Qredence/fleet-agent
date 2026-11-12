@@ -56,8 +56,8 @@ The React frontend renders the conversation and the live process projection.
   `web_search` and `fetch_page` tools.
 - OpenAI-compatible model endpoints are supported through the configured DSPy
   model and base URL; routed behavior is evaluated offline with
-  `uv run python -m evals.run --suite routing` (see
-  [docs/dspy-agent.md](docs/dspy-agent.md)).
+  `uv run python -m evals.run --suite routing` (see the
+  [implementation specs](docs/specs/README.md)).
 
 ### Evidence and artifacts
 
@@ -218,8 +218,8 @@ format, messages format). Profiles stay in the browser and are sent per run as
 is enabled for local LLM servers) and never logs keys. OpenRouter remains a
 one-click OAuth preset. Provider resolution per run: browser profile, then
 `FLEET_AGENT_LLM_*`. Hosted providers use native DSPy `engine="lm15"`; custom
-base URLs use a run-owned native gateway router. See
-[the upgrade and migration notes](docs/backend-dependency-upgrade.md).
+base URLs use a run-owned native gateway router. See the
+[DSPy runtime simplification spec](docs/specs/006-dspy-runtime-simplification.md).
 
 The browser reads the authenticated `/api/agent/capabilities` endpoint before
 runs. Fixture mode works without provider setup and sends no provider headers;

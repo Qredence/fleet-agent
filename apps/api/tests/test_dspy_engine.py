@@ -20,14 +20,14 @@ def make_engine(
     max_iters: int = 4,
     cleanup: Callable[[], None] | None = None,
 ) -> DspyAgentEngine:
-    from app.agent.tools import search_docs
+    from app.agent.tools.docs import SearchDocsTool
 
     lm = ScriptedLM(steps)
 
     def factory() -> dspy.ReActV2:
         return dspy.ReActV2(
             AgentSignature,
-            tools=tools if tools is not None else [search_docs],
+            tools=tools if tools is not None else [SearchDocsTool()],
             max_iters=max_iters,
         )
 
@@ -155,7 +155,8 @@ async def test_one_tool_request_completes():
 
 
 async def test_multi_tool_request_completes():
-    from app.agent.tools import get_current_time, search_docs
+    from app.agent.tools import get_current_time
+    from app.agent.tools.docs import SearchDocsTool
 
     engine = make_engine(
         [
@@ -165,7 +166,7 @@ async def test_multi_tool_request_completes():
             ],
             [submit_call(answer="Used both tools.")],
         ],
-        tools=[search_docs, get_current_time],
+        tools=[SearchDocsTool(), get_current_time],
     )
     result = await run(engine)
 

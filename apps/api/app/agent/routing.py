@@ -14,6 +14,8 @@ from typing import Any, Literal, cast
 
 import dspy
 
+from app.agent.tool_registry import ToolCapability
+
 logger = logging.getLogger(__name__)
 
 ROUTER_STATE_FORMAT = "fleet-agent/router-state@1"
@@ -37,44 +39,94 @@ ROUTES: tuple[ToolRoute, ...] = (
     "workspace_shell",
 )
 
+ROUTE_CAPABILITIES: dict[ToolRoute, frozenset[ToolCapability]] = {
+    "direct": frozenset(),
+    "research": frozenset({"retrieval", "utility"}),
+    "artifact": frozenset({"retrieval", "utility", "artifact"}),
+    "workspace_read": frozenset({"retrieval", "utility", "workspace_read"}),
+    "workspace_write": frozenset(
+        {"retrieval", "utility", "workspace_read", "workspace_write"}
+    ),
+    "workspace_shell": frozenset(
+        {"retrieval", "utility", "workspace_read", "workspace_write", "shell"}
+    ),
+}
+
 _ROUTE_WRAP_CHARS = "\"'`"
 """Quotes LMs sometimes wrap around a route token."""
 
 
 class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
+    """Select the least-privileged route that can fulfill the current request.
+
+    Choose exactly one route: direct, research, artifact, workspace_read,
+    workspace_write, or workspace_shell.
+
+    Route definitions:
+    - direct: Answer from the conversation or your own knowledge; no external
+      lookup, repository inspection, or action is needed.
+    - research: Obtain read-only evidence from the web, product documentation,
+      current-time sources, or other external sources. Searching or fetching
+      product documentation is research, not repository inspection.
+    - artifact: Gather external research evidence to create or export a managed
+      report. Use this when the user requests a standalone managed report and
+      the needed evidence is not already supplied. Do not inspect the workspace
+      unless the user also asks for repository evidence.
+    - workspace_read: Inspect actual repository files, source trees, or test
+      suites without changing them.
+    - workspace_write: Create, replace, or edit repository file contents.
+    - workspace_shell: Run commands, tests, builds, scripts, or other shell
+      operations; also use it to delete, rename, or move files.
+
+    Decision rules:
+    1. Use direct for ordinary knowledge questions: explaining, summarizing,
+       comparing, translating, or describing a concept, term, framework, or
+       tool. Do not use research merely because external evidence could
+       improve an answer.
+    2. Use research when the request explicitly needs a web search,
+       documentation lookup or fetch, current time, recent publications, or
+       other up-to-date/external evidence. A request about product
+       documentation remains research even if it mentions documentation,
+       manuals, or guides; it is not workspace_read unless it asks to inspect
+       files in this repository.
+    3. Use workspace_read only when the request requires findings from actual
+       repository contents, for example when it names a repository file or asks
+       about this repo, its source tree, or its test suite. A general question
+       about a tool or its documentation does not qualify.
+    4. Use artifact for a requested managed report or downloadable report that
+       requires new external research. For a report based on repository
+       contents, use workspace_read (or the explicitly required mutation
+       route) and set output_intent=managed_report. Exporting a report does not
+       itself require workspace mutation privileges.
+    5. Use workspace_write only when repository file contents must be created,
+       replaced, or edited. Editing or emptying content within a file is
+       workspace_write.
+    6. Use workspace_shell only when shell execution is explicitly required, or
+       an existing file must be deleted, renamed, or moved. Read-only file
+       searches and listings requested for findings use workspace_read, not
+       workspace_shell.
+    7. Do not infer a need for mutation or shell access merely because the user
+       discusses code, commands, editing, or files conceptually. Choose the
+       smallest profile that satisfies the actual request.
+
+    Use conversation context and already-supplied evidence. A follow-up that
+    only reformats or exports a previous answer uses direct; do not re-inspect
+    earlier files unless the current request asks for a new check, correction,
+    refresh, or change. A request to "report" findings in chat is not a request
+    to create a managed report: set output_intent=none unless the user asks for
+    a report artifact or downloadable file.
     """
-    Select the smallest capability profile needed to resolve the request.
 
-    direct: no external information or action is needed. Answer from your own
-    knowledge.
-    research: documentation, web information, time, or other read-only evidence.
-    artifact: the request explicitly asks to create a managed report or artifact.
-    workspace_read: repository files must be inspected without modification.
-    workspace_write: repository files must be created, replaced, or edited.
-    workspace_shell: commands, tests, builds, scripts, or shell operations are
-    explicitly required.
-
-    Prefer the least-privileged profile. Do not select a mutating profile merely
-    because the user discusses code, commands, editing, or files conceptually.
-
-    Deciding between direct and research: questions that ask you to explain,
-    summarize, compare, translate, or describe a concept, term, framework, or
-    tool are answerable from your own knowledge — choose direct — unless the
-    request explicitly needs outside or up-to-date evidence (a web search, a
-    documentation fetch, a lookup, the current time, or recent publications)
-    or must inspect this repository's actual files (a named file path, or
-    references to files in the repo, the source tree, or the test suite).
-    Answering a knowledge question correctly does not require gathering
-    evidence, so do not upgrade it to research.
-
-    Deciding between workspace_write and workspace_shell: the managed file
-    tools can create, read, and edit file contents, but none of them can
-    delete, rename, or move a file — only the shell can. So a request to
-    remove, delete, rename, or move an existing file requires workspace_shell.
-    Removing or changing content inside a file (a section, a line, a typo,
-    emptying the text) stays workspace_write.
-    """
-
+    conversation_context: str = dspy.InputField(
+        desc="Bounded selected-branch conversation context, newest turns first.",
+        default="",
+    )
+    output_intent: str = dspy.OutputField(
+        desc=(
+            "none or managed_report. Select managed_report for a requested "
+            "downloadable report; select its evidence route independently."
+        )
+    )
     user_request: str = dspy.InputField(desc="The user's current request.")
     route: str = dspy.OutputField(
         desc="The minimum capability profile required for the task."

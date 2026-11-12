@@ -28,6 +28,6 @@ Hosted Training docs: https://docs.primeintellect.ai/hosted-training
 ## Not to be confused with
 
 - `apps/api/evals/` — Fleet Agent's own offline DSPy evaluation/optimization
-  harness (deterministic scorers, MLflow tracking). See `docs/dspy-agent.md`.
+  harness (deterministic scorers, MLflow tracking). See `docs/specs/README.md`.
 - `apps/api/.env` — the API server's runtime configuration (see
   `apps/api/.env.example`).

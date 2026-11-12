@@ -91,7 +91,7 @@ class TestLeastPrivilegeScorer:
         assert route_least_privilege(**_row("workspace_read", "workspace_read")) == 1.0
         over = route_least_privilege(**_row("workspace_shell", "workspace_read"))
 
-        assert over == 0.35
+        assert over == 0.0
         assert route_least_privilege(**_row("direct", "workspace_write")) == 0.0
 
     def test_agrees_with_the_shared_metric(self) -> None:
@@ -214,7 +214,7 @@ class TestGenaiEvaluate:
 
         The predict function answers every row with ``workspace_shell``, the
         most capable profile, so the metric has to return 1.0 for the one row
-        that needs it and 0.35 (the over-selection penalty) for the other five.
+        that needs it and 0.0 (the over-selection penalty) for the other five.
         """
         import mlflow
         from mlflow.tracking import MlflowClient
@@ -233,7 +233,7 @@ class TestGenaiEvaluate:
             data=dataset, scorers=deterministic_scorers(), predict_fn=predict
         )
 
-        expected_route_mean = (5 * 0.35 + 1.0) / len(examples)
+        expected_route_mean = (5 * 0.0 + 1.0) / len(examples)
         metrics = {name: float(value) for name, value in result.metrics.items()}
         assert metrics["fleet_route_least_privilege/mean"] == pytest.approx(
             expected_route_mean

@@ -1,89 +1,84 @@
-import { HttpAgent } from '@ag-ui/client'
+import { FeedbackThreadContext } from "./message-feedback-controls";
+import { attachmentAdapter } from "./text-attachments";
+export { attachmentAdapter } from "./text-attachments";
+import { HttpAgent } from "@ag-ui/client";
 import {
   AssistantRuntimeProvider,
-  CompositeAttachmentAdapter,
   type FeedbackAdapter,
-  SimpleImageAttachmentAdapter,
-  SimpleTextAttachmentAdapter,
-} from '@assistant-ui/react'
-import { useAgUiRuntime } from '@assistant-ui/react-ag-ui'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+} from "@assistant-ui/react";
+import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   buildHistoryAdapter,
   HistoryHeadSync,
   type UserMessagePersistedHandler,
   waitForThreadHistoryWrites,
-} from '@/features/threads/assistant-thread-adapter'
-import { AgUiRuntimePresenceProvider } from '@/features/agent-runtime/ag-ui-presence'
-import { ArtifactDataUIRegistration } from '@/features/artifacts/artifact-data-ui'
-import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
-import type { ThreadBootstrap } from '@/features/threads/threads-api'
-import { API_BASE_URL, API_KEY } from '@/lib/env'
-import { refreshAgentCapabilities } from '@/features/agent-runtime/agent-capabilities'
-import { getAgentProviderHeaders } from '@/features/providers/providers-store'
+} from "@/features/threads/assistant-thread-adapter";
+import { AgUiRuntimePresenceProvider } from "@/features/agent-runtime/ag-ui-presence";
+import { ArtifactDataUIRegistration } from "@/features/artifacts/artifact-data-ui";
+import { InlineAgentDataUIRegistration } from "@/features/agent-runtime/inline-agent-data-ui";
+import type { ThreadBootstrap } from "@/features/threads/threads-api";
+import { apiJsonFetch } from "@/lib/api-client";
+import { queryClient } from "@/lib/query-client";
+import { ApprovalContext } from "./tool-permissions";
+import { API_BASE_URL, API_KEY } from "@/lib/env";
+import { refreshAgentCapabilities } from "@/features/agent-runtime/agent-capabilities";
+import { getAgentProviderHeaders } from "@/features/providers/providers-store";
 
-const AGENT_URL = `${API_BASE_URL}/api/agent`
-const AGENT_PATHNAME = new URL(AGENT_URL).pathname
+const AGENT_URL = `${API_BASE_URL}/api/agent`;
+const AGENT_PATHNAME = new URL(AGENT_URL).pathname;
 
-function isAgentRunRequest(url: string | URL, requestInit: RequestInit): boolean {
-  if (requestInit.method?.toUpperCase() !== 'POST') return false
+function isAgentRunRequest(
+  url: string | URL,
+  requestInit: RequestInit,
+): boolean {
+  if (requestInit.method?.toUpperCase() !== "POST") return false;
   try {
     // Compare against the agent URL's own pathname so path-prefixed API
     // base URLs (e.g. VITE_API_BASE_URL="https://host/fleet") still match.
-    return new URL(String(url), AGENT_URL).pathname === AGENT_PATHNAME
+    return new URL(String(url), AGENT_URL).pathname === AGENT_PATHNAME;
   } catch {
-    return String(url)
-      .split('?', 1)[0]
-      .endsWith(AGENT_PATHNAME)
+    return String(url).split("?", 1)[0].endsWith(AGENT_PATHNAME);
   }
 }
 
 /** Add browser-owned provider headers only to the agent POST request. */
 export function createAgentFetch(
   threadId?: string,
+  takeApprovals: () => string[] = () => [],
 ): (url: string, requestInit: RequestInit) => Promise<Response> {
   return async (url, requestInit) => {
-    const isAgentRequest = isAgentRunRequest(url, requestInit)
+    const isAgentRequest = isAgentRunRequest(url, requestInit);
     if (threadId && isAgentRequest) {
-      await waitForThreadHistoryWrites(threadId)
+      await waitForThreadHistoryWrites(threadId);
     }
-    const headers = new Headers(requestInit.headers)
+    const headers = new Headers(requestInit.headers);
     if (isAgentRequest) {
       // Browser-owned provider profile headers (BYOK): only ever attached to
       // the agent run POST, never to other Fleet API resources.
-      const capabilities = await refreshAgentCapabilities()
+      const body = JSON.parse(
+        typeof requestInit.body === "string" ? requestInit.body : "{}",
+      );
+      body.forwardedProps = {
+        ...body.forwardedProps,
+        approvedTools: takeApprovals(),
+      };
+      requestInit = { ...requestInit, body: JSON.stringify(body) };
+      const capabilities = await refreshAgentCapabilities();
       // Never send stored credentials to fixture runs, including caller-supplied headers.
-      const providerHeaderNames = Array.from(headers.keys()).filter((name) => name.startsWith('x-llm-'))
-      for (const name of providerHeaderNames) headers.delete(name)
-      const providerHeaders = capabilities.agent_mode === 'fixtures'
-        ? {}
-        : getAgentProviderHeaders()
+      const providerHeaderNames = Array.from(headers.keys()).filter((name) =>
+        name.startsWith("x-llm-"),
+      );
+      for (const name of providerHeaderNames) headers.delete(name);
+      const providerHeaders =
+        capabilities.agent_mode === "fixtures" ? {} : getAgentProviderHeaders();
       for (const [k, v] of Object.entries(providerHeaders)) {
-        headers.set(k, v)
+        headers.set(k, v);
       }
     }
-    return fetch(url, { ...requestInit, headers })
-  }
-}
-
-// Attachments stay local to the assistant-ui runtime. The simple adapters
-// provide picker/drop previews and convert supported files into message parts
-// at send time; no upload endpoint or persistence is involved.
-const attachmentAdapter = new CompositeAttachmentAdapter([
-  new SimpleImageAttachmentAdapter(),
-  new SimpleTextAttachmentAdapter(),
-])
-
-// Message feedback is tracked in memory only: the backend has no feedback
-// endpoint yet, so thumbs state lives for the current session and resets on
-// reload. Swap in a persistent adapter when feedback storage lands.
-const feedbackByMessageId = new Map<string, 'positive' | 'negative'>()
-
-const feedbackAdapter: FeedbackAdapter = {
-  submit: ({ message, type }) => {
-    feedbackByMessageId.set(message.id, type)
-  },
+    return fetch(url, { ...requestInit, headers });
+  };
 }
 
 /**
@@ -101,34 +96,63 @@ export function AgentRuntimeProvider({
   onUserMessagePersisted,
   children,
 }: {
-  threadId?: string
-  bootstrap?: ThreadBootstrap
-  onUserMessagePersisted?: UserMessagePersistedHandler
-  children: ReactNode
+  threadId?: string;
+  bootstrap?: ThreadBootstrap;
+  onUserMessagePersisted?: UserMessagePersistedHandler;
+  children: ReactNode;
 }) {
-  const onUserMessagePersistedRef = useRef(onUserMessagePersisted)
+  const onUserMessagePersistedRef = useRef(onUserMessagePersisted);
 
   useEffect(() => {
-    onUserMessagePersistedRef.current = onUserMessagePersisted
-  }, [onUserMessagePersisted])
+    onUserMessagePersistedRef.current = onUserMessagePersisted;
+  }, [onUserMessagePersisted]);
 
+  const [approved, setApproved] = useState<string[]>([]);
+  const approvalRef = useRef(approved);
+  approvalRef.current = approved;
+  const [feedbackError, setFeedbackError] = useState(false);
+  const feedbackAdapter = useMemo<FeedbackAdapter>(
+    () => ({
+      submit: ({ message, type }) => {
+        if (!threadId) return;
+        void apiJsonFetch(
+          `/api/threads/${threadId}/messages/${message.id}/feedback`,
+          "PUT",
+          { messageId: message.id, type },
+        )
+          .then(() => {
+            setFeedbackError(false);
+            return queryClient.invalidateQueries({
+              queryKey: ["message-feedback", threadId],
+            });
+          })
+          .catch(() => setFeedbackError(true));
+      },
+    }),
+    [threadId],
+  );
   const agent = useMemo(
     () =>
       new HttpAgent({
         url: AGENT_URL,
-        fetch: createAgentFetch(threadId),
-        ...(API_KEY ? { headers: { 'X-API-Key': API_KEY } } : {}),
+        fetch: createAgentFetch(threadId, () => {
+          const selected = approvalRef.current;
+          approvalRef.current = [];
+          setApproved([]);
+          return selected;
+        }),
+        ...(API_KEY ? { headers: { "X-API-Key": API_KEY } } : {}),
       }),
     [threadId],
-  )
+  );
 
   // Bind the agent's wire threadId to the URL thread. Without this the client
   // invents a fresh id and engine mode 404s (runs belong to persisted threads).
   useEffect(() => {
     if (threadId) {
-      agent.threadId = threadId
+      agent.threadId = threadId;
     }
-  }, [agent, threadId])
+  }, [agent, threadId]);
 
   const adapters = useMemo(
     () => ({
@@ -147,7 +171,7 @@ export function AgentRuntimeProvider({
     // adapter identity stable after mount so cache invalidation from an
     // append/update cannot trigger a second runtime load.
     [threadId],
-  )
+  );
 
   const runtime = useAgUiRuntime({
     agent,
@@ -156,26 +180,35 @@ export function AgentRuntimeProvider({
     unstable_enableMessageQueue: true,
     onError: (error) => {
       // Structured client error reporting arrives with observability (PR 9).
-      console.error('[ag-ui] run error', error)
+      console.error("[ag-ui] run error", error);
     },
     onCancel: () => {
-      console.info('[ag-ui] run cancelled')
+      console.info("[ag-ui] run cancelled");
     },
-  })
+  });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <AgUiRuntimePresenceProvider>
-        <ArtifactDataUIRegistration />
-        <InlineAgentDataUIRegistration />
-        {threadId ? (
-          <HistoryHeadSync
-            threadId={threadId}
-            initialHeadId={bootstrap?.messageRepository?.headId ?? null}
-          />
-        ) : null}
-        {children}
-      </AgUiRuntimePresenceProvider>
-    </AssistantRuntimeProvider>
-  )
+    <FeedbackThreadContext.Provider value={threadId}>
+      <ApprovalContext.Provider value={{ approved, setApproved }}>
+        <AssistantRuntimeProvider runtime={runtime}>
+          {feedbackError && (
+            <p role="alert">
+              Feedback could not be saved. Please submit it again.
+            </p>
+          )}
+          <AgUiRuntimePresenceProvider>
+            <ArtifactDataUIRegistration />
+            <InlineAgentDataUIRegistration />
+            {threadId ? (
+              <HistoryHeadSync
+                threadId={threadId}
+                initialHeadId={bootstrap?.messageRepository?.headId ?? null}
+              />
+            ) : null}
+            {children}
+          </AgUiRuntimePresenceProvider>
+        </AssistantRuntimeProvider>
+      </ApprovalContext.Provider>
+    </FeedbackThreadContext.Provider>
+  );
 }

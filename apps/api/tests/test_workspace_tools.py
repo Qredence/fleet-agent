@@ -223,3 +223,34 @@ def test_bash_environment_is_pinned_to_the_system_allowlist(tmp_path: Path):
     # unreachable; the failure is the plain shell "command not found".
     missing = tools.bash("command -v mise || echo missing")
     assert missing.endswith("missing")
+
+
+def test_workspace_read_sources_are_bounded_scrubbed_and_cleared(tmp_path):
+    from app.agent.tools.workspace import WorkspacePolicy, WorkspaceTools
+
+    (tmp_path / "facts.md").write_text(
+        "Project Aster\napi_key=sk-1234567890abcdefgh1234567890\n"
+    )
+    tools = WorkspaceTools(WorkspacePolicy(root=tmp_path))
+    tools.read("facts.md")
+    source = tools.last_sources[0]
+    assert source.title == "facts.md"
+    assert source.source_type == "repository"
+    from app.contracts.agent_state import AgentSource
+
+    AgentSource.model_validate(
+        {
+            "id": source.id,
+            "title": source.title,
+            "sourceType": source.source_type,
+            "excerpt": source.excerpt,
+        }
+    )
+    assert source.uri is None
+    assert "sk-1234567890abcdefgh1234567890" not in source.excerpt
+    assert str(tmp_path) not in source.excerpt
+    tools.read("facts.md", start_line=100, end_line=101)
+    assert tools.last_sources == []
+    with pytest.raises(ValueError):
+        tools.read("../outside.md")
+    assert tools.last_sources == []

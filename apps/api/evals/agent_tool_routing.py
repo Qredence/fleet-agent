@@ -4,8 +4,8 @@ Two populations: canonical examples pin the unambiguous core of each route,
 and adversarial examples attack the two failure modes that matter —
 over-selection (granting mutation when discussion was enough) and
 under-selection (phrasing a mutation as a question or a read).  The metric
-rewards least privilege, tolerates over-selection at reduced score, and
-scores under-selection as total failure because the run cannot succeed.
+reports exact match, validity, sufficiency, and over-selection separately.
+Task execution success requires the independent product acceptance cases.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from typing import Any, Literal
 
 import dspy
 
-from app.agent.routing import ROUTES, ToolRoute, coerce_route
+from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, ToolRoute, coerce_route
+from app.agent.tool_registry import TOOL_SPECS
 
 
 def _example(request: str, route: ToolRoute) -> dspy.Example:
@@ -120,15 +121,6 @@ ROUTING_EXAMPLES: list[dspy.Example] = [
     *ADVERSARIAL_ROUTING_EXAMPLES,
 ]
 
-_ROUTE_RANK: dict[ToolRoute, int] = {
-    "direct": 0,
-    "research": 1,
-    "artifact": 1,
-    "workspace_read": 2,
-    "workspace_write": 3,
-    "workspace_shell": 4,
-}
-
 
 def routing_metric(
     gold: dspy.Example,
@@ -146,29 +138,65 @@ def routing_metric(
     """
     del trace, pred_name, pred_trace, program_trace
     expected = coerce_route(getattr(gold, "expected_route", None))
-    actual_value = getattr(pred, "route", None)
-    actual = coerce_route(actual_value)
-    if actual == expected:
-        return dspy.Prediction(
-            score=1.0,
-            feedback="Correctly selected the minimum required capability profile.",
+    raw = getattr(pred, "route", None)
+    actual = coerce_route(raw)
+    valid = (
+        isinstance(raw, str)
+        and raw.strip().strip("\"'`").lower().replace("-", "_").replace(" ", "_")
+        in ROUTES
+    )
+    required = frozenset(
+        getattr(gold, "required_capabilities", ROUTE_CAPABILITIES[expected])
+    )
+    required_tools = getattr(gold, "required_tools", None)
+    if required_tools is not None:
+        required = frozenset(
+            TOOL_SPECS[name].capability if name in TOOL_SPECS else "unsupported"
+            for name in required_tools
         )
-
-    expected_rank = _ROUTE_RANK[expected]
-    actual_rank = _ROUTE_RANK[actual]
-    if actual_rank > expected_rank:
-        score = 0.35
-        feedback = (
-            f"Selected {actual}, which grants more capability than necessary. "
-            f"The request only requires {expected}."
+    expected_intent = getattr(gold, "expected_output_intent", None)
+    if expected_intent == "managed_report":
+        required = required | {"artifact"}
+    exposed = getattr(pred, "exposed_tools", None)
+    available = (
+        frozenset(
+            metadata.capability
+            for metadata in TOOL_SPECS.values()
+            if metadata.capability in ROUTE_CAPABILITIES[actual]
         )
-    else:
-        score = 0.0
-        feedback = (
-            f"Selected {actual}, which cannot complete the requested operation. "
-            f"At least {expected} is required."
+        if exposed is None
+        else frozenset(
+            TOOL_SPECS[name].capability for name in exposed if name in TOOL_SPECS
         )
-    return dspy.Prediction(score=score, feedback=feedback)
+    )
+    if getattr(pred, "output_intent", None) == "managed_report":
+        available = available | {"artifact"}
+    intent = getattr(pred, "output_intent", "none")
+    valid = valid and intent in {"none", "managed_report"}
+    intent_exact = expected_intent is None or intent == expected_intent
+    authorized = getattr(gold, "authorized_tools", None)
+    observed = set(getattr(pred, "exposed_tools", []) or []) | set(
+        getattr(pred, "executed_tools", []) or []
+    )
+    authorization_failure = authorized is not None and bool(observed - set(authorized))
+    exact = valid and actual == expected
+    sufficient = valid and required <= available
+    over_selection = valid and bool(available - required)
+    return dspy.Prediction(
+        score=float(exact and intent_exact and not authorization_failure),
+        authorization_failure=float(authorization_failure),
+        output_intent_accuracy=float(intent_exact),
+        exact_match=float(exact),
+        invalid_output_rate=float(not valid),
+        capability_sufficiency=float(sufficient),
+        over_selection=float(over_selection),
+        feedback="Correct minimum capabilities."
+        if exact
+        else (
+            f"Expected {expected}; selected {raw!r}. "
+            f"Required capabilities: {sorted(required)}."
+        ),
+    )
 
 
 def routing_score(gold: dspy.Example, pred: dspy.Prediction) -> float:
@@ -273,7 +301,7 @@ def score_seeded_router() -> tuple[float, list[tuple[str, str, str, float]], int
     from tests.helpers.scripted_lm import ScriptedLM
 
     steps = [
-        {"content": f'{{"route": "{example.expected_route}"}}'}
+        {"content": f'{{"route": "{example.expected_route}", "output_intent": "none"}}'}
         for example in CANONICAL_ROUTING_EXAMPLES
     ]
     lm = ScriptedLM(steps)

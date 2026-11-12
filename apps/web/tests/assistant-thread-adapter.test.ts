@@ -31,7 +31,7 @@ describe('assistant-ui history adapter', () => {
     const adapter = buildHistoryAdapter(
       'thread-1',
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         thread: {} as never,
         messageRepository: { headId: null, messages: [] },
         messages: [],
@@ -61,7 +61,7 @@ describe('assistant-ui history adapter', () => {
     const adapter = buildHistoryAdapter(
       'thread-1',
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         thread: {} as never,
         messageRepository: { headId: null, messages: [] },
         messages: [],
@@ -85,7 +85,7 @@ describe('assistant-ui history adapter', () => {
 
   it('restores legacy flat messages as one linear sequence', async () => {
     const bootstrap = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       thread: {} as never,
       messages: [
         { id: 'user-1', role: 'user', content: 'First question' },
@@ -119,7 +119,7 @@ describe('assistant-ui history adapter', () => {
   it('consumes a failed write barrier so a later send is not permanently blocked', async () => {
     persistThreadMessageMock.mockRejectedValueOnce(new Error('offline'))
     const adapter = buildHistoryAdapter('thread-1', {
-      schemaVersion: 1,
+      schemaVersion: 2,
       thread: {} as never,
       messageRepository: { headId: null, messages: [] },
       messages: [],
@@ -145,7 +145,7 @@ describe('assistant-ui history adapter', () => {
 
   it('keeps reasoning hidden when decoding ag-ui/v1 messages', async () => {
     const repository = await buildHistoryAdapter('thread-1', {
-      schemaVersion: 1,
+      schemaVersion: 2,
       thread: {} as never,
       messageRepository: {
         headId: 'assistant-1',
@@ -179,7 +179,7 @@ describe('assistant-ui history adapter', () => {
 
   it('strips reasoning parts when decoding exact aui/v0 messages', async () => {
     const bootstrap = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       thread: {} as never,
       messageRepository: {
         headId: 'assistant-1',
@@ -251,4 +251,17 @@ describe('assistant-ui history adapter', () => {
       signal: controllerB.signal,
     })
   })
+})
+
+it('leaves engine runtime assistant persistence to terminal settlement', async () => {
+  const { queryClient } = await import('@/lib/query-client')
+  const { agentCapabilitiesOptions } = await import('@/features/agent-runtime/agent-capabilities')
+  queryClient.setQueryData(agentCapabilitiesOptions.queryKey, { agent_mode: 'engine', supported_content_types: ['text'] })
+  try {
+    const adapter = buildHistoryAdapter('owned-run')
+    await adapter.append({ parentId: 'user', message: { id: 'msg-run-owned', role: 'assistant', content: [{ type: 'text', text: 'Visible answer' }] } } as never)
+    expect(persistThreadMessageMock).not.toHaveBeenCalled()
+  } finally {
+    queryClient.removeQueries({ queryKey: agentCapabilitiesOptions.queryKey })
+  }
 })

@@ -1,0 +1,29 @@
+{
+  "backend": {
+    "8001": {
+      "agent_mode": "engine",
+      "supported_content_types": [
+        "text"
+      ]
+    },
+    "8002": {
+      "agent_mode": "engine",
+      "supported_content_types": [
+        "text"
+      ]
+    }
+  },
+  "normalTracingDefault": false,
+  "restoredFrontendOrigin": "http://localhost:5173",
+  "restoredBackendOrigin": "http://localhost:8001",
+  "restoredCapabilities": {
+    "agent_mode": "engine",
+    "supported_content_types": [
+      "text"
+    ]
+  },
+  "cleanup": "complete",
+  "isolatedServiceRemoved": true,
+  "validationDatabaseRemoved": true,
+  "disposableFilesRemoved": true
+}

@@ -9,8 +9,5 @@
   "failed",
   "timeout",
   "cancelled",
-  "server_restart",
-  "approval_required",
-  "approval_expired",
-  "approval_invalid"
+  "server_restart"
 ]

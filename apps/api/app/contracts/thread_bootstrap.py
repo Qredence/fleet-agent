@@ -66,7 +66,7 @@ class ThreadBootstrap(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    schemaVersion: Literal[1] = Field(
+    schemaVersion: Literal[2] = Field(
         ..., description="Contract version. Any breaking shape change increments it."
     )
     thread: ThreadOut
@@ -82,3 +82,4 @@ class ThreadBootstrap(BaseModel):
         description="Latest AgentWorkspaceState snapshot for the process panel, or null.",
     )
     latestRun: LatestRun | None
+    cards: dict[str, list[dict[str, Any]]] | None = None

@@ -80,7 +80,7 @@ class TestBoundedJson:
     def test_the_fitted_entry_uses_the_room_that_is_left(self) -> None:
         """The overflow entry stops only when one more character cannot fit."""
 
-        item = {"tool": "read_file_0", "result": "x" * 400, "is_error": False}
+        item = {"tool": "read_file_11", "result": "x" * 400, "is_error": False}
         budget = 120
 
         fitted = _fit_entry(item, budget=budget)
@@ -182,7 +182,7 @@ class TestRoutedEvidenceJson:
         parsed = json.loads(text)
         assert parsed
         assert parsed[0] == {
-            "tool": "read_file_0",
+            "tool": "read_file_11",
             "result": "x" * 900,
             "is_error": False,
         }
@@ -272,3 +272,35 @@ class TestSynthesizerPrompt:
         parsed = json.loads(rendered)
         assert parsed[0]["tool"] == "big"
         assert len(parsed[0]["result"]) > 8000 * 0.9
+
+
+def test_current_run_provenance_distinguishes_superseded_prior_reads():
+    from app.agent.program import _evidence_json
+
+    history = dspy.History(
+        messages=[
+            {
+                "tool_calls": {
+                    "tool_call_results": [
+                        {"name": "read", "value": "old", "is_error": False}
+                    ]
+                }
+            },
+            {
+                "tool_calls": {
+                    "tool_call_results": [
+                        {"name": "write", "value": "success", "is_error": False},
+                        {"name": "read", "value": "new", "is_error": False},
+                    ]
+                }
+            },
+        ]
+    )
+    evidence = json.loads(_evidence_json(history, current_run_start=1))
+    assert [item["result"] for item in evidence] == ["new", "success", "old"]
+    assert [item["scope"] for item in evidence] == [
+        "current_run",
+        "current_run",
+        "prior_turn",
+    ]
+    assert evidence[0]["observation_index"] > evidence[-1]["observation_index"]

@@ -77,6 +77,7 @@ class Message(Base):
         String, default="ag-ui/v1", server_default="ag-ui/v1"
     )
     message_json: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    feedback_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     run_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

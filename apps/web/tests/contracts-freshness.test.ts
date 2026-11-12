@@ -9,6 +9,8 @@ const here = dirname(fileURLToPath(import.meta.url))
 const contractsDir = resolve(here, '../../../packages/contracts')
 
 const cases = [
+  { schema: `${contractsDir}/inline-card.schema.json`, generated: resolve(here, '../src/contracts/inline-card.ts') },
+  { schema: `${contractsDir}/message-feedback.schema.json`, generated: resolve(here, '../src/contracts/message-feedback.ts') },
   {
     schema: `${contractsDir}/agent-capabilities.schema.json`,
     generated: resolve(here, '../src/contracts/agent-capabilities.ts'),

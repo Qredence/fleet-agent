@@ -1,0 +1,437 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InlineCard",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 2,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "agent-progress",
+          "type": "string"
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "messageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "steps": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "running",
+                      "completed",
+                      "failed",
+                      "skipped"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "status"
+                ]
+              }
+            },
+            "activeIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tools": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "target": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "running",
+                      "done",
+                      "failed"
+                    ]
+                  },
+                  "durationMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "target",
+                  "state"
+                ]
+              }
+            }
+          },
+          "required": [
+            "steps"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "runId",
+        "messageId",
+        "data"
+      ],
+      "title": "AgentProgressCard"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 2,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "web-search",
+          "type": "string"
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "messageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 240
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "type"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "maxLength": 32
+                    },
+                    "chars": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            },
+            "results": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "title",
+                  "domain"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "domain": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "sourceId": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                }
+              }
+            },
+            "visibleResults": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "searching": {
+              "type": "boolean"
+            },
+            "cycle": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "query",
+            "results",
+            "searching"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "runId",
+        "messageId",
+        "data"
+      ],
+      "title": "WebSearchCard"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 2,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "sources",
+          "type": "string"
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "messageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sources": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "title",
+                  "domain"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "domain": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "sourceId": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "sources"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "runId",
+        "messageId",
+        "data"
+      ],
+      "title": "SourcesCard"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 2,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "research-report",
+          "type": "string"
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "messageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "sections": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "heading": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "writing",
+                      "done",
+                      "failed"
+                    ]
+                  },
+                  "sources": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "preview": {
+                    "type": "string",
+                    "maxLength": 240
+                  }
+                },
+                "required": [
+                  "id",
+                  "heading",
+                  "state"
+                ]
+              }
+            },
+            "sourcesRead": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "title",
+            "sections"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "runId",
+        "messageId",
+        "data"
+      ],
+      "title": "ResearchReportCard"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 2,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "artifact",
+          "type": "string"
+        },
+        "runId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "messageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "mediaType": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "downloadUrl": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^/api/artifacts/[A-Za-z0-9_-]+$"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "mediaType",
+            "downloadUrl"
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "runId",
+        "messageId",
+        "data"
+      ],
+      "title": "ArtifactCard"
+    }
+  ]
+}

@@ -54,6 +54,7 @@ apps/api/mlruns/
 *.db
 .factory/
 .remember/
+.hermes/
 # Lab generated artifacts
 
 /CLAUDE.md

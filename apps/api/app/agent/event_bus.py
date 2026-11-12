@@ -11,9 +11,42 @@ were scheduled earlier but have not run yet.
 """
 
 import asyncio
+import threading
 
-from app.agent.cancel_token import RunCancelToken
 from app.contracts.domain import DomainEvent
+
+
+class RunCancelledError(asyncio.CancelledError):
+    """Raised by instrumented tools when their run was cancelled."""
+
+
+class RunCancelToken:
+    """Cooperative cancellation flag checked before any tool work starts.
+
+    The coordinator sets the token when the client disconnects (or the run is
+    cancelled); instrumented tools check it BEFORE doing work, which is the
+    guarantee "no new tool starts after cancellation is observed". A ReActV2
+    iteration already inside a provider call may finish — that is the
+    documented limit — but nothing new starts, and late bus events are never
+    emitted.
+    """
+
+    __slots__ = ("_flag",)
+
+    def __init__(self) -> None:
+        self._flag = threading.Event()
+
+    def cancel(self) -> None:
+        self._flag.set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._flag.is_set()
+
+    def check(self) -> None:
+        if self._flag.is_set():
+            raise RunCancelledError("run cancelled")
+
 
 # Sentinel delivered when the producer side is finished.
 _EVENT_SOURCE_DONE = object()

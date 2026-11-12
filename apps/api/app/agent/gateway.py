@@ -3,6 +3,13 @@
 DSPy owns request conversion, streaming, retries, errors and usage. This module
 declares the wire policy and retains run-local tool continuation data that
 DSPy's public ReAct history omits.
+
+A custom engine owns its connection by design: ``dspy.LM(engine=...)`` refuses
+``api_key``/``api_base`` and the other client settings, so keys and addresses
+live here in ``ProviderConfig``, never on the LM. DSPy documents
+``dspy.lm15.register_provider`` as the alternative for OpenAI-compatible HTTP
+services, but that registration is process-global while browser provider
+overrides are per-request values — so the router stays run-owned.
 """
 
 from __future__ import annotations
@@ -29,8 +36,6 @@ from dspy.lm15 import (
 )
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from app.agent.provider_diagnostics import DiagnosticTransport
-
 
 class ProviderConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
@@ -40,8 +45,6 @@ class ProviderConfig(BaseModel):
     base_url: str | None = None
     native_function_calling: bool = True
     developer_role: bool = False
-    diagnostics_enabled: bool = False
-    request_limit: int | None = None
 
 
 class GatewayEngine(LM15Engine):  # type: ignore[misc]
@@ -91,28 +94,15 @@ class GatewayEngine(LM15Engine):  # type: ignore[misc]
                 assistant_reasoning_content="include_empty",
             )
         definition = ProviderDefinition.chat(access, compat=compat)
-        self.diagnostics = (
-            DiagnosticTransport(
-                enabled=config.diagnostics_enabled, limit=config.request_limit
+        super().__init__(
+            RouterConfig(
+                env={},
+                providers=(definition,),
+                api_keys={"fleet-gateway": config.api_key.get_secret_value()}
+                if config.api_key
+                else {},
             )
-            if config.diagnostics_enabled or config.request_limit is not None
-            else None
         )
-        try:
-            super().__init__(
-                RouterConfig(
-                    env={},
-                    transport=self.diagnostics,
-                    providers=(definition,),
-                    api_keys={"fleet-gateway": config.api_key.get_secret_value()}
-                    if config.api_key
-                    else {},
-                )
-            )
-        except BaseException:
-            if self.diagnostics:
-                self.diagnostics.close()
-            raise
 
     def _restore_thinking(self, request: Request) -> Request:
         if not self._replay_thinking:
@@ -165,53 +155,6 @@ class GatewayEngine(LM15Engine):  # type: ignore[misc]
             super().close()
         finally:
             self._tool_thinking.clear()
-            if self.diagnostics:
-                self.diagnostics.close()
-
-
-class HostedEngine(LM15Engine):  # type: ignore[misc]
-    """Native hosted routing with an owned recorder and wire-call budget."""
-
-    def __init__(self, config: ProviderConfig) -> None:
-        # Public native LM properties retain DSPy's model-specific capability hints.
-        probe = dspy.LM(config.model, engine="lm15", cache=False)
-        try:
-            self.supports_function_calling = probe.supports_function_calling
-            self.supports_response_schema = probe.supports_response_schema
-            self.supports_reasoning = probe.supports_reasoning
-            self.supported_params = frozenset(probe.supported_params)
-        finally:
-            probe.close()
-        resolver = LM15Engine(RouterConfig(env={}))
-        try:
-            provider = resolver.resolve(config.model).provider
-        finally:
-            resolver.close()
-        self.diagnostics = DiagnosticTransport(
-            enabled=config.diagnostics_enabled, limit=config.request_limit
-        )
-        try:
-            super().__init__(
-                RouterConfig(
-                    transport=self.diagnostics,
-                    api_keys={provider: config.api_key.get_secret_value()}
-                    if config.api_key
-                    else {},
-                )
-            )
-        except BaseException:
-            self.diagnostics.close()
-            raise
-        self._resources_closed = False
-
-    def close(self) -> None:
-        if self._resources_closed:
-            return
-        self._resources_closed = True
-        try:
-            super().close()
-        finally:
-            self.diagnostics.close()
 
 
 def close_lm(lm: dspy.LM) -> None:
@@ -219,5 +162,5 @@ def close_lm(lm: dspy.LM) -> None:
     try:
         lm.close()
     finally:
-        if isinstance(lm.engine, (GatewayEngine, HostedEngine)):
+        if isinstance(lm.engine, GatewayEngine):
             lm.engine.close()

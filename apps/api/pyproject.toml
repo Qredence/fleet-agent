@@ -11,10 +11,9 @@ dependencies = [
     "fastapi>=0.142.1",
     "httpcore>=1.0.9",
     "httpx>=0.28.1",
-    "mlflow==3.16.1",
+    "mlflow==3.18.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
-    "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.1",
     "starlette>=1.7.0",
     "uvicorn>=0.54.0",
@@ -68,7 +67,7 @@ ignore_missing_imports = true
 
 # Generated from packages/contracts/*.schema.json — not authored code.
 [[tool.mypy.overrides]]
-module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap"]
+module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap", "app.contracts.inline_card", "app.contracts.message_feedback"]
 ignore_errors = true
 
 [tool.deptry]

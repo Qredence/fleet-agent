@@ -13,5 +13,7 @@
   "provider_unauthorized": "The language model rejected the configured API key. Check the provider credentials and base URL.",
   "approval_expired": "The approval request is no longer available.",
   "approval_invalid": "The approval response is invalid.",
-  "internal_error": "The agent run failed."
+  "internal_error": "The agent run failed.",
+  "unsupported_input_type": "Only text inputs and text attachments are supported.",
+  "run_save_failed": "The answer completed, but saving failed. Copy it before reloading."
 }

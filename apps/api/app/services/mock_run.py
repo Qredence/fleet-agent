@@ -11,9 +11,9 @@ from functools import lru_cache
 from ag_ui.core import BaseEvent, Event, RunAgentInput, StateSnapshotEvent
 from pydantic import TypeAdapter
 
+from app.agui.run import TimedEvent
 from app.contracts.agent_state import AgentWorkspaceState
-from app.contracts.paths import CONTRACTS_DIR
-from app.contracts.replay import TimedEvent
+from app.contracts.constants import CONTRACTS_DIR
 from app.kernel.run_input import last_user_text
 
 _FIXTURES_DIR = CONTRACTS_DIR / "fixtures"
@@ -56,6 +56,10 @@ def _validate_snapshots(name: str, timed: list[TimedEvent]) -> None:
 def select_fixture_name(input_data: RunAgentInput) -> str:
     """Deterministic mock routing so demo/error paths are reachable from the UI."""
     text = last_user_text(input_data).lower()
+    if "save failed" in text:
+        return "save-failed-run"
+    if "save retry" in text:
+        return "save-retry-run"
     if "no output" in text:
         return "forced-submit-run"
     if "tool error" in text:

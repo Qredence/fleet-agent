@@ -1,0 +1,866 @@
+"""AG-UI SSE coordinators: fixture replay and the live DSPy run.
+
+Both coordinators own the same protocol invariants — the Accept header drives the
+encoder, exactly one terminal event is emitted, a client disconnect stops the
+stream quietly, and internal failures surface as a safe RUN_ERROR (never a stack
+trace). ``RunCoordinator`` replays scripted fixture streams; ``LiveDSPyCoordinator``
+runs the real engine, reduces domain events into public state, and settles the
+run durably.
+"""
+
+import asyncio
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterable
+from contextlib import suppress
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+from ag_ui.core import (
+    BaseEvent,
+    EventType,
+    RunAgentInput,
+    RunErrorEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
+    StateDeltaEvent,
+    StateSnapshotEvent,
+    TextMessageContentEvent,
+    TextMessageEndEvent,
+    TextMessageStartEvent,
+)
+from ag_ui.encoder import EventEncoder
+from dspy import LMAuthError, LMInvalidRequestError, LMRateLimitError
+
+from app.agent.approval import approved_tool_names
+from app.agent.engine import (
+    AgentRunContext,
+    AgentRunResult,
+    AgentStreamUpdate,
+    EngineBuilder,
+)
+from app.agent.event_bus import DONE, RunEventBus
+from app.agent.provider import ProviderOverride
+from app.agui.state import TraceReducer
+from app.agui.wire import chunk_text, map_domain_event
+from app.contracts.constants import public_error
+from app.contracts.domain import (
+    ArtifactFailed,
+    ArtifactReady,
+    ArtifactStarted,
+    FinalFieldsReady,
+    SourceDiscovered,
+    SynthesisTokenDelta,
+    ToolCompleted,
+    ToolFailed,
+)
+from app.kernel.run_input import history_from_agui_messages, last_user_text
+from app.persistence.run_persistence import RunPersistence
+from app.services.metrics import MetricsRegistry
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TimedEvent:
+    """One fixture line: emit ``event`` ``at_ms`` after the stream starts."""
+
+    at_ms: int
+    event: BaseEvent
+
+
+_TERMINAL_EVENTS = {EventType.RUN_FINISHED, EventType.RUN_ERROR}
+
+
+class RunCoordinator:
+    """Replays timed events; owns timing, id binding, and stream invariants."""
+
+    def __init__(self, *, time_scale: float = 1.0) -> None:
+        self._time_scale = time_scale
+
+    async def stream(
+        self,
+        *,
+        input_data: RunAgentInput,
+        events: Iterable[TimedEvent],
+        accept: str | None,
+        is_disconnected: Callable[[], Awaitable[bool]],
+    ) -> AsyncIterator[str]:
+        # Upstream types the optional parameter as `str`; "" is the no-value form.
+        encoder = EventEncoder(accept=accept or "")
+        terminal_sent = False
+        started = asyncio.get_running_loop().time()
+
+        try:
+            for timed in events:
+                if terminal_sent:
+                    return
+                if await is_disconnected():
+                    return
+                await self._wait_until(timed.at_ms, started)
+                event = _bind_run_ids(timed.event, input_data)
+                if event.type in _TERMINAL_EVENTS:
+                    terminal_sent = True
+                yield encoder.encode(event)
+            if not terminal_sent:
+                yield encoder.encode(
+                    RunFinishedEvent(
+                        thread_id=input_data.thread_id, run_id=input_data.run_id
+                    )
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            if terminal_sent:
+                return
+            logger.exception(
+                "mock run failed", extra={"thread_id": input_data.thread_id}
+            )
+            terminal_sent = True
+            yield encoder.encode(
+                RunErrorEvent(
+                    message="The agent run failed.",
+                    code="internal_error",
+                )
+            )
+
+    async def _wait_until(self, at_ms: int, started: float) -> None:
+        if self._time_scale <= 0:
+            return
+        elapsed_ms = (asyncio.get_running_loop().time() - started) * 1000
+        delay_s = max(0.0, (at_ms - elapsed_ms) / 1000 * self._time_scale)
+        await asyncio.sleep(delay_s)
+
+
+def _bind_run_ids(event: BaseEvent, input_data: RunAgentInput) -> BaseEvent:
+    """Carry the client's thread/run ids onto fixture events."""
+    updates: dict[str, Any] = {}
+    if hasattr(event, "thread_id"):
+        updates["thread_id"] = input_data.thread_id
+    if hasattr(event, "run_id"):
+        updates["run_id"] = input_data.run_id
+
+    # Fixtures intentionally use stable IDs so they are easy to inspect. The
+    # browser-owned message repository, however, requires message IDs to be
+    # unique within a thread. Scope every fixture message identity to this
+    # run while keeping tool-call IDs stable for the fixture trace.
+    for field in ("message_id", "parent_message_id"):
+        value = getattr(event, field, None)
+        if isinstance(value, str) and value:
+            updates[field] = f"{value}-{input_data.run_id}"
+
+    if isinstance(event, StateSnapshotEvent):
+        snapshot = dict(event.snapshot)
+        snapshot["threadId"] = input_data.thread_id
+        snapshot_run = dict(snapshot.get("run", {}))
+        snapshot_run["id"] = input_data.run_id
+        snapshot["run"] = snapshot_run
+        updates["snapshot"] = snapshot
+
+    return event.model_copy(update=updates) if updates else event
+
+
+_CANCEL_SETTLEMENT_TIMEOUT_S = 2.0
+
+
+class LiveDSPyCoordinator:
+    async def stream(
+        self,
+        *,
+        input_data: RunAgentInput,
+        engine_builder: EngineBuilder,
+        accept: str | None,
+        is_disconnected: Callable[[], Awaitable[bool]],
+        provider_override: ProviderOverride | None = None,
+        persistence: RunPersistence | None = None,
+        run_timeout_s: float = 300.0,
+        metrics: MetricsRegistry | None = None,
+    ) -> AsyncIterator[str]:
+        """
+        Stream an agent run as encoded AG-UI events.
+
+        Parameters:
+            input_data (RunAgentInput): Input data identifying the thread, run, and user
+                request.
+            engine_builder (EngineBuilder): Factory that creates the agent engine and
+                connects it to the event bus.
+            accept (str | None): Requested event encoding or media type.
+            is_disconnected (Callable[[], Awaitable[bool]]): Callback that reports
+                whether the client disconnected.
+            persistence (RunPersistence | None): Optional lifecycle and state
+                persistence service.
+            run_timeout_s (float): Maximum duration allowed for event processing and
+                engine completion.
+            metrics (MetricsRegistry | None): Optional metrics registry for run and tool
+                metrics.
+
+        Yields:
+            str: Encoded lifecycle, state, message, and terminal events for the agent
+                run.
+        """
+        encoder = EventEncoder(accept=accept or "")
+        # Approval is decided before the run starts: gated tools are withheld
+        # unless this request authorized them (see app/agent/approval.py).
+        approved = approved_tool_names(input_data.forwarded_props)
+        thread_id = input_data.thread_id
+        run_id = input_data.run_id
+        loop = asyncio.get_running_loop()
+        bus = RunEventBus(loop)
+        run = await persistence.get_run(run_id) if persistence else None
+        if persistence and run is None:
+            run = await persistence.reserve_run(input_data=input_data)
+        # A turn continues from the assistant message the previous run settled
+        # on, when there was one.
+        continuation_head = run.continuation_message_id if run else None
+        prior_state = (
+            await persistence.get_latest_state(thread_id, continuation_head)
+            if persistence
+            else None
+        )
+        reducer = TraceReducer(
+            thread_id=thread_id,
+            run_id=run_id,
+            prior_state=prior_state,
+            run_scoped_decisions=persistence is not None,
+        )
+        assistant_message_id = f"msg-{run_id}"
+        started_monotonic = loop.time()
+        if metrics:
+            metrics.incr("agent_runs_total")
+
+        def emit(event: BaseEvent) -> str:
+            return encoder.encode(event)
+
+        terminal_settled = False
+        terminal_save_task: asyncio.Task[bool] | None = None
+        failed_artifacts: set[str] = set()
+        terminal_emitted = False
+        settlement_lock = asyncio.Lock()
+        metrics_recorded = False
+        engine_task: asyncio.Task[AgentRunResult] | None = None
+
+        def record_terminal_metrics(*, error: bool) -> None:
+            nonlocal metrics_recorded
+            if metrics is None or metrics_recorded:
+                return
+            metrics_recorded = True
+            metrics.observe(
+                "agent_run_duration_ms",
+                (loop.time() - started_monotonic) * 1000,
+            )
+            if error:
+                metrics.incr("agent_run_errors_total")
+
+        def log_terminal(
+            message: str,
+            *,
+            level: int,
+            termination_reason: str | None,
+        ) -> None:
+            """Log bounded run diagnostics without history or provider data."""
+            logger.log(
+                level,
+                message,
+                run_id,
+                thread_id,
+                extra={
+                    "tool_call_count": len(reducer.state.get("toolCalls", [])),
+                    "termination_reason": termination_reason,
+                    "forced_submit": termination_reason == "forced_submit",
+                },
+            )
+
+        def complete_public_state(result: AgentRunResult) -> list[dict[str, object]]:
+            """Finish the public reducer even if a mapper/reducer hook fails."""
+
+            try:
+                return reducer.complete_run(result)
+            except Exception:
+                logger.exception(
+                    "public state reducer failed (thread %s, run %s)",
+                    thread_id,
+                    run_id,
+                )
+                run_state = reducer.state.setdefault("run", {})
+                run_state["status"] = (
+                    "cancelled" if result.error_code == "run_cancelled" else "failed"
+                )
+                run_state["finishedAt"] = _utc_now()
+                if result.termination_reason:
+                    run_state["terminationReason"] = result.termination_reason
+                if result.error_code:
+                    run_state["errorCode"] = result.error_code
+                return []
+
+        def committed_state() -> dict[str, Any]:
+            snapshot = deepcopy(reducer.state)
+            snapshot["run"]["saveStatus"] = "saved"
+            return snapshot
+
+        def save_outcome(settled: bool) -> list[dict[str, Any]]:
+            status = "saved" if settled and persistence else "failed"
+            reducer.state["run"]["saveStatus"] = status
+            return [{"op": "replace", "path": "/run/saveStatus", "value": status}]
+
+        async def settle_cancelled() -> bool:
+            """Settle a cancelled agent run and record its terminal state.
+
+            Returns:
+                bool: `True` if persistence succeeds or is unavailable,
+                    `False` if persistence fails or was already settled.
+            """
+            nonlocal terminal_settled
+            async with settlement_lock:
+                if terminal_settled:
+                    return False
+                cancel_result = AgentRunResult(
+                    status="failed",
+                    answer=None,
+                    process_summary="The agent run was cancelled.",
+                    termination_reason="cancelled",
+                    error_code="run_cancelled",
+                )
+                complete_public_state(cancel_result)
+                reducer.state["run"]["status"] = "cancelled"
+                reducer.state["run"]["errorCode"] = "run_cancelled"
+                settled = (
+                    await _settle_with_retry(
+                        lambda: persistence.run_cancelled(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            state_json=committed_state(),
+                        )
+                    )
+                    if persistence
+                    else True
+                )
+                save_outcome(settled)
+                # A failed second retry is logged by _settle_with_retry, but
+                # this generator must still stop rather than racing another
+                # terminal event into the same run.
+                terminal_settled = True
+                record_terminal_metrics(error=True)
+                log_terminal(
+                    "run %s cancelled (thread %s)",
+                    level=logging.INFO,
+                    termination_reason=cancel_result.termination_reason,
+                )
+                return settled
+
+        async def settle_cancelled_bounded() -> bool:
+            """Settles cancellation within a bounded interval.
+
+            Returns:
+                bool: `True` if settlement succeeds within the timeout,
+                    `False` if it times out or reports failure.
+            """
+
+            task = asyncio.create_task(settle_cancelled())
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(task), timeout=_CANCEL_SETTLEMENT_TIMEOUT_S
+                )
+            except TimeoutError:
+                task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await task
+                logger.error(
+                    "cancellation settlement timed out (thread %s, run %s)",
+                    thread_id,
+                    run_id,
+                )
+                return False
+
+        def pump_stream(
+            stream_factory: Callable[..., Any],
+            *,
+            user_request: str,
+            history: Any | None,
+            context: AgentRunContext,
+        ) -> Coroutine[Any, Any, AgentRunResult]:
+            """Consume streaming engine updates and publish final answer fields.
+
+            Parameters:
+                stream_factory: Factory that produces agent stream updates.
+                user_request: The user's request.
+                history: Prior conversation history, if available.
+                context: Context for the agent run.
+
+            Returns:
+                The completed agent run result.
+
+            Raises:
+                RuntimeError: If the stream ends without a final result.
+            """
+
+            async def run_pump() -> AgentRunResult:
+                """Consume streaming updates and return completed result.
+
+                Raises:
+                    RuntimeError: If the stream ends without a final result.
+
+                Returns:
+                    AgentRunResult: The completed agent run result.
+                """
+                result: AgentRunResult | None = None
+                summary_parts: list[str] = []
+                stream_kwargs: dict[str, Any] = {
+                    "user_request": user_request,
+                    "history": history,
+                    "context": context,
+                }
+                async for update in stream_factory(**stream_kwargs):
+                    assert isinstance(update, AgentStreamUpdate)
+                    if update.kind == "final_fields":
+                        bus.publish_from_loop(
+                            FinalFieldsReady(
+                                answer=update.answer,
+                                process_summary=update.process_summary,
+                            )
+                        )
+                    elif update.kind == "token":
+                        # Streamed synthesis fields (already scrubbed by the
+                        # engine) become incremental message/state updates.
+                        if update.delta and update.stream_field == "answer":
+                            bus.publish_from_loop(
+                                SynthesisTokenDelta(
+                                    field="answer",
+                                    delta=update.delta,
+                                    summary_so_far="".join(summary_parts),
+                                )
+                            )
+                        elif update.delta and update.stream_field == "process_summary":
+                            summary_parts.append(update.delta)
+                            bus.publish_from_loop(
+                                SynthesisTokenDelta(
+                                    field="process_summary",
+                                    delta=update.delta,
+                                    summary_so_far="".join(summary_parts),
+                                )
+                            )
+                    else:
+                        result = update.result
+                if result is None:
+                    raise RuntimeError("streaming engine ended without a final result")
+                return result
+
+            return run_pump()
+
+        answer_streamed = False
+        answer_tokens_streamed = False
+        try:
+            if persistence:
+                await persistence.mark_running(run_id=run_id, state_json=reducer.state)
+            if await is_disconnected():
+                await settle_cancelled_bounded()
+                return
+
+            yield emit(RunStartedEvent(thread_id=thread_id, run_id=run_id))
+            yield emit(
+                TextMessageStartEvent(
+                    message_id=assistant_message_id,
+                    role="assistant",
+                )
+            )
+            yield emit(StateSnapshotEvent(snapshot=reducer.state))
+            logger.info("run %s started (thread %s)", run_id, thread_id)
+
+            continuation_history = (
+                await persistence.get_continuation_history(thread_id, continuation_head)
+                if persistence
+                else None
+            )
+            if continuation_history is None and len(input_data.messages) > 1:
+                continuation_history = history_from_agui_messages(
+                    input_data.messages[:-1]
+                )
+            yield emit(StateDeltaEvent(delta=reducer.begin()))
+
+            context = AgentRunContext(
+                thread_id=thread_id,
+                run_id=run_id,
+                assistant_message_id=assistant_message_id,
+            )
+            engine = engine_builder(
+                bus,
+                thread_id=thread_id,
+                provider_override=provider_override,
+                approved=approved,
+            )
+            stream_factory = getattr(engine, "stream", None)
+            if callable(stream_factory):
+                engine_task = asyncio.create_task(
+                    pump_stream(
+                        stream_factory,
+                        user_request=last_user_text(input_data),
+                        history=continuation_history,
+                        context=context,
+                    )
+                )
+            else:
+                run_kwargs: dict[str, Any] = {
+                    "user_request": last_user_text(input_data),
+                    "history": continuation_history,
+                    "context": context,
+                }
+                engine_task = asyncio.create_task(engine.run(**run_kwargs))
+            engine_task.add_done_callback(lambda _task: bus.close_from_loop())
+
+            try:
+                # This timeout covers event draining and the final engine wait.
+                async with asyncio.timeout(run_timeout_s):
+                    while True:
+                        if await is_disconnected():
+                            bus.cancel_token.cancel()
+                            engine_task.cancel()
+                            await settle_cancelled_bounded()
+                            return
+                        event = await bus.next()
+                        if event is DONE:
+                            break
+                        if (
+                            isinstance(event, SynthesisTokenDelta)
+                            and event.field == "answer"
+                        ):
+                            # Tokens streamed the answer text incrementally;
+                            # final fields must not duplicate it as chunks.
+                            answer_streamed = True
+                            answer_tokens_streamed = True
+                        if isinstance(event, FinalFieldsReady) and event.answer:
+                            answer_streamed = True
+                        if (
+                            isinstance(event, ArtifactReady)
+                            and event.artifact.id in failed_artifacts
+                        ):
+                            event = ArtifactFailed(
+                                artifact_id=event.artifact.id,
+                                name=event.artifact.name,
+                                media_type=event.artifact.media_type,
+                            )
+                        if persistence and isinstance(
+                            event,
+                            (
+                                SourceDiscovered,
+                                ArtifactStarted,
+                                ArtifactReady,
+                                ArtifactFailed,
+                            ),
+                        ):
+                            try:
+                                await persistence.record_domain_event(
+                                    event, thread_id=thread_id, run_id=run_id
+                                )
+                            except Exception as exc:
+                                logger.error(
+                                    "resource persistence failed (exception_type=%s)",
+                                    type(exc).__name__,
+                                )
+                                if isinstance(event, (ArtifactStarted, ArtifactReady)):
+                                    failed_artifacts.add(event.artifact.id)
+                                    event = ArtifactFailed(
+                                        artifact_id=event.artifact.id,
+                                        name=event.artifact.name,
+                                        media_type=event.artifact.media_type,
+                                    )
+                        agui_events = map_domain_event(
+                            event,  # type: ignore[arg-type]
+                            assistant_message_id=assistant_message_id,
+                            reducer=reducer,
+                            emit_answer_text=not answer_tokens_streamed,
+                        )
+                        if metrics:
+                            if isinstance(event, ToolCompleted):
+                                metrics.incr("agent_tool_calls_total")
+                                metrics.observe(
+                                    "agent_tool_duration_ms", event.duration_ms
+                                )
+                            elif isinstance(event, ToolFailed):
+                                metrics.incr("agent_tool_calls_total")
+                                metrics.incr("agent_tool_errors_total")
+                                metrics.observe(
+                                    "agent_tool_duration_ms", event.duration_ms
+                                )
+                        for agui_event in agui_events:
+                            yield emit(agui_event)
+                    result = await engine_task
+            except TimeoutError:
+                bus.cancel_token.cancel()
+                engine_task.cancel()
+                try:
+                    await engine_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    logger.error(
+                        "engine cleanup failed after timeout (exception_type=%s)",
+                        type(exc).__name__,
+                    )
+                result = AgentRunResult(
+                    status="failed",
+                    answer=None,
+                    process_summary="The agent run timed out.",
+                    termination_reason="timeout",
+                    error_code="agent_timeout",
+                )
+
+            delta = complete_public_state(result)
+            if persistence:
+                operation = (
+                    (
+                        lambda: persistence.run_completed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=committed_state(),
+                            assistant_message_id=assistant_message_id,
+                        )
+                    )
+                    if result.status == "completed"
+                    else (
+                        lambda: persistence.run_failed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=result,
+                            state_json=committed_state(),
+                        )
+                    )
+                )
+                terminal_save_task = asyncio.create_task(_settle_with_retry(operation))
+            terminal_settled = True
+            if result.status == "completed":
+                yield emit(StateDeltaEvent(delta=delta))
+                if not answer_streamed:
+                    for chunk in chunk_text(result.answer or ""):
+                        yield emit(
+                            TextMessageContentEvent(
+                                message_id=assistant_message_id, delta=chunk
+                            )
+                        )
+                yield emit(TextMessageEndEvent(message_id=assistant_message_id))
+                settled = (
+                    await _finish_terminal(terminal_save_task)
+                    if terminal_save_task
+                    else False
+                )
+                yield emit(StateDeltaEvent(delta=save_outcome(settled)))
+                if not settled:
+                    # The answer and completed public state are already on the
+                    # wire.  Persistence is retried above, but a database
+                    # outage must not turn this accepted stream into an
+                    # unterminated response or leak a driver exception.
+                    logger.error(
+                        "completed run could not be persisted (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                terminal_settled = True
+                record_terminal_metrics(error=False)
+                terminal_emitted = True
+                yield emit(RunFinishedEvent(thread_id=thread_id, run_id=run_id))
+                log_terminal(
+                    "run %s completed (thread %s)",
+                    level=logging.INFO,
+                    termination_reason=result.termination_reason,
+                )
+            else:
+                yield emit(StateDeltaEvent(delta=delta))
+                yield emit(TextMessageEndEvent(message_id=assistant_message_id))
+                settled = (
+                    await _finish_terminal(terminal_save_task)
+                    if terminal_save_task
+                    else False
+                )
+                yield emit(StateDeltaEvent(delta=save_outcome(settled)))
+                if not settled:
+                    logger.error(
+                        "failed run could not be persisted (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+                terminal_settled = True
+                code, message = public_error(result.error_code, "agent_no_output")
+                logger.warning(
+                    "run %s failed [%s] (thread %s)",
+                    run_id,
+                    code,
+                    thread_id,
+                    extra={
+                        "tool_call_count": len(reducer.state.get("toolCalls", [])),
+                        "termination_reason": result.termination_reason,
+                        "forced_submit": result.termination_reason == "forced_submit",
+                    },
+                )
+                record_terminal_metrics(error=True)
+                terminal_emitted = True
+                yield emit(RunErrorEvent(message=message, code=code))
+
+        except asyncio.CancelledError:
+            bus.cancel_token.cancel()
+            if terminal_save_task is not None and not terminal_save_task.done():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(terminal_save_task), timeout=5
+                    )
+                except TimeoutError:
+                    terminal_save_task.cancel()
+                    await asyncio.gather(terminal_save_task, return_exceptions=True)
+            if not terminal_emitted:
+                if engine_task is not None and not engine_task.done():
+                    engine_task.cancel()
+                try:
+                    await settle_cancelled_bounded()
+                except Exception:
+                    logger.exception(
+                        "could not persist cancellation (thread %s, run %s)",
+                        thread_id,
+                        run_id,
+                    )
+            raise
+        except Exception as exc:
+            if terminal_emitted or terminal_settled:
+                raise
+            code, message = _code_for_exception(exc)
+            if code == "provider_request_rejected":
+                message = f"{message} Run ID: {run_id}."
+            failure = AgentRunResult(
+                status="failed",
+                answer=None,
+                process_summary="The agent run failed before producing a response.",
+                termination_reason="failed",
+                error_code=code,
+            )
+            logger.error(
+                "live run failed (thread %s, run %s, exception_type=%s)",
+                thread_id,
+                run_id,
+                type(exc).__name__,
+            )
+            delta = complete_public_state(failure)
+            settled = True
+            if persistence:
+                try:
+                    settled = await _settle_terminal(
+                        lambda: persistence.run_failed(
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            result=failure,
+                            state_json=committed_state(),
+                        )
+                    )
+                except Exception as persist_exc:
+                    # Keep the fallback terminal event safe even if a custom
+                    # persistence implementation escapes the retry wrapper.
+                    logger.error(
+                        "could not persist unexpected failure "
+                        "(thread %s, run %s, exception_type=%s)",
+                        thread_id,
+                        run_id,
+                        type(persist_exc).__name__,
+                    )
+                    settled = False
+            delta.extend(save_outcome(settled))
+            if not settled:
+                logger.error(
+                    "unexpected terminal failure could not be persisted "
+                    "(thread %s, run %s)",
+                    thread_id,
+                    run_id,
+                )
+            # This fallback is deliberately unconditional: once the request
+            # was accepted, clients must receive one safe terminal event even
+            # when both persistence attempts fail.
+            terminal_settled = True
+            terminal_emitted = True
+            record_terminal_metrics(error=True)
+            log_terminal(
+                "run %s ended with an unexpected failure (thread %s)",
+                level=logging.ERROR,
+                termination_reason=failure.termination_reason,
+            )
+            yield emit(StateDeltaEvent(delta=delta))
+            yield emit(TextMessageEndEvent(message_id=assistant_message_id))
+            yield emit(RunErrorEvent(message=message, code=code))
+
+
+async def _settle_terminal(operation: Callable[[], Awaitable[bool | None]]) -> bool:
+    """Finish accepted terminal persistence despite a disconnected client."""
+    return await _finish_terminal(asyncio.create_task(_settle_with_retry(operation)))
+
+
+async def _finish_terminal(task: asyncio.Task[bool]) -> bool:
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5)
+        except TimeoutError:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        raise
+
+
+async def _settle_with_retry(
+    operation: Callable[[], Awaitable[bool | None]],
+) -> bool:
+    """Retry one lifecycle write with a fresh session after rollback."""
+
+    for attempt in range(2):
+        try:
+            result = await operation()
+            return result is not False
+        except Exception as exc:
+            if attempt == 0:
+                logger.warning(
+                    "terminal persistence failed; retrying with a fresh session "
+                    "(exception_type=%s)",
+                    type(exc).__name__,
+                )
+            else:
+                logger.error(
+                    "terminal persistence failed after retry (exception_type=%s)",
+                    type(exc).__name__,
+                )
+    return False
+
+
+def _flatten_exception_group(
+    group: BaseExceptionGroup[BaseException],
+) -> list[BaseException]:
+    """Flatten nested exception groups into their leaf exceptions.
+
+    ``dspy.streamify`` runs a program inside an anyio task group, so a failure
+    from a provider can reach this boundary wrapped rather than bare.
+    """
+    flat: list[BaseException] = []
+    for exc in group.exceptions:
+        if isinstance(exc, BaseExceptionGroup):
+            flat.extend(_flatten_exception_group(exc))
+        else:
+            flat.append(exc)
+    return flat
+
+
+def _code_for_exception(exc: Exception) -> tuple[str, str]:
+    leaves: list[BaseException]
+    if isinstance(exc, BaseExceptionGroup):
+        leaves = _flatten_exception_group(exc)
+    else:
+        leaves = [exc]
+    text = " ".join(f"{type(item).__name__} {item}" for item in leaves).lower()
+    if any(isinstance(item, LMAuthError) for item in leaves) or "lmautherror" in text:
+        return public_error("provider_unauthorized")
+    if (
+        any(isinstance(item, LMRateLimitError) for item in leaves)
+        or "rate limit" in text
+        or "ratelimit" in text
+        or "429" in text
+    ):
+        return public_error("rate_limited")
+    if any(isinstance(item, LMInvalidRequestError) for item in leaves):
+        return public_error("provider_request_rejected")
+    return public_error("internal_error")
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")

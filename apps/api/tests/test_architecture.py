@@ -106,16 +106,26 @@ def test_the_agent_layer_does_not_import_the_layers_that_serve_it() -> None:
 
 
 def test_the_agui_layer_imports_the_agent_contracts_it_consumes() -> None:
-    """A guard against the mirror image: the shared contracts stay agent-owned."""
-    event_bus = (AGENT / "event_bus.py").resolve()
-    cancel_token = (AGENT / "cancel_token.py").resolve()
-    assert event_bus.is_file(), "RunEventBus belongs to the agent layer"
-    assert cancel_token.is_file(), "RunCancelToken belongs to the agent layer"
+    """A guard against the mirror image: the shared contracts stay agent-owned.
 
-    engine = (AGENT / "engine.py").read_text(encoding="utf-8")
-    assert "class EngineBuilder(Protocol):" in engine, (
-        "the engine build contract belongs beside the engine it produces"
-    )
+    Ownership is asserted on the *symbols*, not on filenames, so the agent layer
+    may reorganise its own modules without weakening the dependency direction —
+    and a re-declaration of one of these contracts outside ``app/agent`` fails
+    here rather than silently creating a second source of truth.
+    """
+    owned = ("RunEventBus", "RunCancelToken", "EngineBuilder")
+    definitions: dict[str, list[str]] = {name: [] for name in owned}
+    for path in sorted(APP.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for name in owned:
+            if re.search(rf"^class {name}\b", text, re.MULTILINE):
+                definitions[name].append(path.relative_to(APP.parent).as_posix())
+
+    for name, sites in definitions.items():
+        assert len(sites) == 1, f"{name} must be defined once, found: {sites}"
+        assert sites[0].startswith("app/agent/"), (
+            f"{name} belongs to the agent layer, not {sites[0]}"
+        )
 
 
 def test_the_kernel_stays_free_of_app_layers() -> None:

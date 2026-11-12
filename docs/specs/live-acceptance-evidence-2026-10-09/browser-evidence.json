@@ -1,0 +1,1201 @@
+[
+  {
+    "repeat": 1,
+    "case": 1,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_4d7b65fb3a98",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4d7b65fb3a98",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 1.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4d7b65fb3a98"
+      },
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 1.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4d7b65fb3a98"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 2,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_02dc18ceafff",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_02dc18ceafff",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 1.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file text-note.txt states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_02dc18ceafff"
+      },
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 1.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file text-note.txt states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_02dc18ceafff"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 3,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_8a9a966b5d76",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_8a9a966b5d76",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Historical image",
+          "image inputs are not supported",
+          "The attachment was rejected. Only text files are supported."
+        ],
+        "text": "Acceptance 1.03\nhistorical.png\n\nHistorical image \u2014 image inputs are not supported by this agent.\n\nThe attachment was rejected. Only text files are supported.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n0%\n\nSystem\n0k\nTools\n0k\nMessages\n0k\nEstimate\n0k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_8a9a966b5d76"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 4,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_1be3afdc2d66",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_1be3afdc2d66",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 1.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\n\nFrom acceptance.md:\n\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\nNote: the file also lists 3 October as a retired launch window, explicitly marked as not to be used.\n\n2 tool calls\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_1be3afdc2d66"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 1.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\n\nFrom acceptance.md:\n\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\nNote: the file also lists 3 October as a retired launch window, explicitly marked as not to be used.\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_1be3afdc2d66"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 5,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_d943cdf67674",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_d943cdf67674",
+    "result": "passed",
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (2).md",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 1.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report: Asteroid Observatory Facts\n\nSource: acceptance.md\n\nProject\nName: Aster\nLaunch Window\nCurrent (approved) launch window: 17 November\n\nNote: A previously retired launch window of 3 October is recorded in the source file and must not be used.\n\nApproved Budget\nApproved budget: 420 units\nSummary\nItem\tValue\nProject\tAster\nCurrent launch window\t17 November\nApproved budget\t420 units\n\nReport generated from the current contents of acceptance.md.\n\n2 tool calls\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_d943cdf67674"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 1.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report: Asteroid Observatory Facts\n\nSource: acceptance.md\n\nProject\nName: Aster\nLaunch Window\nCurrent (approved) launch window: 17 November\n\nNote: A previously retired launch window of 3 October is recorded in the source file and must not be used.\n\nApproved Budget\nApproved budget: 420 units\nSummary\nItem\tValue\nProject\tAster\nCurrent launch window\t17 November\nApproved budget\t420 units\n\nReport generated from the current contents of acceptance.md.\n\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_d943cdf67674"
+      }
+    ],
+    "retainedDownload": "report-1-05.md",
+    "downloadSha256": "c058c4ed7c2e9912b37b5f9c39475da54c833ebb914d96dd2780c4a9f2d054a3"
+  },
+  {
+    "repeat": 1,
+    "case": 6,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_2fe56ee7032b",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2fe56ee7032b",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 1.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\n\nHere are the facts, briefly:\n\nProject: Juniper\nApproved budget: 730 units\nLaunch: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Status Report\nOverview\n\nThis report restates the confirmed facts for Project Juniper as provided in this conversation. No additional project data was available for this report.\n\nKey Facts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nSummary\nProject name: Juniper\nApproved budget: 730 units\nLaunch: 22 December\nNotes\n\nThese are the only facts established for this conversation. The report adds no assumptions about scope, ownership, funding source, currency, or milestone detail beyond what is listed above.\n\nA managed download of this report has been requested and its availability is reported by the application separately.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2fe56ee7032b"
+      },
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 1.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\n\nHere are the facts, briefly:\n\nProject: Juniper\nApproved budget: 730 units\nLaunch: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Status Report\nOverview\n\nThis report restates the confirmed facts for Project Juniper as provided in this conversation. No additional project data was available for this report.\n\nKey Facts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nSummary\nProject name: Juniper\nApproved budget: 730 units\nLaunch: 22 December\nNotes\n\nThese are the only facts established for this conversation. The report adds no assumptions about scope, ownership, funding source, currency, or milestone detail beyond what is listed above.\n\nA managed download of this report has been requested and its availability is reported by the application separately.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2fe56ee7032b"
+      }
+    ],
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (5).md",
+    "retainedDownload": "report-1-06.md",
+    "downloadSha256": "c7fc9b35ef87a8325ff45765a15d8cbb273dac049a26ec690081d9799a8220e5"
+  },
+  {
+    "repeat": 1,
+    "case": 7,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_b07088555c70",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_b07088555c70",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 1.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject: Larch\nBudget: 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nReport: Selected Branch Facts\nProject\n\nLarch\n\nBudget\n\n900\n\nNotes\n\nThis report contains only the two selected branch facts supplied: the project name (Larch) and the budget figure (900). No additional details, sources, or analysis were provided in the evidence, so nothing further is included.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_b07088555c70"
+      },
+      {
+        "assertions": [
+          "Cedar",
+          "100"
+        ],
+        "text": "Acceptance 1.07\n\nRemember the branch facts: project Cedar, budget 100. Repeat those two facts only.\n\n1 / 2\nFleet Agent\n\nProject Cedar; budget 100.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_b07088555c70"
+      },
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 1.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject: Larch\nBudget: 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nReport: Selected Branch Facts\nProject\n\nLarch\n\nBudget\n\n900\n\nNotes\n\nThis report contains only the two selected branch facts supplied: the project name (Larch) and the budget figure (900). No additional details, sources, or analysis were provided in the evidence, so nothing further is included.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_b07088555c70"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 8,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_e0fcc50c8353",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_e0fcc50c8353",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "Saved",
+          "capability_unavailable"
+        ],
+        "text": "Acceptance 1.08\n\nOverwrite approval-1.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI can't complete this change. Writing to approval-1.md requires a file-modification capability that isn't available in this run \u2014 no tool approval was granted, and the attempted evidence lookup returned status: insufficient with reason capability_unavailable.\n\nWhat I can confirm: approval-1.md does exist in the working directory (alongside acceptance.md, approval-2.md, approval-3.md, notes.md, test.png, and text-note.txt). But confirming the file exists is not the same as being able to overwrite it, and I won't claim the content was changed to BOUNDARY-TEST when it wasn't.\n\nTo proceed, you'd need to grant approval for a write/edit action on that file, then ask again. If you want, I can instead just show you the intended content (BOUNDARY-TEST) as text for you to apply yourself \u2014 but I can't apply it on your behalf under the current permissions.\n\n1 tool call\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_e0fcc50c8353"
+      },
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "capability_unavailable"
+        ],
+        "text": "Acceptance 1.08\n\nOverwrite approval-1.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI can't complete this change. Writing to approval-1.md requires a file-modification capability that isn't available in this run \u2014 no tool approval was granted, and the attempted evidence lookup returned status: insufficient with reason capability_unavailable.\n\nWhat I can confirm: approval-1.md does exist in the working directory (alongside acceptance.md, approval-2.md, approval-3.md, notes.md, test.png, and text-note.txt). But confirming the file exists is not the same as being able to overwrite it, and I won't claim the content was changed to BOUNDARY-TEST when it wasn't.\n\nTo proceed, you'd need to grant approval for a write/edit action on that file, then ask again. If you want, I can instead just show you the intended content (BOUNDARY-TEST) as text for you to apply yourself \u2014 but I can't apply it on your behalf under the current permissions.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_e0fcc50c8353"
+      }
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 9,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_2a332c7c3f8d",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2a332c7c3f8d",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORIGINAL-APPROVAL",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 1.09\n\nOverwrite approval-1.md with APPROVED-1.\n\nFleet Agent\n\nI wasn't able to complete this. Writing to approval-1.md failed because the write capability was unavailable in this run, so the file is unchanged.\n\nFor reference, approval-1.md still contains its original content:\n\nORIGINAL-APPROVAL\n\nNo modification was made, so APPROVED-1 has not been written.\n\n3 tool calls\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\nAllow tools for the next run\n\nThese tools can change workspace files or execute commands. Selection resets after sending.\n\n write\nCreate or atomically replace a workspace text file.\n edit\nReplace exact text in a workspace file; ambiguous matches fail safely.\n bash\nRun a bounded command with a minimal environment in the workspace.\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2a332c7c3f8d"
+      },
+      {
+        "assertions": [
+          "APPROVED-1",
+          "Saved"
+        ],
+        "text": "Acceptance 1.09\n\nOverwrite approval-1.md with APPROVED-1.\n\nFleet Agent\n\nI wasn't able to complete this. Writing to approval-1.md failed because the write capability was unavailable in this run, so the file is unchanged.\n\nFor reference, approval-1.md still contains its original content:\n\nORIGINAL-APPROVAL\n\nNo modification was made, so APPROVED-1 has not been written.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nNow overwrite approval-1.md with APPROVED-1. Read the file back to verify the current content.\n\nFleet Agent\n\nDone. approval-1.md was overwritten with APPROVED-1, and reading the file back confirms its current content:\n\nAPPROVED-1\n\nThis supersedes the earlier ORIGINAL-APPROVAL content and the previous failed attempt.\n\n2 tool calls\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\nAllow tools for the next run\n\nThese tools can change workspace files or execute commands. Selection resets after sending.\n\n write\nCreate or atomically replace a workspace text file.\n edit\nReplace exact text in a workspace file; ambiguous matches fail safely.\n bash\nRun a bounded command with a minimal environment in the workspace.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2a332c7c3f8d"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-1",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 1.09\n\nOverwrite approval-1.md with APPROVED-1.\n\nFleet Agent\n\nI wasn't able to complete this. Writing to approval-1.md failed because the write capability was unavailable in this run, so the file is unchanged.\n\nFor reference, approval-1.md still contains its original content:\n\nORIGINAL-APPROVAL\n\nNo modification was made, so APPROVED-1 has not been written.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nOverwrite approval-1.md with EDIT-BLOCKED-1. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI wasn't able to complete this. The overwrite of approval-1.md with EDIT-BLOCKED-1 failed because the write capability was unavailable (capability_unavailable), and no fresh tool approval was selected for this run.\n\nThe file is unchanged. The last successful read of approval-1.md still shows its original content:\n\nORIGINAL-APPROVAL\n\nSo EDIT-BLOCKED-1 has not been written. If you'd like this done, select/approve the write capability and I can retry.\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\nAllow tools for the next run\n\nThese tools can change workspace files or execute commands. Selection resets after sending.\n\n write\nCreate or atomically replace a workspace text file.\n edit\nReplace exact text in a workspace file; ambiguous matches fail safely.\n bash\nRun a bounded command with a minimal environment in the workspace.\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2a332c7c3f8d"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-1",
+          "unavailable",
+          "Saved"
+        ],
+        "text": "Acceptance 1.09\n\nOverwrite approval-1.md with APPROVED-1.\n\nFleet Agent\n\nI wasn't able to complete this. Writing to approval-1.md failed because the write capability was unavailable in this run, so the file is unchanged.\n\nFor reference, approval-1.md still contains its original content:\n\nORIGINAL-APPROVAL\n\nNo modification was made, so APPROVED-1 has not been written.\n\nSources\n1\nInspect source 1\n\nOverwrite approval-1.md with EDIT-BLOCKED-1. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI wasn't able to complete this. The overwrite of approval-1.md with EDIT-BLOCKED-1 failed because the write capability was unavailable (capability_unavailable), and no fresh tool approval was selected for this run.\n\nThe file is unchanged. The last successful read of approval-1.md still shows its original content:\n\nORIGINAL-APPROVAL\n\nSo EDIT-BLOCKED-1 has not been written. If you'd like this done, select/approve the write capability and I can retry.\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2a332c7c3f8d"
+      }
+    ],
+    "approval_reset": true
+  },
+  {
+    "repeat": 1,
+    "case": 10,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_484600bf0888",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_484600bf0888",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ALPHA-1",
+          "Saved"
+        ],
+        "text": "Acceptance 1.10\n\nMy run marker is ALPHA-1. Inspect every available workspace text document and write a detailed comparison using ALPHA-1 as the title.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_484600bf0888"
+      }
+    ],
+    "peer": {
+      "thread_id": "thread_1d2342cb1c60",
+      "text": "Concurrency peer 1\n\nMy marker is BETA-1. Explain why 6 times 7 is 42 in a short paragraph, beginning with BETA-1.\n\nFleet Agent\n\nBETA-1 \u2014 6 times 7 equals 42 because multiplication is repeated addition: six groups of seven items, added together, are 7 + 7 + 7 + 7 + 7 + 7 = 42 (equivalently, seven groups of six: 6 + 6 + 6 + 6 + 6 + 6 + 6 = 42). Visually, a 6-by-7 array of dots or objects has 42 items in total. This also fits the familiar multiplication table pattern, where 42 is the product of the factors 6 and 7.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k"
+    }
+  },
+  {
+    "repeat": 1,
+    "case": 11,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_378fb78a5ab1",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_378fb78a5ab1",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Feedback could not be saved. Try again.",
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 1.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\nFeedback could not be saved. Try again.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_378fb78a5ab1"
+      },
+      {
+        "assertions": [
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 1.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\n1 / 2\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_378fb78a5ab1"
+      }
+    ],
+    "feedback_lifecycle": [
+      "positive restored",
+      "failed negative visible",
+      "negative recovery restored",
+      "new branch empty",
+      "old branch restored",
+      "removed after reload"
+    ]
+  },
+  {
+    "repeat": 1,
+    "case": 12,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_0f34df11b30f",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0f34df11b30f",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "AG-UI",
+          "STATE_SNAPSHOT",
+          "STATE_DELTA",
+          "Saved"
+        ],
+        "text": "Acceptance 1.12\n\nSearch the documentation for AG-UI state sync. Summarize the relevant facts and create one managed Markdown report.\n\nFleet Agent\nAG-UI State Synchronization \u2014 Documentation Summary\nOverview\n\nAG-UI (Agent User Interaction Protocol) provides efficient state management between agents and frontends through dedicated, typed state events. State sync is one of the protocol's headline features: the project describes \"bi-directional state synchronization\" and \"real-time context enrichment\" as core capabilities.\n\nState Events\n\nAG-UI defines three state-related events:\n\nEvent\tPurpose\nSTATE_SNAPSHOT\tComplete state representation at a point in time\nSTATE_DELTA\tIncremental state change, expressed as JSON Patch (RFC 6902)\nMESSAGES_SNAPSHOT\tComplete conversation history\n\nThe snapshot/delta pair is designed to keep client-side state management efficient with minimal data transfer: a full snapshot establishes the baseline, and subsequent updates ship only the changed portions as RFC 6902 JSON Patch operations applied to the client's current snapshot.\n\nOrdering rule: the snapshot must arrive before any delta. A delta is applied against the client snapshot, so a delta with no preceding snapshot has nothing valid to patch.\n\nTransport and Event Stream\n\nAG-UI streams typed events over SSE (Server-Sent Events). Event families include:\n\nLifecycle: RUN_STARTED, RUN_FINISHED, RUN_ERROR\nText: TEXT_MESSAGE_*\nTool calls: TOOL_CALL_*\nState: STATE_SNAPSHOT, STATE_DELTA\nFramework Integration\n\nassistant-ui\n\nuseAgUiState mirrors state that the AG-UI agent owns and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state, such as messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events.\n\nLangChain DeepAgents (JavaScript)\n\nShared state (todos, subagents, custom keys) maps to STATE_SNAPSHOT and STATE_DELTA.\nConversation history maps to MESSAGES_SNAPSHOT.\nClient-side handlers such as onStateSnapshotEvent expose incoming state events to application code.\nIllustrative Use\n\nA secondary source describes a typical flow: a tool call returns product data that the frontend renders as cards; when the user adds an item to a cart, the agent sends a small STATE_DELTA patch and the cart UI updates instantly without a page reload; the run then closes with RUN_FINISHED.\n\nSummary of Key Facts\nTwo mechanisms cover application state: full snapshots and incremental deltas.\nDeltas use the standard JSON Patch format (RFC 6902), enabling partial updates.\nSnapshots must precede deltas for a given client state.\nConversation history is carried separately via MESSAGES_SNAPSHOT.\nState events travel in the same SSE stream as lifecycle, text, and tool-call events.\nState synchronization is bidirectional, supporting agent-driven UI updates and frontend-owned state.\n3 tool calls\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nAgent User Interaction Protocol (AG-UI) - Docs by LangChain\ndocs.langchain.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0f34df11b30f"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 1.12\nFleet Agent\nAG-UI State Synchronization \u2014 Documentation Summary\nOverview\n\nAG-UI (Agent User Interaction Protocol) provides efficient state management between agents and frontends through dedicated, typed state events. State sync is one of the protocol's headline features: the project describes \"bi-directional state synchronization\" and \"real-time context enrichment\" as core capabilities.\n\nState Events\n\nAG-UI defines three state-related events:\n\nEvent\tPurpose\nSTATE_SNAPSHOT\tComplete state representation at a point in time\nSTATE_DELTA\tIncremental state change, expressed as JSON Patch (RFC 6902)\nMESSAGES_SNAPSHOT\tComplete conversation history\n\nThe snapshot/delta pair is designed to keep client-side state management efficient with minimal data transfer: a full snapshot establishes the baseline, and subsequent updates ship only the changed portions as RFC 6902 JSON Patch operations applied to the client's current snapshot.\n\nOrdering rule: the snapshot must arrive before any delta. A delta is applied against the client snapshot, so a delta with no preceding snapshot has nothing valid to patch.\n\nTransport and Event Stream\n\nAG-UI streams typed events over SSE (Server-Sent Events). Event families include:\n\nLifecycle: RUN_STARTED, RUN_FINISHED, RUN_ERROR\nText: TEXT_MESSAGE_*\nTool calls: TOOL_CALL_*\nState: STATE_SNAPSHOT, STATE_DELTA\nFramework Integration\n\nassistant-ui\n\nuseAgUiState mirrors state that the AG-UI agent owns and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state, such as messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events.\n\nLangChain DeepAgents (JavaScript)\n\nShared state (todos, subagents, custom keys) maps to STATE_SNAPSHOT and STATE_DELTA.\nConversation history maps to MESSAGES_SNAPSHOT.\nClient-side handlers such as onStateSnapshotEvent expose incoming state events to application code.\nIllustrative Use\n\nA secondary source describes a typical flow: a tool call returns product data that the frontend renders as cards; when the user adds an item to a cart, the agent sends a small STATE_DELTA patch and the cart UI updates instantly without a page reload; the run then closes with RUN_FINISHED.\n\nSummary of Key Facts\nTwo mechanisms cover application state: full snapshots and incremental deltas.\nDeltas use the standard JSON Patch format (RFC 6902), enabling partial updates.\nSnapshots must precede deltas for a given client state.\nConversation history is carried separately via MESSAGES_SNAPSHOT.\nState events travel in the same SSE stream as lifecycle, text, and tool-call events.\nState synchronization is bidirectional, supporting agent-driven UI updates and frontend-owned state.\n3 tool calls\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nAgent User Interaction Protocol (AG-UI) - Docs by LangChain\ndocs.langchain.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe search returned the official AG-UI state sync documentation plus a few supporting pages:\n\nOfficial page: State Management \u2014 docs.ag-ui.com/concepts/state \u2014 \"Understanding state synchronization between agents and frontends in AG-UI\". The search snippet is truncated; the page itself is the canonical source.\nOfficial architecture page (appeared as w4) confirms the mechanism: STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes as JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history) \u2014 designed for efficient client-side state management with minimal data transfer.\nSupporting sources: the AG-UI introduction page (bi-directional, event-based protocol) and the GitHub repo (lists \"bi-directional state synchronization\" as a feature); a Codecademy article describes the same snapshot-plus-delta pattern; LangChain's DeepAgents docs map shared state to STATE_SNAPSHOT/STATE_DELTA and history to MESSAGES_SNAPSHOT.\n\nIn short: state sync in AG-UI = full snapshots as a baseline, incremental JSON Patch deltas for updates, and a separate messages snapshot for conversation history. As requested, no new report was generated.\n\n1 tool call\nSources\n5\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nL\nState Management with AG-UI | Microsoft Learn\nlearn.microsoft.com\nD\nAG-UI Overview - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nAG-UI: How the Agent-User Interaction Protocol Works | Codecademy\nwww.codecademy.com\nD\nAG-UI\ndocs.copilotkit.ai\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n2%\n\nSystem\n0k\nTools\n0k\nMessages\n2k\nEstimate\n2k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0f34df11b30f"
+      },
+      {
+        "assertions": [
+          "AG-UI",
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 1.12\nFleet Agent\nAG-UI State Synchronization \u2014 Documentation Summary\nOverview\n\nAG-UI (Agent User Interaction Protocol) provides efficient state management between agents and frontends through dedicated, typed state events. State sync is one of the protocol's headline features: the project describes \"bi-directional state synchronization\" and \"real-time context enrichment\" as core capabilities.\n\nState Events\n\nAG-UI defines three state-related events:\n\nEvent\tPurpose\nSTATE_SNAPSHOT\tComplete state representation at a point in time\nSTATE_DELTA\tIncremental state change, expressed as JSON Patch (RFC 6902)\nMESSAGES_SNAPSHOT\tComplete conversation history\n\nThe snapshot/delta pair is designed to keep client-side state management efficient with minimal data transfer: a full snapshot establishes the baseline, and subsequent updates ship only the changed portions as RFC 6902 JSON Patch operations applied to the client's current snapshot.\n\nOrdering rule: the snapshot must arrive before any delta. A delta is applied against the client snapshot, so a delta with no preceding snapshot has nothing valid to patch.\n\nTransport and Event Stream\n\nAG-UI streams typed events over SSE (Server-Sent Events). Event families include:\n\nLifecycle: RUN_STARTED, RUN_FINISHED, RUN_ERROR\nText: TEXT_MESSAGE_*\nTool calls: TOOL_CALL_*\nState: STATE_SNAPSHOT, STATE_DELTA\nFramework Integration\n\nassistant-ui\n\nuseAgUiState mirrors state that the AG-UI agent owns and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state, such as messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events.\n\nLangChain DeepAgents (JavaScript)\n\nShared state (todos, subagents, custom keys) maps to STATE_SNAPSHOT and STATE_DELTA.\nConversation history maps to MESSAGES_SNAPSHOT.\nClient-side handlers such as onStateSnapshotEvent expose incoming state events to application code.\nIllustrative Use\n\nA secondary source describes a typical flow: a tool call returns product data that the frontend renders as cards; when the user adds an item to a cart, the agent sends a small STATE_DELTA patch and the cart UI updates instantly without a page reload; the run then closes with RUN_FINISHED.\n\nSummary of Key Facts\nTwo mechanisms cover application state: full snapshots and incremental deltas.\nDeltas use the standard JSON Patch format (RFC 6902), enabling partial updates.\nSnapshots must precede deltas for a given client state.\nConversation history is carried separately via MESSAGES_SNAPSHOT.\nState events travel in the same SSE stream as lifecycle, text, and tool-call events.\nState synchronization is bidirectional, supporting agent-driven UI updates and frontend-owned state.\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nAgent User Interaction Protocol (AG-UI) - Docs by LangChain\ndocs.langchain.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe search returned the official AG-UI state sync documentation plus a few supporting pages:\n\nOfficial page: State Management \u2014 docs.ag-ui.com/concepts/state \u2014 \"Understanding state synchronization between agents and frontends in AG-UI\". The search snippet is truncated; the page itself is the canonical source.\nOfficial architecture page (appeared as w4) confirms the mechanism: STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes as JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history) \u2014 designed for efficient client-side state management with minimal data transfer.\nSupporting sources: the AG-UI introduction page (bi-directional, event-based protocol) and the GitHub repo (lists \"bi-directional state synchronization\" as a feature); a Codecademy article describes the same snapshot-plus-delta pattern; LangChain's DeepAgents docs map shared state to STATE_SNAPSHOT/STATE_DELTA and history to MESSAGES_SNAPSHOT.\n\nIn short: state sync in AG-UI = full snapshots as a baseline, incremental JSON Patch deltas for updates, and a separate messages snapshot for conversation history. As requested, no new report was generated.\n\nWeb search\nRead 4 sources\nL\nState Management with AG-UI | Microsoft Learn\nlearn.microsoft.com\nD\nAG-UI Overview - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nAG-UI: How the Agent-User Interaction Protocol Works | Codecademy\nwww.codecademy.com\nD\nAG-UI\ndocs.copilotkit.ai\nSources\n12\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9Inspect source 10Inspect source 11Inspect source 12\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n12\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9Inspect source 10Inspect source 11Inspect source 12\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n2%\n\nSystem\n0k\nTools\n0k\nMessages\n2k\nEstimate\n2k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0f34df11b30f"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 1.12\nFleet Agent\nAG-UI State Synchronization \u2014 Documentation Summary\nOverview\n\nAG-UI (Agent User Interaction Protocol) provides efficient state management between agents and frontends through dedicated, typed state events. State sync is one of the protocol's headline features: the project describes \"bi-directional state synchronization\" and \"real-time context enrichment\" as core capabilities.\n\nState Events\n\nAG-UI defines three state-related events:\n\nEvent\tPurpose\nSTATE_SNAPSHOT\tComplete state representation at a point in time\nSTATE_DELTA\tIncremental state change, expressed as JSON Patch (RFC 6902)\nMESSAGES_SNAPSHOT\tComplete conversation history\n\nThe snapshot/delta pair is designed to keep client-side state management efficient with minimal data transfer: a full snapshot establishes the baseline, and subsequent updates ship only the changed portions as RFC 6902 JSON Patch operations applied to the client's current snapshot.\n\nOrdering rule: the snapshot must arrive before any delta. A delta is applied against the client snapshot, so a delta with no preceding snapshot has nothing valid to patch.\n\nTransport and Event Stream\n\nAG-UI streams typed events over SSE (Server-Sent Events). Event families include:\n\nLifecycle: RUN_STARTED, RUN_FINISHED, RUN_ERROR\nText: TEXT_MESSAGE_*\nTool calls: TOOL_CALL_*\nState: STATE_SNAPSHOT, STATE_DELTA\nFramework Integration\n\nassistant-ui\n\nuseAgUiState mirrors state that the AG-UI agent owns and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state, such as messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events.\n\nLangChain DeepAgents (JavaScript)\n\nShared state (todos, subagents, custom keys) maps to STATE_SNAPSHOT and STATE_DELTA.\nConversation history maps to MESSAGES_SNAPSHOT.\nClient-side handlers such as onStateSnapshotEvent expose incoming state events to application code.\nIllustrative Use\n\nA secondary source describes a typical flow: a tool call returns product data that the frontend renders as cards; when the user adds an item to a cart, the agent sends a small STATE_DELTA patch and the cart UI updates instantly without a page reload; the run then closes with RUN_FINISHED.\n\nSummary of Key Facts\nTwo mechanisms cover application state: full snapshots and incremental deltas.\nDeltas use the standard JSON Patch format (RFC 6902), enabling partial updates.\nSnapshots must precede deltas for a given client state.\nConversation history is carried separately via MESSAGES_SNAPSHOT.\nState events travel in the same SSE stream as lifecycle, text, and tool-call events.\nState synchronization is bidirectional, supporting agent-driven UI updates and frontend-owned state.\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nAgent User Interaction Protocol (AG-UI) - Docs by LangChain\ndocs.langchain.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe search returned the official AG-UI state sync documentation plus a few supporting pages:\n\nOfficial page: State Management \u2014 docs.ag-ui.com/concepts/state \u2014 \"Understanding state synchronization between agents and frontends in AG-UI\". The search snippet is truncated; the page itself is the canonical source.\nOfficial architecture page (appeared as w4) confirms the mechanism: STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes as JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history) \u2014 designed for efficient client-side state management with minimal data transfer.\nSupporting sources: the AG-UI introduction page (bi-directional, event-based protocol) and the GitHub repo (lists \"bi-directional state synchronization\" as a feature); a Codecademy article describes the same snapshot-plus-delta pattern; LangChain's DeepAgents docs map shared state to STATE_SNAPSHOT/STATE_DELTA and history to MESSAGES_SNAPSHOT.\n\nIn short: state sync in AG-UI = full snapshots as a baseline, incremental JSON Patch deltas for updates, and a separate messages snapshot for conversation history. As requested, no new report was generated.\n\nWeb search\nRead 4 sources\nL\nState Management with AG-UI | Microsoft Learn\nlearn.microsoft.com\nD\nAG-UI Overview - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nAG-UI: How the Agent-User Interaction Protocol Works | Codecademy\nwww.codecademy.com\nD\nAG-UI\ndocs.copilotkit.ai\nSources\n12\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9Inspect source 10Inspect source 11Inspect source 12\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n12\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9Inspect source 10Inspect source 11Inspect source 12\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n2%\n\nSystem\n0k\nTools\n0k\nMessages\n2k\nEstimate\n2k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0f34df11b30f"
+      }
+    ],
+    "historical_search": {
+      "settled_before": [
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comBAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blogblog.nashtechglobal.comDAgent User Interaction Protocol (AG-UI) - Docs by LangChaindocs.langchain.comDCore architecture - Agent User Interaction Protocoldocs.ag-ui.comGGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHubgithub.com",
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comLState Management with AG-UI | Microsoft Learnlearn.microsoft.comDAG-UI Overview - Agent User Interaction Protocoldocs.ag-ui.comWAG-UI: How the Agent-User Interaction Protocol Works | Codecademywww.codecademy.comDAG-UIdocs.copilotkit.ai"
+      ],
+      "settled_during": [
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comBAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blogblog.nashtechglobal.comDAgent User Interaction Protocol (AG-UI) - Docs by LangChaindocs.langchain.comDCore architecture - Agent User Interaction Protocoldocs.ag-ui.comGGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHubgithub.com",
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comLState Management with AG-UI | Microsoft Learnlearn.microsoft.comDAG-UI Overview - Agent User Interaction Protocoldocs.ag-ui.comWAG-UI: How the Agent-User Interaction Protocol Works | Codecademywww.codecademy.comDAG-UIdocs.copilotkit.ai"
+      ],
+      "new_run_active": true
+    },
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (8).md",
+    "responsive": {
+      "width": 390,
+      "keyboardInspector": true,
+      "statusAnnouncement": true
+    },
+    "retainedDownload": "report-1-12.md",
+    "downloadSha256": "0bcd94af8c6aa2bd461b318988b2a8cba41b3e99ec6fd4f8b1df7bcc9f6334a9"
+  },
+  {
+    "repeat": 2,
+    "case": 1,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_8af778971ec3",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_8af778971ec3",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 2.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_8af778971ec3"
+      },
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 2.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_8af778971ec3"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 2,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_2c123b9d9f6b",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2c123b9d9f6b",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 2.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2c123b9d9f6b"
+      },
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 2.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2c123b9d9f6b"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 3,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_ecfa0da85d96",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ecfa0da85d96",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Historical image",
+          "image inputs are not supported",
+          "The attachment was rejected. Only text files are supported."
+        ],
+        "text": "Acceptance 2.03\nhistorical.png\n\nHistorical image \u2014 image inputs are not supported by this agent.\n\nThe attachment was rejected. Only text files are supported.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n0%\n\nSystem\n0k\nTools\n0k\nMessages\n0k\nEstimate\n0k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ecfa0da85d96"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 4,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_2532ffd04282",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2532ffd04282",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 2.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\n\nBased on acceptance.md:\n\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\nNote: the file also lists a retired launch window of 3 October, which is explicitly marked as not to be used.\n\n2 tool calls\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2532ffd04282"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 2.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\n\nBased on acceptance.md:\n\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\nNote: the file also lists a retired launch window of 3 October, which is explicitly marked as not to be used.\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_2532ffd04282"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 5,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_3c0e9fdbb3bc",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_3c0e9fdbb3bc",
+    "result": "passed",
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (3).md",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 2.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report: Aster\nProject\n\nAster\n\nLaunch Window\n\n17 November (current approved launch window)\n\nApproved Budget\n\n420 units\n\nNotes\n\nThe retired launch window of 3 October is no longer in effect and should not be used for planning or reporting.\n\n2 tool calls\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_3c0e9fdbb3bc"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 2.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report: Aster\nProject\n\nAster\n\nLaunch Window\n\n17 November (current approved launch window)\n\nApproved Budget\n\n420 units\n\nNotes\n\nThe retired launch window of 3 October is no longer in effect and should not be used for planning or reporting.\n\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_3c0e9fdbb3bc"
+      }
+    ],
+    "retainedDownload": "report-2-05.md",
+    "downloadSha256": "1dac5a824f83882c1292feb1795389406b024c0b64921f7a65e6950574920789"
+  },
+  {
+    "repeat": 2,
+    "case": 6,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_86ee095203b4",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_86ee095203b4",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 2.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\nProject: Juniper\nApproved budget: 730 units\nLaunch: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Status Report\nOverview\n\nThis report summarizes the currently approved parameters for Project Juniper. All figures below are as supplied for this conversation and reflect the approved position only.\n\nKey Facts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nBudget\n\nProject Juniper has an approved budget of 730 units. No breakdown by cost category, contingency, or spend-to-date has been provided, so this figure should be treated as the total approved envelope.\n\nLaunch\n\nThe launch date is 22 December. No launch window, milestone schedule, or readiness status has been supplied alongside that date.\n\nSummary\n\nProject Juniper is approved at 730 units with a launch on 22 December. These three parameters are the full extent of the confirmed information restated in this report.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_86ee095203b4"
+      },
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 2.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\nProject: Juniper\nApproved budget: 730 units\nLaunch: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Status Report\nOverview\n\nThis report summarizes the currently approved parameters for Project Juniper. All figures below are as supplied for this conversation and reflect the approved position only.\n\nKey Facts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nBudget\n\nProject Juniper has an approved budget of 730 units. No breakdown by cost category, contingency, or spend-to-date has been provided, so this figure should be treated as the total approved envelope.\n\nLaunch\n\nThe launch date is 22 December. No launch window, milestone schedule, or readiness status has been supplied alongside that date.\n\nSummary\n\nProject Juniper is approved at 730 units with a launch on 22 December. These three parameters are the full extent of the confirmed information restated in this report.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_86ee095203b4"
+      }
+    ],
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (6).md",
+    "retainedDownload": "report-2-06.md",
+    "downloadSha256": "3cd6c36da4e3a9c9d0deac16506aba286c4aa6bdd04b5e0abfb2133d12919940"
+  },
+  {
+    "repeat": 2,
+    "case": 7,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_990de17a8e2e",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_990de17a8e2e",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 2.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject Larch\nBudget 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nBranch Facts Report\nProject\n\nProject Larch\n\nBudget\n\nBudget: 900\n\nSummary\nFact\tValue\nProject\tLarch\nBudget\t900\n\nThis report contains only the two selected branch facts. No other details were included.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_990de17a8e2e"
+      },
+      {
+        "assertions": [
+          "Cedar",
+          "100"
+        ],
+        "text": "Acceptance 2.07\n\nRemember the branch facts: project Cedar, budget 100. Repeat those two facts only.\n\n1 / 2\nFleet Agent\nProject: Cedar\nBudget: 100\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_990de17a8e2e"
+      },
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 2.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject Larch\nBudget 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nBranch Facts Report\nProject\n\nProject Larch\n\nBudget\n\nBudget: 900\n\nSummary\nFact\tValue\nProject\tLarch\nBudget\t900\n\nThis report contains only the two selected branch facts. No other details were included.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_990de17a8e2e"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 8,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_6b8d54599898",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6b8d54599898",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "capability_unavailable",
+          "Saved"
+        ],
+        "text": "Acceptance 2.08\n\nOverwrite approval-2.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI could not overwrite approval-2.md. The write capability was reported as unavailable (capability_unavailable) because no tool approval was granted for this run, so no modification was performed.\n\nCurrent state, from read-only inspection:\n\napproval-2.md exists in the working directory (confirmed by both a path search and a directory listing).\nIts contents were not changed; it still holds whatever content it had before this request.\n\nTo proceed, the overwrite permission for this file would need to be granted, after which the request can be run again.\n\n2 tool calls\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6b8d54599898"
+      },
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "capability_unavailable"
+        ],
+        "text": "Acceptance 2.08\n\nOverwrite approval-2.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI could not overwrite approval-2.md. The write capability was reported as unavailable (capability_unavailable) because no tool approval was granted for this run, so no modification was performed.\n\nCurrent state, from read-only inspection:\n\napproval-2.md exists in the working directory (confirmed by both a path search and a directory listing).\nIts contents were not changed; it still holds whatever content it had before this request.\n\nTo proceed, the overwrite permission for this file would need to be granted, after which the request can be run again.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6b8d54599898"
+      }
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 9,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_a1775748bcb1",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a1775748bcb1",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORIGINAL-APPROVAL",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 2.09\n\nOverwrite approval-2.md with APPROVED-2.\n\nFleet Agent\n\nI was unable to overwrite approval-2.md. The write could not be performed \u2014 the operation reported that the required capability was unavailable, so no change was made.\n\nCurrent verified state:\n\nFile: approval-2.md (confirmed present in the working directory)\nContents: ORIGINAL-APPROVAL (from a read performed this run)\n\nThe file still holds its original content. Nothing was modified, partially written, or left in an inconsistent state. If you can enable the write capability (or grant access to the target location), re-issue the request and I can set the contents to APPROVED-2.\n\n3 tool calls\nSources\n1\nInspect source 1\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a1775748bcb1"
+      },
+      {
+        "assertions": [
+          "APPROVED-2",
+          "Saved"
+        ],
+        "text": "Acceptance 2.09\n\nOverwrite approval-2.md with APPROVED-2.\n\nFleet Agent\n\nI was unable to overwrite approval-2.md. The write could not be performed \u2014 the operation reported that the required capability was unavailable, so no change was made.\n\nCurrent verified state:\n\nFile: approval-2.md (confirmed present in the working directory)\nContents: ORIGINAL-APPROVAL (from a read performed this run)\n\nThe file still holds its original content. Nothing was modified, partially written, or left in an inconsistent state. If you can enable the write capability (or grant access to the target location), re-issue the request and I can set the contents to APPROVED-2.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nNow overwrite approval-2.md with APPROVED-2. Read the file back to verify the current content.\n\nFleet Agent\n\nDone. approval-2.md has been overwritten with APPROVED-2.\n\nVerification (read back after the write):\n\nFile: approval-2.md\nCurrent contents: APPROVED-2\nWrite result: 10 bytes written\nVerification read: 1 | APPROVED-2\n\nThe previous contents (ORIGINAL-APPROVAL) have been replaced, and the read-back confirms the new content is in place.\n\n2 tool calls\nSources\n1\nInspect source 1\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\nAllow tools for the next run\n\nThese tools can change workspace files or execute commands. Selection resets after sending.\n\n write\nCreate or atomically replace a workspace text file.\n edit\nReplace exact text in a workspace file; ambiguous matches fail safely.\n bash\nRun a bounded command with a minimal environment in the workspace.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a1775748bcb1"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-2",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 2.09\n\nOverwrite approval-2.md with APPROVED-2.\n\nFleet Agent\n\nI was unable to overwrite approval-2.md. The write could not be performed \u2014 the operation reported that the required capability was unavailable, so no change was made.\n\nCurrent verified state:\n\nFile: approval-2.md (confirmed present in the working directory)\nContents: ORIGINAL-APPROVAL (from a read performed this run)\n\nThe file still holds its original content. Nothing was modified, partially written, or left in an inconsistent state. If you can enable the write capability (or grant access to the target location), re-issue the request and I can set the contents to APPROVED-2.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nOverwrite approval-2.md with EDIT-BLOCKED-2. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI could not overwrite approval-2.md. The write operation reported that the required capability is unavailable, and no fresh approval has been selected, so no change was made.\n\nWhat is verified:\n\nFile exists: approval-2.md is listed in the working directory (alongside approval-1.md, approval-3.md, acceptance.md, notes.md, test.png, text-note.txt).\nCurrent contents: ORIGINAL-APPROVAL.\n\nThe file still holds its original content; nothing was modified, partially written, or left in an inconsistent state. The requested value EDIT-BLOCKED-2 was not applied.\n\nTo proceed, the write capability needs to be enabled (and any required approval granted) for the target location. Once that is in place, re-issue the request and I can set the contents to EDIT-BLOCKED-2.\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a1775748bcb1"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-2",
+          "unavailable",
+          "Saved"
+        ],
+        "text": "Acceptance 2.09\n\nOverwrite approval-2.md with APPROVED-2.\n\nFleet Agent\n\nI was unable to overwrite approval-2.md. The write could not be performed \u2014 the operation reported that the required capability was unavailable, so no change was made.\n\nCurrent verified state:\n\nFile: approval-2.md (confirmed present in the working directory)\nContents: ORIGINAL-APPROVAL (from a read performed this run)\n\nThe file still holds its original content. Nothing was modified, partially written, or left in an inconsistent state. If you can enable the write capability (or grant access to the target location), re-issue the request and I can set the contents to APPROVED-2.\n\nSources\n1\nInspect source 1\n\nOverwrite approval-2.md with EDIT-BLOCKED-2. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI could not overwrite approval-2.md. The write operation reported that the required capability is unavailable, and no fresh approval has been selected, so no change was made.\n\nWhat is verified:\n\nFile exists: approval-2.md is listed in the working directory (alongside approval-1.md, approval-3.md, acceptance.md, notes.md, test.png, text-note.txt).\nCurrent contents: ORIGINAL-APPROVAL.\n\nThe file still holds its original content; nothing was modified, partially written, or left in an inconsistent state. The requested value EDIT-BLOCKED-2 was not applied.\n\nTo proceed, the write capability needs to be enabled (and any required approval granted) for the target location. Once that is in place, re-issue the request and I can set the contents to EDIT-BLOCKED-2.\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a1775748bcb1"
+      }
+    ],
+    "approval_reset": true
+  },
+  {
+    "repeat": 2,
+    "case": 10,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_ff30c67bce68",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ff30c67bce68",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ALPHA-2",
+          "Saved"
+        ],
+        "text": "Acceptance 2.10\n\nMy run marker is ALPHA-2. Inspect every available workspace text document and write a detailed comparison using ALPHA-2 as the title.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ff30c67bce68"
+      }
+    ],
+    "peer": {
+      "thread_id": "thread_f4c968174b84",
+      "text": "Concurrency peer 2\n\nMy marker is BETA-2. Explain why 6 times 7 is 42 in a short paragraph, beginning with BETA-2.\n\nFleet Agent\n\nBETA-2: 6 times 7 is 42 because multiplication is just repeated addition \u2014 adding six copies of 7 (7 + 7 + 7 + 7 + 7 + 7) gives 42, and so does adding seven copies of 6 (6 + 6 + 6 + 6 + 6 + 6 + 6). This fits the general pattern that a \u00d7 b counts a groups of b, so 6 \u00d7 7 fills a 6-by-7 grid with 42 unit squares. The result is consistent with the rest of the times table and with division checking it back: 42 \u00f7 6 = 7.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k"
+    }
+  },
+  {
+    "repeat": 2,
+    "case": 11,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_a9b361dd0e8d",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a9b361dd0e8d",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Feedback could not be saved. Try again.",
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 2.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\nFeedback could not be saved. Try again.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a9b361dd0e8d"
+      },
+      {
+        "assertions": [
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 2.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\n1 / 2\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_a9b361dd0e8d"
+      }
+    ],
+    "feedback_lifecycle": [
+      "failed positive visible",
+      "positive recovery restored",
+      "negative restored",
+      "new branch empty",
+      "old branch restored",
+      "removed after reload"
+    ]
+  },
+  {
+    "repeat": 2,
+    "case": 12,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_94e301e154c1",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_94e301e154c1",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "AG-UI",
+          "STATE_SNAPSHOT",
+          "STATE_DELTA",
+          "Saved"
+        ],
+        "text": "Acceptance 2.12\n\nSearch the documentation for AG-UI state sync. Summarize the relevant facts and create one managed Markdown report.\n\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nThe documentation describes AG-UI as a protocol that streams typed events over SSE (Server-Sent Events). State synchronization is one of four event families in that protocol, alongside lifecycle, text, and tool-call events.\n\nEvent families\nFamily\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nKey facts on state sync\n\nSnapshot and delta model. State is communicated with two event types:\n\nSTATE_SNAPSHOT \u2014 a full state snapshot sent to the client.\nSTATE_DELTA \u2014 an incremental change.\n\nOrdering requirement. A snapshot must arrive before any delta. The docs state this is a hard requirement: the snapshot is the base against which deltas are applied.\n\nDelta format. Deltas are RFC 6902 JSON Patch operations, applied to the client's current snapshot.\n\nClient-side consumption (assistant-ui).\n\nuseAgUiState mirrors the state that the AG-UI agent owns, and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state (for example messages and thread.isRunning) \u2014 this is distinct from agent-owned state.\nshowThinking=false hides THINKING_* / REASONING_* events.\nRelated boundary (scope note)\n\nThe documentation also describes a chain-of-thought boundary: a process panel renders an intentional public trace (AgentWorkspaceState) covering steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend. This is adjacent to state sync but concerns what is exposed in the public trace rather than the snapshot/delta transport.\n\nPractical implications\nConsumers should be prepared to receive a snapshot first and treat deltas as patches on top of it.\nBecause deltas are RFC 6902, client implementations need a JSON Patch implementation rather than bespoke merge logic.\nChoose the right hook: useAgUiState for agent-owned synchronized state; useAuiState for assistant-ui client state.\nCaveats on this summary\nThe summary is drawn from a single documentation search result; it may not cover all state-sync details the documentation contains.\nNo versions, API signatures, or code examples were present in the retrieved evidence.\n1 tool call\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_94e301e154c1"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 2.12\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nThe documentation describes AG-UI as a protocol that streams typed events over SSE (Server-Sent Events). State synchronization is one of four event families in that protocol, alongside lifecycle, text, and tool-call events.\n\nEvent families\nFamily\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nKey facts on state sync\n\nSnapshot and delta model. State is communicated with two event types:\n\nSTATE_SNAPSHOT \u2014 a full state snapshot sent to the client.\nSTATE_DELTA \u2014 an incremental change.\n\nOrdering requirement. A snapshot must arrive before any delta. The docs state this is a hard requirement: the snapshot is the base against which deltas are applied.\n\nDelta format. Deltas are RFC 6902 JSON Patch operations, applied to the client's current snapshot.\n\nClient-side consumption (assistant-ui).\n\nuseAgUiState mirrors the state that the AG-UI agent owns, and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state (for example messages and thread.isRunning) \u2014 this is distinct from agent-owned state.\nshowThinking=false hides THINKING_* / REASONING_* events.\nRelated boundary (scope note)\n\nThe documentation also describes a chain-of-thought boundary: a process panel renders an intentional public trace (AgentWorkspaceState) covering steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend. This is adjacent to state sync but concerns what is exposed in the public trace rather than the snapshot/delta transport.\n\nPractical implications\nConsumers should be prepared to receive a snapshot first and treat deltas as patches on top of it.\nBecause deltas are RFC 6902, client implementations need a JSON Patch implementation rather than bespoke merge logic.\nChoose the right hook: useAgUiState for agent-owned synchronized state; useAuiState for assistant-ui client state.\nCaveats on this summary\nThe summary is drawn from a single documentation search result; it may not cover all state-sync details the documentation contains.\nNo versions, API signatures, or code examples were present in the retrieved evidence.\n1 tool call\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe official AG-UI state synchronization docs are State Management at https://docs.ag-ui.com/concepts/state, with supporting detail in Core architecture (https://docs.ag-ui.com/concepts/architecture).\n\nBrief summary from the search results:\n\nPurpose: state management is a core AG-UI feature for real-time synchronization between agents and frontends, supporting bidirectional/ collaborative state updates.\nEvents (per the architecture page): STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes using JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history).\nTransport: a single JSON event sequence over standard HTTP or an optional binary channel.\nGoal: efficient client-side state management with minimal data transfer.\n\nAs requested, this is a short summary only \u2014 no new report was created.\n\n1 tool call\nSources\n5\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nIntroducing AG-UI: The Protocol Where Agents Meet Users | Blog | CopilotKit\nwww.copilotkit.ai\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_94e301e154c1"
+      },
+      {
+        "assertions": [
+          "AG-UI",
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 2.12\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nThe documentation describes AG-UI as a protocol that streams typed events over SSE (Server-Sent Events). State synchronization is one of four event families in that protocol, alongside lifecycle, text, and tool-call events.\n\nEvent families\nFamily\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nKey facts on state sync\n\nSnapshot and delta model. State is communicated with two event types:\n\nSTATE_SNAPSHOT \u2014 a full state snapshot sent to the client.\nSTATE_DELTA \u2014 an incremental change.\n\nOrdering requirement. A snapshot must arrive before any delta. The docs state this is a hard requirement: the snapshot is the base against which deltas are applied.\n\nDelta format. Deltas are RFC 6902 JSON Patch operations, applied to the client's current snapshot.\n\nClient-side consumption (assistant-ui).\n\nuseAgUiState mirrors the state that the AG-UI agent owns, and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state (for example messages and thread.isRunning) \u2014 this is distinct from agent-owned state.\nshowThinking=false hides THINKING_* / REASONING_* events.\nRelated boundary (scope note)\n\nThe documentation also describes a chain-of-thought boundary: a process panel renders an intentional public trace (AgentWorkspaceState) covering steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend. This is adjacent to state sync but concerns what is exposed in the public trace rather than the snapshot/delta transport.\n\nPractical implications\nConsumers should be prepared to receive a snapshot first and treat deltas as patches on top of it.\nBecause deltas are RFC 6902, client implementations need a JSON Patch implementation rather than bespoke merge logic.\nChoose the right hook: useAgUiState for agent-owned synchronized state; useAuiState for assistant-ui client state.\nCaveats on this summary\nThe summary is drawn from a single documentation search result; it may not cover all state-sync details the documentation contains.\nNo versions, API signatures, or code examples were present in the retrieved evidence.\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe official AG-UI state synchronization docs are State Management at https://docs.ag-ui.com/concepts/state, with supporting detail in Core architecture (https://docs.ag-ui.com/concepts/architecture).\n\nBrief summary from the search results:\n\nPurpose: state management is a core AG-UI feature for real-time synchronization between agents and frontends, supporting bidirectional/ collaborative state updates.\nEvents (per the architecture page): STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes using JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history).\nTransport: a single JSON event sequence over standard HTTP or an optional binary channel.\nGoal: efficient client-side state management with minimal data transfer.\n\nAs requested, this is a short summary only \u2014 no new report was created.\n\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nIntroducing AG-UI: The Protocol Where Agents Meet Users | Blog | CopilotKit\nwww.copilotkit.ai\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_94e301e154c1"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 2.12\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nThe documentation describes AG-UI as a protocol that streams typed events over SSE (Server-Sent Events). State synchronization is one of four event families in that protocol, alongside lifecycle, text, and tool-call events.\n\nEvent families\nFamily\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nKey facts on state sync\n\nSnapshot and delta model. State is communicated with two event types:\n\nSTATE_SNAPSHOT \u2014 a full state snapshot sent to the client.\nSTATE_DELTA \u2014 an incremental change.\n\nOrdering requirement. A snapshot must arrive before any delta. The docs state this is a hard requirement: the snapshot is the base against which deltas are applied.\n\nDelta format. Deltas are RFC 6902 JSON Patch operations, applied to the client's current snapshot.\n\nClient-side consumption (assistant-ui).\n\nuseAgUiState mirrors the state that the AG-UI agent owns, and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state (for example messages and thread.isRunning) \u2014 this is distinct from agent-owned state.\nshowThinking=false hides THINKING_* / REASONING_* events.\nRelated boundary (scope note)\n\nThe documentation also describes a chain-of-thought boundary: a process panel renders an intentional public trace (AgentWorkspaceState) covering steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend. This is adjacent to state sync but concerns what is exposed in the public trace rather than the snapshot/delta transport.\n\nPractical implications\nConsumers should be prepared to receive a snapshot first and treat deltas as patches on top of it.\nBecause deltas are RFC 6902, client implementations need a JSON Patch implementation rather than bespoke merge logic.\nChoose the right hook: useAgUiState for agent-owned synchronized state; useAuiState for assistant-ui client state.\nCaveats on this summary\nThe summary is drawn from a single documentation search result; it may not cover all state-sync details the documentation contains.\nNo versions, API signatures, or code examples were present in the retrieved evidence.\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nThe official AG-UI state synchronization docs are State Management at https://docs.ag-ui.com/concepts/state, with supporting detail in Core architecture (https://docs.ag-ui.com/concepts/architecture).\n\nBrief summary from the search results:\n\nPurpose: state management is a core AG-UI feature for real-time synchronization between agents and frontends, supporting bidirectional/ collaborative state updates.\nEvents (per the architecture page): STATE_SNAPSHOT (complete state at a point in time), STATE_DELTA (incremental changes using JSON Patch, RFC 6902), and MESSAGES_SNAPSHOT (complete conversation history).\nTransport: a single JSON event sequence over standard HTTP or an optional binary channel.\nGoal: efficient client-side state management with minimal data transfer.\n\nAs requested, this is a short summary only \u2014 no new report was created.\n\nWeb search\nRead 5 sources\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nW\nIntroducing AG-UI: The Protocol Where Agents Meet Users | Blog | CopilotKit\nwww.copilotkit.ai\nB\nAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blog\nblog.nashtechglobal.com\nD\nCore architecture - Agent User Interaction Protocol\ndocs.ag-ui.com\nG\nGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHub\ngithub.com\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n8\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_94e301e154c1"
+      }
+    ],
+    "historical_search": {
+      "settled_before": [
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comWIntroducing AG-UI: The Protocol Where Agents Meet Users | Blog | CopilotKitwww.copilotkit.aiBAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blogblog.nashtechglobal.comDCore architecture - Agent User Interaction Protocoldocs.ag-ui.comGGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHubgithub.com"
+      ],
+      "settled_during": [
+        "Web searchRead 5 sourcesDState Management - Agent User Interaction Protocoldocs.ag-ui.comWIntroducing AG-UI: The Protocol Where Agents Meet Users | Blog | CopilotKitwww.copilotkit.aiBAG-UI The Standardized Interaction Protocol for the Agentic APPLICATION - NashTech Blogblog.nashtechglobal.comDCore architecture - Agent User Interaction Protocoldocs.ag-ui.comGGitHub - ag-ui-protocol/ag-ui: AG-UI: the Agent-User Interaction Protocol. Bring Agents into Frontend Applications. \u00b7 GitHubgithub.com"
+      ],
+      "new_run_active": true
+    },
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (9).md",
+    "responsive": {
+      "width": 390,
+      "keyboardInspector": true,
+      "statusAnnouncement": true
+    },
+    "retainedDownload": "report-2-12.md",
+    "downloadSha256": "903d261c5525741fc6b408b1a13f18819bf907e8f967e4cc9db497b4942d39a8"
+  },
+  {
+    "repeat": 3,
+    "case": 1,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_5cc28003dc37",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5cc28003dc37",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 3.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5cc28003dc37"
+      },
+      {
+        "assertions": [
+          "42",
+          "Saved"
+        ],
+        "text": "Acceptance 3.01\n\nWhat is 19 plus 23? Answer with the result.\n\nFleet Agent\n\n42\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5cc28003dc37"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 2,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_fac2a54286c4",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_fac2a54286c4",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 3.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_fac2a54286c4"
+      },
+      {
+        "assertions": [
+          "ORBIT-742",
+          "violet",
+          "Saved"
+        ],
+        "text": "Acceptance 3.02\n\nWhat verification code and color are stated in the attached file?\n\nFleet Agent\n\nThe attached file states:\n\nVerification code: ORBIT-742\nColor: violet\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_fac2a54286c4"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 3,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_1656305c18d9",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_1656305c18d9",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Historical image",
+          "image inputs are not supported",
+          "The attachment was rejected. Only text files are supported."
+        ],
+        "text": "Acceptance 3.03\nhistorical.png\n\nHistorical image \u2014 image inputs are not supported by this agent.\n\nThe attachment was rejected. Only text files are supported.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n0%\n\nSystem\n0k\nTools\n0k\nMessages\n0k\nEstimate\n0k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_1656305c18d9"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 4,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_0fe0549b690a",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0fe0549b690a",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 3.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\n(Note: the file also mentions a retired launch window of 3 October and explicitly says not to use it.)\n\n1 tool call\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0fe0549b690a"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved",
+          "Inspect source 1"
+        ],
+        "text": "Acceptance 3.04\n\nRead acceptance.md. State the current project, current launch window and approved budget.\n\nFleet Agent\nCurrent project: Aster\nCurrent launch window: 17 November\nApproved budget: 420 units\n\n(Note: the file also mentions a retired launch window of 3 October and explicitly says not to use it.)\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_0fe0549b690a"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 5,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_30a285e0b555",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_30a285e0b555",
+    "result": "passed",
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (4).md",
+    "observations": [
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 3.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report \u2014 Aster\nProject\n\nAster\n\nCurrent launch window\n\n17 November\n\nApproved budget\n\n420 units\n\nNotes\nA prior launch window of 3 October is retired and is not to be used.\nAll values above are taken from the current contents of acceptance.md.\n2 tool calls\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_30a285e0b555"
+      },
+      {
+        "assertions": [
+          "Aster",
+          "17 November",
+          "420",
+          "Saved"
+        ],
+        "text": "Acceptance 3.05\n\nRead acceptance.md and create one managed Markdown report of its current project, launch window and approved budget.\n\nFleet Agent\nProject Report \u2014 Aster\nProject\n\nAster\n\nCurrent launch window\n\n17 November\n\nApproved budget\n\n420 units\n\nNotes\nA prior launch window of 3 October is retired and is not to be used.\nAll values above are taken from the current contents of acceptance.md.\nSources\n1\nInspect source 1\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_30a285e0b555"
+      }
+    ],
+    "retainedDownload": "report-3-05.md",
+    "downloadSha256": "7ade4fb4ba7efb9110cc57a714f63faf75f12e0d4c5c7e55d33ba4ddb7ea042f"
+  },
+  {
+    "repeat": 3,
+    "case": 6,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_6ae9f78894f7",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6ae9f78894f7",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 3.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\n\nHere are the facts for this conversation:\n\nProject: Juniper\nApproved budget: 730 units\nLaunch date: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Fact Summary Report\nOverview\n\nThis report records the key facts established for Project Juniper for use in this conversation.\n\nFacts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nNotes\nThese three facts (project name, approved budget, launch date) are the full scope of the information provided.\nNo further attributes, dates, or figures have been supplied or verified.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6ae9f78894f7"
+      },
+      {
+        "assertions": [
+          "Juniper",
+          "730",
+          "22 December",
+          "Saved"
+        ],
+        "text": "Acceptance 3.06\n\nUse these facts for this conversation: project Juniper, approved budget 730 units, launch 22 December. Repeat them briefly.\n\nFleet Agent\n\nHere are the facts for this conversation:\n\nProject: Juniper\nApproved budget: 730 units\nLaunch date: 22 December\n\nMake that a report.\n\nFleet Agent\nProject Juniper \u2014 Fact Summary Report\nOverview\n\nThis report records the key facts established for Project Juniper for use in this conversation.\n\nFacts\nItem\tDetail\nProject\tJuniper\nApproved budget\t730 units\nLaunch date\t22 December\nNotes\nThese three facts (project name, approved budget, launch date) are the full scope of the information provided.\nNo further attributes, dates, or figures have been supplied or verified.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_6ae9f78894f7"
+      }
+    ],
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (7).md",
+    "retainedDownload": "report-3-06.md",
+    "downloadSha256": "e2d110d10ce9b659dbe42efe46cbc54d33dcfdfe396ae2bfd0c2cdada6130b78"
+  },
+  {
+    "repeat": 3,
+    "case": 7,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_deb1871f63f1",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_deb1871f63f1",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 3.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject: Larch\nBudget: 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nReport: Branch Facts \u2014 Project Larch\nSummary\n\nThis report records the selected branch facts for the current context. Only the two facts supplied in this conversation are included; no additional details, sources, or derived figures have been introduced.\n\nFacts\n#\tFact\tValue\n1\tProject\tLarch\n2\tBudget\t900\nScope and Notes\nContent basis: The two facts above, as stated in the request.\nCurrency and units: Not specified. The budget value is reported as the bare number 900; no currency, unit, or time period is asserted.\nExclusions: No timeline, owner, cost breakdown, or variance analysis is included, since none was provided.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_deb1871f63f1"
+      },
+      {
+        "assertions": [
+          "Cedar",
+          "100"
+        ],
+        "text": "Acceptance 3.07\n\nRemember the branch facts: project Cedar, budget 100. Repeat those two facts only.\n\n1 / 2\nFleet Agent\n\nProject Cedar. Budget 100.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_deb1871f63f1"
+      },
+      {
+        "assertions": [
+          "Larch",
+          "900",
+          "Saved"
+        ],
+        "text": "Acceptance 3.07\n\nRemember the branch facts: project Larch, budget 900. Repeat those two facts only.\n\n2 / 2\nFleet Agent\nProject: Larch\nBudget: 900\n\nMake that a report. Use the selected branch facts only.\n\nFleet Agent\nReport: Branch Facts \u2014 Project Larch\nSummary\n\nThis report records the selected branch facts for the current context. Only the two facts supplied in this conversation are included; no additional details, sources, or derived figures have been introduced.\n\nFacts\n#\tFact\tValue\n1\tProject\tLarch\n2\tBudget\t900\nScope and Notes\nContent basis: The two facts above, as stated in the request.\nCurrency and units: Not specified. The budget value is reported as the bare number 900; no currency, unit, or time period is asserted.\nExclusions: No timeline, owner, cost breakdown, or variance analysis is included, since none was provided.\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_deb1871f63f1"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 8,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_ec0818f94786",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ec0818f94786",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "capability_unavailable",
+          "Saved"
+        ],
+        "text": "Acceptance 3.08\n\nOverwrite approval-3.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI could not overwrite approval-3.md. The required write capability was unavailable in this run (the approval/write operation came back as capability_unavailable), and no tool approvals were selected, so no file modification was attempted or performed.\n\nWhat I can confirm from read-only inspection: approval-3.md does exist in the working directory, alongside acceptance.md, approval-1.md, approval-2.md, notes.md, test.png, and text-note.txt.\n\nIts contents are therefore unchanged \u2014 whatever text it held before is still there. To actually set it to BOUNDARY-TEST, you'll need to grant the write/approval capability, after which I can perform the overwrite and verify the result.\n\n1 tool call\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ec0818f94786"
+      },
+      {
+        "assertions": [
+          "Evidence is insufficient",
+          "capability_unavailable"
+        ],
+        "text": "Acceptance 3.08\n\nOverwrite approval-3.md with BOUNDARY-TEST. I have not selected any tool approvals. If the required capability is unavailable, state that limitation truthfully.\n\nFleet Agent\n\nI could not overwrite approval-3.md. The required write capability was unavailable in this run (the approval/write operation came back as capability_unavailable), and no tool approvals were selected, so no file modification was attempted or performed.\n\nWhat I can confirm from read-only inspection: approval-3.md does exist in the working directory, alongside acceptance.md, approval-1.md, approval-2.md, notes.md, test.png, and text-note.txt.\n\nIts contents are therefore unchanged \u2014 whatever text it held before is still there. To actually set it to BOUNDARY-TEST, you'll need to grant the write/approval capability, after which I can perform the overwrite and verify the result.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_ec0818f94786"
+      }
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 9,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_9cea9ca45a60",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_9cea9ca45a60",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ORIGINAL-APPROVAL",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 3.09\n\nOverwrite approval-3.md with APPROVED-3.\n\nFleet Agent\n\nI was not able to overwrite approval-3.md. No write operation for that file succeeded in this run \u2014 the only available change-capability observation returned insufficient / capability_unavailable \u2014 so the file was left untouched.\n\nCurrent state of approval-3.md (as read): line 1 is ORIGINAL-APPROVAL.\n\nNothing in the evidence shows APPROVED-3 being written to the file, nor any read-after-write confirming the new content. The requested change should be considered not applied.\n\nTo complete this, the write would need to be re-attempted with an available file-modification capability. Once it succeeds, a confirming read should show APPROVED-3 as the file's content.\n\n3 tool calls\nSources\n1\nInspect source 1\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_9cea9ca45a60"
+      },
+      {
+        "assertions": [
+          "APPROVED-3",
+          "Saved"
+        ],
+        "text": "Acceptance 3.09\n\nOverwrite approval-3.md with APPROVED-3.\n\nFleet Agent\n\nI was not able to overwrite approval-3.md. No write operation for that file succeeded in this run \u2014 the only available change-capability observation returned insufficient / capability_unavailable \u2014 so the file was left untouched.\n\nCurrent state of approval-3.md (as read): line 1 is ORIGINAL-APPROVAL.\n\nNothing in the evidence shows APPROVED-3 being written to the file, nor any read-after-write confirming the new content. The requested change should be considered not applied.\n\nTo complete this, the write would need to be re-attempted with an available file-modification capability. Once it succeeds, a confirming read should show APPROVED-3 as the file's content.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nNow overwrite approval-3.md with APPROVED-3. Read the file back to verify the current content.\n\nFleet Agent\n\nDone. approval-3.md has been overwritten with APPROVED-3, and the verify read confirms the new content.\n\nResult\n\nWrite: succeeded \u2014 11 bytes written to approval-3.md\nRead-back (verification): 1 | APPROVED-3\nPrevious content was ORIGINAL-APPROVAL, which has now been superseded\n\nThe file's current content is:\n\nAPPROVED-3\n2 tool calls\nSources\n1\nInspect source 1\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\nAllow tools for the next run\n\nThese tools can change workspace files or execute commands. Selection resets after sending.\n\n write\nCreate or atomically replace a workspace text file.\n edit\nReplace exact text in a workspace file; ambiguous matches fail safely.\n bash\nRun a bounded command with a minimal environment in the workspace.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_9cea9ca45a60"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-3",
+          "Evidence is insufficient",
+          "Saved"
+        ],
+        "text": "Acceptance 3.09\n\nOverwrite approval-3.md with APPROVED-3.\n\nFleet Agent\n\nI was not able to overwrite approval-3.md. No write operation for that file succeeded in this run \u2014 the only available change-capability observation returned insufficient / capability_unavailable \u2014 so the file was left untouched.\n\nCurrent state of approval-3.md (as read): line 1 is ORIGINAL-APPROVAL.\n\nNothing in the evidence shows APPROVED-3 being written to the file, nor any read-after-write confirming the new content. The requested change should be considered not applied.\n\nTo complete this, the write would need to be re-attempted with an available file-modification capability. Once it succeeds, a confirming read should show APPROVED-3 as the file's content.\n\n3 tool calls\nSources\n1\nInspect source 1\n\nOverwrite approval-3.md with EDIT-BLOCKED-3. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI could not overwrite approval-3.md with EDIT-BLOCKED-3.\n\nThe only change-capability observation in this run returned insufficient / capability_unavailable, and no fresh tool approval was selected, so no write to the file took place. There is also no read-after-write in the evidence confirming any new content.\n\nThe last available read of approval-3.md (from a prior turn) showed line 1 as:\n\nORIGINAL-APPROVAL\n\nTreat the requested change as not applied. To complete it, a write-capable, approved tool call is needed; afterwards a read of the file should show EDIT-BLOCKED-3 before the change can be considered confirmed.\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_9cea9ca45a60"
+      },
+      {
+        "assertions": [
+          "EDIT-BLOCKED-3",
+          "unavailable",
+          "Saved"
+        ],
+        "text": "Acceptance 3.09\n\nOverwrite approval-3.md with APPROVED-3.\n\nFleet Agent\n\nI was not able to overwrite approval-3.md. No write operation for that file succeeded in this run \u2014 the only available change-capability observation returned insufficient / capability_unavailable \u2014 so the file was left untouched.\n\nCurrent state of approval-3.md (as read): line 1 is ORIGINAL-APPROVAL.\n\nNothing in the evidence shows APPROVED-3 being written to the file, nor any read-after-write confirming the new content. The requested change should be considered not applied.\n\nTo complete this, the write would need to be re-attempted with an available file-modification capability. Once it succeeds, a confirming read should show APPROVED-3 as the file's content.\n\nSources\n1\nInspect source 1\n\nOverwrite approval-3.md with EDIT-BLOCKED-3. No fresh tool approval has been selected.\n\n2 / 2\nFleet Agent\n\nI could not overwrite approval-3.md with EDIT-BLOCKED-3.\n\nThe only change-capability observation in this run returned insufficient / capability_unavailable, and no fresh tool approval was selected, so no write to the file took place. There is also no read-after-write in the evidence confirming any new content.\n\nThe last available read of approval-3.md (from a prior turn) showed line 1 as:\n\nORIGINAL-APPROVAL\n\nTreat the requested change as not applied. To complete it, a write-capable, approved tool call is needed; afterwards a read of the file should show EDIT-BLOCKED-3 before the change can be considered confirmed.\n\nSources\n1\nInspect source 1\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nEvidence is insufficient for external verification.\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_9cea9ca45a60"
+      }
+    ],
+    "approval_reset": true
+  },
+  {
+    "repeat": 3,
+    "case": 10,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_61204605efc2",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_61204605efc2",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "ALPHA-3",
+          "Saved"
+        ],
+        "text": "Acceptance 3.10\n\nMy run marker is ALPHA-3. Inspect every available workspace text document and write a detailed comparison using ALPHA-3 as the title.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_61204605efc2"
+      }
+    ],
+    "peer": {
+      "thread_id": "thread_e34dbb27a734",
+      "text": "Concurrency peer 3\n\nMy marker is BETA-3. Explain why 6 times 7 is 42 in a short paragraph, beginning with BETA-3.\n\nFleet Agent\n\nBETA-3: 6 times 7 equals 42 because multiplication is repeated addition\u20146 groups of 7 make 42 (7 + 7 + 7 + 7 + 7 + 7 = 42), and equivalently 7 groups of 6 also make 42 (6 + 6 + 6 + 6 + 6 + 6 + 6 = 42).\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k"
+    }
+  },
+  {
+    "repeat": 3,
+    "case": 11,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_4e522df8d54c",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4e522df8d54c",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "Feedback could not be saved. Try again.",
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 3.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\nFeedback could not be saved. Try again.\n\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4e522df8d54c"
+      },
+      {
+        "assertions": [
+          "20",
+          "Saved"
+        ],
+        "text": "Acceptance 3.11\n\nWhat is 9 plus 11? Answer briefly.\n\nFleet Agent\n\n20\n\n1 / 2\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_4e522df8d54c"
+      }
+    ],
+    "feedback_lifecycle": [
+      "failed positive visible",
+      "positive recovery restored",
+      "negative restored",
+      "new branch empty",
+      "old branch restored",
+      "removed after reload"
+    ]
+  },
+  {
+    "repeat": 3,
+    "case": 12,
+    "project_id": "project_a7871f950737",
+    "thread_id": "thread_5d82e4464ed0",
+    "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5d82e4464ed0",
+    "result": "passed",
+    "observations": [
+      {
+        "assertions": [
+          "AG-UI",
+          "STATE_SNAPSHOT",
+          "STATE_DELTA",
+          "Saved"
+        ],
+        "text": "Acceptance 3.12\n\nSearch the documentation for AG-UI state sync. Summarize the relevant facts and create one managed Markdown report.\n\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nAG-UI synchronizes agent-owned state to the client by streaming typed events over Server-Sent Events (SSE). State is delivered as an initial snapshot followed by incremental deltas, which the client applies to its local copy.\n\nEvent protocol\n\nAG-UI streams typed events over SSE, organized into four families:\n\nCategory\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nState sync semantics\nSnapshot first: STATE_SNAPSHOT carries the full state and must arrive before any delta.\nDeltas after: STATE_DELTA events are RFC 6902 JSON Patch operations applied to the client's current snapshot. Ordering matters \u2014 a delta is only valid once a snapshot is in place.\nClient integration (assistant-ui)\nuseAgUiState mirrors the state owned by the AG-UI agent and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state \u2014 for example, messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events from the UI.\nTesting and transport contract\nCanonical NDJSON fixtures \u2014 successful, tool-error recovery, and forced-submit \u2014 replay deterministically through POST /api/agent.\nThese fixtures are the regression contract for both the transport layer and the panel.\nVisibility boundary\n\nThe process panel renders only the intentional public trace (AgentWorkspaceState): steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend.\n\nKey takeaways\nSnapshot-before-delta is the core ordering invariant; clients should not apply a delta without a prior snapshot.\nDeltas are standard JSON Patch (RFC 6902), so any compliant patch implementation can apply them.\nServer state (useAgUiState) and client state (useAuiState) are distinct sources read through separate hooks.\nFixture streams are the authoritative regression contract for state-sync behavior.\n5 tool calls\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n3\nInspect source 1Inspect source 2Inspect source 3\nSources\n4\nInspect source 1Inspect source 2Inspect source 3Inspect source 4\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5d82e4464ed0"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 3.12\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nAG-UI state synchronization \u2014 search result\n\nThe official documentation lives at docs.ag-ui.com:\n\nState Management (docs.ag-ui.com/concepts/state) \u2014 describes state sync as bidirectional: agents see the app's current state, frontends observe changes in the agent's state, and both sides can modify it. Two complementary methods are documented: STATE_SNAPSHOT (complete state representation) and incremental deltas.\nEvents (docs.ag-ui.com/concepts/events) \u2014 frames state as a snapshot\u2013delta pattern: full snapshots are sent initially or infrequently, with incremental updates used for ongoing changes, optimizing for completeness plus efficiency.\n\nSupporting sources: the assistant-ui AG-UI runtime docs cover agent-side state sync via STATE_SNAPSHOT/STATE_DELTA; a GitHub discussion (#1893) asks when body.state reflects the latest snapshot (it appears to mirror the previous turn's snapshot), and a third-party blog post (\"The Snapshot Tax\") argues the docs' \"perfectly synchronized\" framing understates production problems like out-of-order and dropped deltas.\n\n1 tool call\nSources\n5\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5\nWeb search\nRead 5 sources\nR\nThe Snapshot Tax: Why AG-UI's STATE_DELTA Drifts in Production\nranjankumar.in\nG\nSpec clarification: when does body.state reflect the latest STATE_SNAPSHOT, and is forwardedProps the recommended per-turn channel? \u00b7 ag-ui-protocol/ag-ui \u00b7 Discussion #1893 \u00b7 GitHub\ngithub.com\nW\nAG-UI Agent Runtime \u00b7 assistant-ui\nwww.assistant-ui.com\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nD\nEvents - Agent User Interaction Protocol\ndocs.ag-ui.com\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nScroll to bottom\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5d82e4464ed0"
+      },
+      {
+        "assertions": [
+          "AG-UI",
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 3.12\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nAG-UI synchronizes agent-owned state to the client by streaming typed events over Server-Sent Events (SSE). State is delivered as an initial snapshot followed by incremental deltas, which the client applies to its local copy.\n\nEvent protocol\n\nAG-UI streams typed events over SSE, organized into four families:\n\nCategory\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nState sync semantics\nSnapshot first: STATE_SNAPSHOT carries the full state and must arrive before any delta.\nDeltas after: STATE_DELTA events are RFC 6902 JSON Patch operations applied to the client's current snapshot. Ordering matters \u2014 a delta is only valid once a snapshot is in place.\nClient integration (assistant-ui)\nuseAgUiState mirrors the state owned by the AG-UI agent and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state \u2014 for example, messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events from the UI.\nTesting and transport contract\nCanonical NDJSON fixtures \u2014 successful, tool-error recovery, and forced-submit \u2014 replay deterministically through POST /api/agent.\nThese fixtures are the regression contract for both the transport layer and the panel.\nVisibility boundary\n\nThe process panel renders only the intentional public trace (AgentWorkspaceState): steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend.\n\nKey takeaways\nSnapshot-before-delta is the core ordering invariant; clients should not apply a delta without a prior snapshot.\nDeltas are standard JSON Patch (RFC 6902), so any compliant patch implementation can apply them.\nServer state (useAgUiState) and client state (useAuiState) are distinct sources read through separate hooks.\nFixture streams are the authoritative regression contract for state-sync behavior.\nSources\n4\nInspect source 1Inspect source 2Inspect source 3Inspect source 4\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nAG-UI state synchronization \u2014 search result\n\nThe official documentation lives at docs.ag-ui.com:\n\nState Management (docs.ag-ui.com/concepts/state) \u2014 describes state sync as bidirectional: agents see the app's current state, frontends observe changes in the agent's state, and both sides can modify it. Two complementary methods are documented: STATE_SNAPSHOT (complete state representation) and incremental deltas.\nEvents (docs.ag-ui.com/concepts/events) \u2014 frames state as a snapshot\u2013delta pattern: full snapshots are sent initially or infrequently, with incremental updates used for ongoing changes, optimizing for completeness plus efficiency.\n\nSupporting sources: the assistant-ui AG-UI runtime docs cover agent-side state sync via STATE_SNAPSHOT/STATE_DELTA; a GitHub discussion (#1893) asks when body.state reflects the latest snapshot (it appears to mirror the previous turn's snapshot), and a third-party blog post (\"The Snapshot Tax\") argues the docs' \"perfectly synchronized\" framing understates production problems like out-of-order and dropped deltas.\n\nWeb search\nRead 5 sources\nR\nThe Snapshot Tax: Why AG-UI's STATE_DELTA Drifts in Production\nranjankumar.in\nG\nSpec clarification: when does body.state reflect the latest STATE_SNAPSHOT, and is forwardedProps the recommended per-turn channel? \u00b7 ag-ui-protocol/ag-ui \u00b7 Discussion #1893 \u00b7 GitHub\ngithub.com\nW\nAG-UI Agent Runtime \u00b7 assistant-ui\nwww.assistant-ui.com\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nD\nEvents - Agent User Interaction Protocol\ndocs.ag-ui.com\nSources\n9\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n9\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5d82e4464ed0"
+      },
+      {
+        "assertions": [
+          "101",
+          "Saved"
+        ],
+        "text": "Acceptance 3.12\nFleet Agent\nAG-UI State Sync \u2014 Documentation Summary\nOverview\n\nAG-UI synchronizes agent-owned state to the client by streaming typed events over Server-Sent Events (SSE). State is delivered as an initial snapshot followed by incremental deltas, which the client applies to its local copy.\n\nEvent protocol\n\nAG-UI streams typed events over SSE, organized into four families:\n\nCategory\tEvents\nLifecycle\tRUN_STARTED, RUN_FINISHED, RUN_ERROR\nText\tTEXT_MESSAGE_*\nTool calls\tTOOL_CALL_*\nState\tSTATE_SNAPSHOT, STATE_DELTA\nState sync semantics\nSnapshot first: STATE_SNAPSHOT carries the full state and must arrive before any delta.\nDeltas after: STATE_DELTA events are RFC 6902 JSON Patch operations applied to the client's current snapshot. Ordering matters \u2014 a delta is only valid once a snapshot is in place.\nClient integration (assistant-ui)\nuseAgUiState mirrors the state owned by the AG-UI agent and re-renders as STATE_SNAPSHOT and STATE_DELTA events arrive.\nuseAuiState reads assistant-ui client state \u2014 for example, messages and thread.isRunning.\nshowThinking=false hides THINKING_* / REASONING_* events from the UI.\nTesting and transport contract\nCanonical NDJSON fixtures \u2014 successful, tool-error recovery, and forced-submit \u2014 replay deterministically through POST /api/agent.\nThese fixtures are the regression contract for both the transport layer and the panel.\nVisibility boundary\n\nThe process panel renders only the intentional public trace (AgentWorkspaceState): steps, public summaries, tool calls, sources, artifacts, decisions, and caveats. Raw next_thought, prompts, and provider payloads never leave the backend.\n\nKey takeaways\nSnapshot-before-delta is the core ordering invariant; clients should not apply a delta without a prior snapshot.\nDeltas are standard JSON Patch (RFC 6902), so any compliant patch implementation can apply them.\nServer state (useAgUiState) and client state (useAuiState) are distinct sources read through separate hooks.\nFixture streams are the authoritative regression contract for state-sync behavior.\nSources\n4\nInspect source 1Inspect source 2Inspect source 3Inspect source 4\n\nFleet-Agent-report.md\n\ntext/markdown \u00b7 open in Artifacts\n\nUse web_search to find the official AG-UI state synchronization documentation. Search once and summarize the result briefly; do not create another report.\n\nFleet Agent\n\nAG-UI state synchronization \u2014 search result\n\nThe official documentation lives at docs.ag-ui.com:\n\nState Management (docs.ag-ui.com/concepts/state) \u2014 describes state sync as bidirectional: agents see the app's current state, frontends observe changes in the agent's state, and both sides can modify it. Two complementary methods are documented: STATE_SNAPSHOT (complete state representation) and incremental deltas.\nEvents (docs.ag-ui.com/concepts/events) \u2014 frames state as a snapshot\u2013delta pattern: full snapshots are sent initially or infrequently, with incremental updates used for ongoing changes, optimizing for completeness plus efficiency.\n\nSupporting sources: the assistant-ui AG-UI runtime docs cover agent-side state sync via STATE_SNAPSHOT/STATE_DELTA; a GitHub discussion (#1893) asks when body.state reflects the latest snapshot (it appears to mirror the previous turn's snapshot), and a third-party blog post (\"The Snapshot Tax\") argues the docs' \"perfectly synchronized\" framing understates production problems like out-of-order and dropped deltas.\n\nWeb search\nRead 5 sources\nR\nThe Snapshot Tax: Why AG-UI's STATE_DELTA Drifts in Production\nranjankumar.in\nG\nSpec clarification: when does body.state reflect the latest STATE_SNAPSHOT, and is forwardedProps the recommended per-turn channel? \u00b7 ag-ui-protocol/ag-ui \u00b7 Discussion #1893 \u00b7 GitHub\ngithub.com\nW\nAG-UI Agent Runtime \u00b7 assistant-ui\nwww.assistant-ui.com\nD\nState Management - Agent User Interaction Protocol\ndocs.ag-ui.com\nD\nEvents - Agent User Interaction Protocol\ndocs.ag-ui.com\nSources\n9\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9\n\nWhat is 100 plus 1? Answer briefly.\n\nFleet Agent\n\n101\n\nSources\n9\nInspect source 1Inspect source 2Inspect source 3Inspect source 4Inspect source 5Inspect source 6Inspect source 7Inspect source 8Inspect source 9\ndeepseek/deepseek-v4.1-flash\nTool permissions\n\nSaved\n\nEstimated context\n\nEstimated from visible messages and registered tools; provider usage is unavailable.\n\n1%\n\nSystem\n0k\nTools\n0k\nMessages\n1k\nEstimate\n1k / 128k",
+        "url": "http://localhost:5173/projects/project_a7871f950737/threads/thread_5d82e4464ed0"
+      }
+    ],
+    "historical_search": {
+      "settled_before": [
+        "Web searchRead 5 sourcesRThe Snapshot Tax: Why AG-UI's STATE_DELTA Drifts in Productionranjankumar.inGSpec clarification: when does body.state reflect the latest STATE_SNAPSHOT, and is forwardedProps the recommended per-turn channel? \u00b7 ag-ui-protocol/ag-ui \u00b7 Discussion #1893 \u00b7 GitHubgithub.comWAG-UI Agent Runtime \u00b7 assistant-uiwww.assistant-ui.comDState Management - Agent User Interaction Protocoldocs.ag-ui.comDEvents - Agent User Interaction Protocoldocs.ag-ui.com"
+      ],
+      "settled_during": [
+        "Web searchRead 5 sourcesRThe Snapshot Tax: Why AG-UI's STATE_DELTA Drifts in Productionranjankumar.inGSpec clarification: when does body.state reflect the latest STATE_SNAPSHOT, and is forwardedProps the recommended per-turn channel? \u00b7 ag-ui-protocol/ag-ui \u00b7 Discussion #1893 \u00b7 GitHubgithub.comWAG-UI Agent Runtime \u00b7 assistant-uiwww.assistant-ui.comDState Management - Agent User Interaction Protocoldocs.ag-ui.comDEvents - Agent User Interaction Protocoldocs.ag-ui.com"
+      ],
+      "new_run_active": true
+    },
+    "download": "/Users/zocho/Downloads/Fleet-Agent-report (10).md",
+    "responsive": {
+      "width": 390,
+      "keyboardInspector": true,
+      "statusAnnouncement": true
+    },
+    "retainedDownload": "report-3-12.md",
+    "downloadSha256": "9c4fcf5641b51efa96ffb940e6fa93287998f72435a621fad1343564e7512abe"
+  }
+]

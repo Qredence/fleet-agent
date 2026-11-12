@@ -12,7 +12,7 @@ The loop is manual and offline, and it never touches the database or the runtime
 3. GEPA-compile a candidate over the TRAIN split only.
 4. Score the candidate on the same held-out test split.
 5. Gates: the candidate must beat the baseline AND clear ``--min-accuracy``.
-   On failure nothing is written and the exit code is 2.
+   On rejection, preserve a local report and return exit code 2.
 6. On success, write a versioned artifact directory holding the promoted
    instructions, a report, and a manifest.
 
@@ -24,9 +24,11 @@ restart the server, which the startup log confirms.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import shutil
+import subprocess
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -84,6 +86,19 @@ def split_examples(
     Stratified by route so a small held-out set still covers every profile;
     without that, a route with two examples could vanish from the test split.
     """
+    if any(getattr(example, "group_id", None) for example in examples):
+        groups: dict[str, list[dspy.Example]] = {}
+        for example in examples:
+            key = str(getattr(example, "group_id", None) or example.user_request)
+            groups.setdefault(key, []).append(example)
+        keys = sorted(groups)
+        random.Random(seed).shuffle(keys)
+        count = min(len(keys) - 1, max(1, round(len(keys) * val_fraction)))
+        validation_keys = set(keys[:count])
+        return (
+            [e for key in keys if key not in validation_keys for e in groups[key]],
+            [e for key in keys if key in validation_keys for e in groups[key]],
+        )
     by_route: dict[str, list[dspy.Example]] = {}
     for example in examples:
         by_route.setdefault(_route_of(example), []).append(example)
@@ -137,13 +152,14 @@ def _report(
 
 
 def _miss_lines(score: RoutingScore) -> list[str]:
-    return [str(miss) for miss in score.misses]
+    return [str(miss)[:400] for miss in score.misses[:128]]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--auto", choices=("light", "medium", "heavy"), default="light")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--corpus", choices=("routing", "expanded"), default="routing")
     parser.add_argument("--split-seed", type=int, default=17)
     parser.add_argument("--min-accuracy", type=float, default=0.9)
     parser.add_argument(
@@ -177,7 +193,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    train, held_out = split_examples(ROUTING_EXAMPLES, seed=args.split_seed)
+    from evals.product_tasks import PRODUCT_HOLDOUT_EXAMPLES, PRODUCT_ROUTING_EXAMPLES
+
+    corpus = (
+        [*ROUTING_EXAMPLES, *PRODUCT_ROUTING_EXAMPLES]
+        if args.corpus == "expanded"
+        else ROUTING_EXAMPLES
+    )
+    if args.corpus == "expanded":
+        train, held_out = corpus, PRODUCT_HOLDOUT_EXAMPLES
+    else:
+        train, held_out = split_examples(corpus, seed=args.split_seed)
+    optimization_train, development = split_examples(
+        train, val_fraction=0.2, seed=args.split_seed + 1
+    )
+    candidate_program = None
     try:
         baseline_program = RouterProgram()
         baseline = score_router(baseline_program.router, lm, held_out)
@@ -190,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
             # GEPA selects its Pareto candidates on the TRAIN split only. Handing it
             # the held-out set would tune the candidate against the very examples the
             # gate is measured on, which makes the pass meaningless.
-            trainset=train,
-            valset=train,
+            trainset=optimization_train,
+            valset=development,
             reflection_lm=lm,
             auto=args.auto,
             seed=args.seed,
@@ -203,7 +233,58 @@ def main(argv: list[str] | None = None) -> int:
             f"over {len(held_out)} examples"
         )
     except Exception as error:  # noqa: BLE001 - provider failures are expected operations
-        print(f"optimization failed: {error}", file=sys.stderr)
+        print(f"optimization failed ({type(error).__name__})", file=sys.stderr)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        attempt = ARTIFACTS_DIR / f"router_gepa_{stamp}"
+        attempt.mkdir(parents=True, exist_ok=False)
+        summary = {
+            "promotion_decision": False,
+            "failure_type": type(error).__name__,
+            "git_revision": subprocess.run(
+                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+            ).stdout.strip(),
+            "dataset_digest": hashlib.sha256(
+                json.dumps(
+                    [dict(e) for e in [*train, *held_out]], sort_keys=True, default=str
+                ).encode()
+            ).hexdigest(),
+            "train_ids": [
+                hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                for e in optimization_train
+            ],
+            "development_ids": [
+                hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                for e in development
+            ],
+            "holdout_ids": [
+                hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                for e in held_out
+            ],
+            "corpus_version": "product-routing@2"
+            if args.corpus == "expanded"
+            else "routing@1",
+            "split_seed": args.split_seed,
+            "budget": args.auto,
+            "dspy_version": dspy.__version__,
+            "seed": args.seed,
+            "model_identity": str(getattr(lm, "model", "unknown"))[:128],
+        }
+        (attempt / "candidate_configuration.json").write_text(
+            json.dumps(
+                {
+                    "router_instructions": _instructions(candidate_program)[:16_000]
+                    if candidate_program is not None
+                    else None
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        (attempt / "manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
+        (attempt / "report.md").write_text(
+            "# Optimization failed\n\n"
+            + f"Failure type: {type(error).__name__}. No candidate was promoted.\n"
+        )
         log_optimization_run(
             outcome="error",
             budget=args.auto,
@@ -231,84 +312,111 @@ def main(argv: list[str] | None = None) -> int:
             "rejected: GEPA converged without rewriting the router instructions",
             file=sys.stderr,
         )
-        log_optimization_run(
-            outcome="gates-failed",
-            budget=args.auto,
-            seed=args.seed,
-            split_seed=args.split_seed,
-            train_examples=len(train),
-            val_examples=len(held_out),
-            min_accuracy=args.min_accuracy,
-            baseline_mean=baseline.mean,
-            candidate_mean=candidate.mean,
-            baseline_latency_s=baseline.mean_latency_s,
-            candidate_latency_s=candidate.mean_latency_s,
-            dspy_version=dspy.__version__,
-            baseline_failures=baseline.failures,
-            candidate_failures=candidate.failures,
-        )
-        return 2
 
-    passed = candidate.mean > baseline.mean and candidate.mean >= args.min_accuracy
+    candidate_too_large = len(candidate_text) > 16_000
+    passed = (
+        not candidate_too_large
+        and candidate.metrics.get("authorization_failure", 0) == 0
+        and candidate_text != baseline_text
+        and candidate.mean > baseline.mean
+        and candidate.mean >= args.min_accuracy
+    )
     outcome = "artifact-written" if passed else "gates-failed"
     train_counts = Counter(_route_of(example) for example in train)
 
     artifact_dir: Path | None = None
-    if passed:
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        artifact_dir = ARTIFACTS_DIR / f"router_gepa_{stamp}"
-        artifact_dir.mkdir(parents=True, exist_ok=False)
-        state = {
-            "format": ROUTER_STATE_FORMAT,
-            "created_at": datetime.now(UTC).isoformat(),
-            "dspy_version": dspy.__version__,
-            "router_instructions": _instructions(candidate_program),
-            "metrics": {
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    artifact_dir = ARTIFACTS_DIR / f"router_gepa_{stamp}"
+    artifact_dir.mkdir(parents=True, exist_ok=False)
+    state = {
+        "format": ROUTER_STATE_FORMAT,
+        "created_at": datetime.now(UTC).isoformat(),
+        "dspy_version": dspy.__version__,
+        "router_instructions": candidate_text[:16_000],
+        "metrics": {
+            "baseline_mean": baseline.mean,
+            "candidate_mean": candidate.mean,
+            "min_accuracy": args.min_accuracy,
+        },
+    }
+    (artifact_dir / "router_state.json").write_text(
+        json.dumps(state, indent=2) + "\n", encoding="utf-8"
+    )
+    (artifact_dir / "report.md").write_text(
+        _report(
+            outcome=outcome,
+            baseline=baseline,
+            candidate=candidate,
+            min_accuracy=args.min_accuracy,
+            budget=args.auto,
+            split=(len(train), len(held_out)),
+            seed=args.seed,
+        ),
+        encoding="utf-8",
+    )
+    (artifact_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": ROUTER_STATE_FORMAT,
+                "created_at": state["created_at"],
+                "promotion_decision": passed,
+                "failure_summary": "candidate_instructions_too_large"
+                if candidate_too_large
+                else (None if passed else "promotion_gates_failed"),
+                "git_revision": subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.strip(),
+                "model_identity": str(getattr(lm, "model", "unknown")),
+                "program_fingerprint": hashlib.sha256(
+                    _instructions(candidate_program).encode()
+                ).hexdigest(),
+                "corpus_version": "product-routing@2"
+                if args.corpus == "expanded"
+                else "routing@1",
+                "dataset_digest": hashlib.sha256(
+                    json.dumps(
+                        [dict(e) for e in [*train, *held_out]],
+                        sort_keys=True,
+                        default=str,
+                    ).encode()
+                ).hexdigest(),
+                "train_ids": [
+                    hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                    for e in optimization_train
+                ],
+                "development_ids": [
+                    hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                    for e in development
+                ],
+                "holdout_ids": [
+                    hashlib.sha256(str(e.user_request).encode()).hexdigest()
+                    for e in held_out
+                ],
+                "baseline_metrics": baseline.metrics,
+                "candidate_metrics": candidate.metrics,
+                "dspy_version": dspy.__version__,
+                "budget": args.auto,
+                "seed": args.seed,
+                "split_seed": args.split_seed,
+                "train_examples": len(train),
+                "val_examples": len(held_out),
+                "train_routes": dict(sorted(train_counts.items())),
                 "baseline_mean": baseline.mean,
                 "candidate_mean": candidate.mean,
+                "baseline_failures": baseline.failures,
+                "candidate_failures": candidate.failures,
                 "min_accuracy": args.min_accuracy,
+                "baseline_misses": _miss_lines(baseline),
+                "candidate_misses": _miss_lines(candidate),
             },
-        }
-        (artifact_dir / "router_state.json").write_text(
-            json.dumps(state, indent=2) + "\n", encoding="utf-8"
+            indent=2,
         )
-        (artifact_dir / "report.md").write_text(
-            _report(
-                outcome=outcome,
-                baseline=baseline,
-                candidate=candidate,
-                min_accuracy=args.min_accuracy,
-                budget=args.auto,
-                split=(len(train), len(held_out)),
-                seed=args.seed,
-            ),
-            encoding="utf-8",
-        )
-        (artifact_dir / "manifest.json").write_text(
-            json.dumps(
-                {
-                    "format": ROUTER_STATE_FORMAT,
-                    "created_at": state["created_at"],
-                    "dspy_version": dspy.__version__,
-                    "budget": args.auto,
-                    "seed": args.seed,
-                    "split_seed": args.split_seed,
-                    "train_examples": len(train),
-                    "val_examples": len(held_out),
-                    "train_routes": dict(sorted(train_counts.items())),
-                    "baseline_mean": baseline.mean,
-                    "candidate_mean": candidate.mean,
-                    "baseline_failures": baseline.failures,
-                    "candidate_failures": candidate.failures,
-                    "min_accuracy": args.min_accuracy,
-                    "baseline_misses": _miss_lines(baseline),
-                    "candidate_misses": _miss_lines(candidate),
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     log_optimization_run(
         outcome=outcome,

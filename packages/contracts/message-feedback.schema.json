@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MessageFeedback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "messageId",
+    "type"
+  ],
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "negative"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "runId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "branchParentId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "programVersion": {
+      "type": "string",
+      "maxLength": 128
+    }
+  }
+}

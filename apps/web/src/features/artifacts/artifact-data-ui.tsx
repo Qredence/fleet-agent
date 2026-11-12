@@ -1,3 +1,4 @@
+import { cardData } from '@/features/agent-runtime/card-contract'
 import { useAssistantDataUI } from '@assistant-ui/react'
 
 import { ArtifactCard } from '@/components/elements/artifact-card'
@@ -13,6 +14,7 @@ interface ArtifactData {
 }
 
 function parseArtifactData(value: unknown): ArtifactData | null {
+  value = cardData(value, 'artifact')
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return null
   }
@@ -32,13 +34,14 @@ function parseArtifactData(value: unknown): ArtifactData | null {
 function InlineArtifactCard({ data: rawData }: { data: unknown }) {
   const data = parseArtifactData(rawData)
   const openPanel = useWorkspaceStore((s) => s.setProcessPanelOpen)
+  const openSheet = useWorkspaceStore((s) => s.setProcessSheetOpen)
   const setTab = useWorkspaceStore((s) => s.setProcessPanelTab)
   const select = useWorkspaceStore((s) => s.setSelectedArtifactId)
   // The wrapper hugs the card edge-to-edge, so it shares the card's radius
   // (the shape ladder's `bg` step) and the focus ring stays concentric.
   const shape = useShape()
 
-  if (!data) return null
+  if (!data) return <p role="status">This artifact card could not be displayed.</p>
 
   return (
     <button
@@ -46,6 +49,7 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
       aria-label={`Open artifact ${data.name}`}
       onClick={() => {
         openPanel(true)
+        openSheet(true)
         setTab('artifacts')
         select(data.id)
       }}

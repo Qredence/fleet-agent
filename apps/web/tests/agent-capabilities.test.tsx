@@ -11,10 +11,10 @@ afterEach(() => {
 
 it('refreshes cached fixture mode before the next run', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(new Response('{"agent_mode":"fixtures"}'))
-    .mockResolvedValueOnce(new Response('{"agent_mode":"engine"}'))
-  expect(await refreshAgentCapabilities()).toEqual({ agent_mode: 'fixtures' })
-  expect(await refreshAgentCapabilities()).toEqual({ agent_mode: 'engine' })
+    .mockResolvedValueOnce(new Response('{"agent_mode":"fixtures","supported_content_types":["text"]}'))
+    .mockResolvedValueOnce(new Response('{"agent_mode":"engine","supported_content_types":["text"]}'))
+  expect(await refreshAgentCapabilities()).toEqual({ agent_mode: 'fixtures', supported_content_types: ['text'] })
+  expect(await refreshAgentCapabilities()).toEqual({ agent_mode: 'engine', supported_content_types: ['text'] })
   expect(fetchMock).toHaveBeenCalledTimes(2)
   expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/agent/capabilities')
 })
@@ -31,7 +31,7 @@ it('reports loading, then fixture readiness, then an API failure', async () => {
   const { result } = renderHook(useRunReadiness)
   expect(result.current.ready).toBe(false)
   expect(result.current.message).toContain('Checking')
-  await act(async () => { resolve(new Response('{"agent_mode":"fixtures"}')) })
+  await act(async () => { resolve(new Response('{"agent_mode":"fixtures","supported_content_types":["text"]}')) })
   await waitFor(() => expect(result.current.fixtures).toBe(true))
   await act(async () => { await refreshAgentCapabilities().catch(() => {}) })
   await waitFor(() => expect(result.current.ready).toBe(false))
