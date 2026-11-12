@@ -1,0 +1,177 @@
+apps/api/evals/agent_tool_routing.py
+  s_649fabe453efec::t_0d726bbe3a3f06 230-238,251-258
+  s_649fabe453efec::t_c6dc7123b9d8db 135-140
+apps/api/app/agent/approval.py
+  s_c9a1652cf56d9a::t_eff747ccafbc13 8
+apps/api/tests/test_fleet_agent_routing.py
+  s_f43a6c50f10102::t_cea9632fd126fd 96
+apps/api/app/agent/tools/__init__.py
+  s_c9a1652cf56d9a::t_a9dfb834eb8ac1 4
+apps/api/app/agent/tools/report.py
+  s_c9a1652cf56d9a::t_c50c9aa6a97acc 6
+apps/api/pyproject.toml
+  s_6b1a635e889bfd::t_7aaa0a776b5bac 10
+docs/specs/README.md
+  s_c9a1652cf56d9a::t_33f25c9003f24b 14
+apps/api/tests/test_artifact_flow.py
+  s_f43a6c50f10102::t_cea9632fd126fd 49
+docs/specs/008-dspy-3.5-migration.md
+  s_c9a1652cf56d9a::t_fc973cc489c2cc 1-130
+apps/api/tests/helpers/signatures.py
+  s_f43a6c50f10102::t_d73c26bdbbe9b4 1,5
+apps/api/tests/test_mlflow_tracking.py
+  s_f43a6c50f10102::t_ed845328d5963e 155
+apps/api/app/agent/factory.py
+  s_c9a1652cf56d9a::t_ef8bca59b16869 274
+  s_c9a1652cf56d9a::t_88ece721a06ec6 139
+README.md
+  s_c9a1652cf56d9a::t_31023884b4d70a 111
+  s_c9a1652cf56d9a::t_52860ecdda4675 39,42
+  s_c9a1652cf56d9a::t_1bcd133addd5b3 50
+  s_c9a1652cf56d9a::t_a4f505daecf982 207
+  s_c9a1652cf56d9a::t_8b47f8bf866900 22
+apps/api/app/api/agent.py
+  s_c9a1652cf56d9a::t_7e447df30b811b 5
+apps/api/tests/helpers/scripted_lm.py
+  s_f43a6c50f10102::t_49d9b6c311bbed 22
+  s_f43a6c50f10102::t_aaa0d67f738028 232,236
+  s_f43a6c50f10102::t_ea59e0349c160f 149
+  s_f43a6c50f10102::t_81e8555033e4ff 135-142,153,158-159,166,168-171
+  s_f43a6c50f10102::t_70100e2978e64e 110-129,131-134,143-148,150-152,154-157,160-165,167,172-173
+  s_f43a6c50f10102::t_b708a4e28691e2 103-109,130
+  s_f43a6c50f10102::t_566d16b1a41fe3 16
+  s_f43a6c50f10102::t_035b9a1b1d65a5 3
+.circleci/config.yml
+  s_649fabe453efec::t_f57472e5ae4b74 91-95
+apps/api/app/agent/engine.py
+  s_c9a1652cf56d9a::t_625272ec70f49d 188
+  s_c9a1652cf56d9a::t_c6feaa0d5662d9 166-167,169,174
+  s_c9a1652cf56d9a::t_95978492170917 4
+  s_c9a1652cf56d9a::t_1dd2c8c9326b81 200
+apps/api/tests/test_dspy_contract.py
+  s_f43a6c50f10102::t_4b742a8980af90 35
+  s_f43a6c50f10102::t_e4d4160700f505 418-422
+  s_f43a6c50f10102::t_cd23d58e35299d 380-417,423-424
+  s_f43a6c50f10102::t_dc144b6a729fe8 111,123,152,173,217,239,267,305,337,426
+  s_f43a6c50f10102::t_290d05823e81ab 7-11
+  s_f43a6c50f10102::t_cd8f7dba0cd6e4 133,137,143-144,146,182-183,194,276-277,323,326,365,370
+  s_f43a6c50f10102::t_ebe0abf0adbe38 92-97,99-106
+  s_649fabe453efec::t_4cb1a92875e946 1
+apps/api/app/agent/event_bus.py
+  s_c9a1652cf56d9a::t_4daa66947685ed 3
+  s_c9a1652cf56d9a::t_f865c7bd105854 28
+apps/api/evals/scorers.py
+  s_649fabe453efec::t_2fd35e6f713223 13
+apps/api/app/agent/signature.py
+  s_c9a1652cf56d9a::t_c17cce595804b8 149
+  s_6b1a635e889bfd::t_edf9c985a8564e 28
+  s_6b1a635e889bfd::t_5e5c92317e3193 53
+  s_c9a1652cf56d9a::t_f73273170c2548 6
+  s_c9a1652cf56d9a::t_cb3a037c2cba6e 140
+apps/api/tests/test_content_safety.py
+  s_f43a6c50f10102::t_cea9632fd126fd 138-139
+apps/api/evals/datasets.py
+  s_649fabe453efec::t_12f31598c92db6 3,6
+apps/api/tests/test_hardening.py
+  s_f43a6c50f10102::t_cea9632fd126fd 172,242,300
+apps/api/app/agent/program.py
+  s_c9a1652cf56d9a::t_54cac09a9de65b 490
+  s_c9a1652cf56d9a::t_e57af1542eb29c 133-134
+  s_c9a1652cf56d9a::t_a2f493a13277ad 71
+  s_c9a1652cf56d9a::t_f3ac328f0e3c33 34
+  s_c9a1652cf56d9a::t_91716fccac508a 497
+apps/api/tests/test_callbacks.py
+  s_f43a6c50f10102::t_2605341bb3307e 50
+  s_f43a6c50f10102::t_fd9d01b9b1e5b3 124
+  s_f43a6c50f10102::t_78e093a0629c49 160,164-165
+  s_f43a6c50f10102::t_684126e08547c5 167
+  s_f43a6c50f10102::t_46ab26f6a79009 20
+  s_f43a6c50f10102::t_a8c1372918c722 90
+apps/api/tests/test_agent_construction.py
+  s_f43a6c50f10102::t_889d9d58bc3ab3 65-71,75
+  s_f43a6c50f10102::t_6b31f2dcfb3542 30-34
+  s_f43a6c50f10102::t_2ddabaea50d7bb 6-7,22
+  s_f43a6c50f10102::t_cea9632fd126fd 74
+  s_f43a6c50f10102::t_bbfca8393eadb5 111
+  s_f43a6c50f10102::t_6b66fbb2b35d17 158-310
+apps/api/app/agent/tool_registry.py
+  s_c9a1652cf56d9a::t_a7a27f99cce3c6 331
+  s_c9a1652cf56d9a::t_7e1502ca4185d5 15
+  s_c9a1652cf56d9a::t_9c441653357360 303
+apps/api/tests/test_live_coordinator.py
+  s_f43a6c50f10102::t_cea9632fd126fd 32-33,276-277
+  s_f43a6c50f10102::t_002ed5c9e9a0ff 477-478
+apps/api/tests/test_evidence.py
+  s_f43a6c50f10102::t_6fff1c33464e62 219,236
+  s_f43a6c50f10102::t_d2f6129d72ce1f 260-264
+  s_f43a6c50f10102::t_80d7145a5d221a 265
+apps/api/app/agent/tools/corpus.py
+  s_c9a1652cf56d9a::t_a830c23e220654 59,63
+AGENTS.md
+  s_6b1a635e889bfd::t_a566339e579dc9 95
+apps/api/app/settings.py
+  s_c9a1652cf56d9a::t_e7d34041b53674 54
+apps/api/app/agent/tooling.py
+  s_c9a1652cf56d9a::t_6a9b59e91144fd 105
+  s_c9a1652cf56d9a::t_77a43abed40d71 24
+apps/api/app/agent/tools/docs.py
+  s_c9a1652cf56d9a::t_eb7c7304e2ff68 1,4
+  s_c9a1652cf56d9a::t_9400dc940f0ed3 23
+apps/api/tests/test_agent_tool_routing.py
+  s_f43a6c50f10102::t_c8f7ae24414cf3 105-107
+apps/api/app/contracts/domain.py
+  s_c9a1652cf56d9a::t_86d0cc8847227f 107
+apps/api/tests/test_mlflow_tracing.py
+  s_f43a6c50f10102::t_db5042d4fc7d9d 108
+apps/api/tests/test_dspy_engine.py
+  s_f43a6c50f10102::t_cea9632fd126fd 36-37,92,125
+  s_f43a6c50f10102::t_9b1775345aa0be 335-468,471-500
+  s_f43a6c50f10102::t_3dab192b522f5e 469-470
+  s_f43a6c50f10102::t_453672ff140867 11-20
+apps/api/app/agent/tools/web.py
+  s_c9a1652cf56d9a::t_0c3f719a9fda94 7
+apps/api/app/agent/callbacks.py
+  s_c9a1652cf56d9a::t_723f58aa8e9b95 60
+apps/api/uv.lock
+  s_6b1a635e889bfd::t_18af5542501b2a 843,848,851,853,856,861,863,969
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c821d0071cb8bf4984afe787a7a02a02ec97162c",
+  "prompts": {},
+  "sessions": {
+    "s_649fabe453efec": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "b9fb5da0-c2c0-4b18-a8c8-c16ca158324c",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    },
+    "s_6b1a635e889bfd": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "21a2d81d-bd8b-4fd2-b95b-c178a80ef8a5",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    },
+    "s_c9a1652cf56d9a": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6d0977a4-af52-449f-860b-64fd9f28f63c",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    },
+    "s_f43a6c50f10102": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "050e51f2-95c0-4899-b37e-d3384c50e630",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
