@@ -1,0 +1,39 @@
+apps/web/src/components/assistant-ui/composer-elements.tsx
+  s_72b709646c8c4c::t_a686d2df9ecad4 205
+apps/web/src/index.css
+  s_72b709646c8c4c::t_adc2ef6eb8c4b1 45
+apps/web/oxlint-plugins/no-arbitrary-text-size.mjs
+  s_72b709646c8c4c::t_ea5558cb120156 1-28,31-69,88,91
+  s_72b709646c8c4c::t_6d3a77aa7b5583 29
+  s_56d7d11c669095::t_015ba34b86ae57 30
+apps/web/src/lib/utils.ts
+  s_72b709646c8c4c::t_550f6b8bd0bf55 11-13,15,20
+apps/web/tests/cn-type-scale.test.ts
+  s_72b709646c8c4c::t_6309d3466e083d 18-24
+  s_72b709646c8c4c::t_0246d327808747 1-17,25-67,71,73-96
+  s_72b709646c8c4c::t_1b81397dd2ebd5 68-70,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac9cf1e0a0f8b3f40465c0890f61757972880c5b",
+  "prompts": {},
+  "sessions": {
+    "s_56d7d11c669095": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "5a98f0fa-72da-4d6f-99ad-637c268118c9",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    },
+    "s_72b709646c8c4c": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "2fb04558-ce69-415c-a385-7f25513c612d",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
