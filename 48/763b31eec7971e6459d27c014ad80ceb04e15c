@@ -1,0 +1,56 @@
+apps/web/src/features/agent-runtime/agent-capabilities.ts
+  s_3b95650d2eff5e::t_6516845b662c7f 12-14,18,36-37
+apps/web/tests/run-target.test.ts
+  s_3b95650d2eff5e::t_7aa9012d52d947 11,13-23,28,37,51,58-63,65-70,79,88-91,107,130
+  s_3b95650d2eff5e::t_5383adc0f58fb2 64,73,81,97,110,114-129
+  s_3b95650d2eff5e::t_bd0b52b1fd6a31 42
+  s_3b95650d2eff5e::t_13cb41cfb99f12 131
+apps/web/tests/agent-runtime-provider.test.ts
+  s_3b95650d2eff5e::t_56d817b024969f 165-184
+apps/web/src/components/assistant-ui/composer-elements.tsx
+  s_3b95650d2eff5e::t_7e525746c5f541 557-561,563-569
+packages/contracts/agent-capabilities.schema.json
+  s_3b95650d2eff5e::t_61b614f7e743c0 32
+  s_3b95650d2eff5e::t_8cb08f9c554434 29-31
+apps/web/src/features/agent-runtime/run-target.ts
+  s_3b95650d2eff5e::t_b398355cb9417d 101-108,110-112,130-131
+  s_3b95650d2eff5e::t_36626a82581ee3 146-150,152,159-166
+  s_3b95650d2eff5e::t_2b3123775e860f 60-63
+  s_3b95650d2eff5e::t_2552ecfd4080a3 64-67,113
+  s_3b95650d2eff5e::t_d859db5e38b6d9 12-27,32
+  s_3b95650d2eff5e::t_cf3b83c5bb7344 71-77,81-87,90-96,99,109,114-120,126-129
+apps/web/tests/agent-capabilities.test.tsx
+  s_3b95650d2eff5e::t_223d08d6ff4f70 40-62
+apps/web/src/features/providers/settings/settings-dialog.tsx
+  s_3b95650d2eff5e::t_17c3e6e856c90c 391
+apps/api/tests/test_agent_capabilities.py
+  s_3b95650d2eff5e::t_1d24c52d06436d 33-57,59-63,66,75
+  s_3b95650d2eff5e::t_6621c1db814f19 67
+  s_3b95650d2eff5e::t_6cd7ecdba6d454 24-30,58,64-65,68-74,84-88,96-105
+  s_3b95650d2eff5e::t_0bcabd771cf10c 31-32
+  s_3b95650d2eff5e::t_12de74754c5eec 106-107
+apps/api/app/api/agent.py
+  s_3b95650d2eff5e::t_0a3c749df265b1 99-104
+  s_3b95650d2eff5e::t_4a63bebf6b0c3b 91-93
+  s_3b95650d2eff5e::t_8237a0f7a92a7a 84-90,94,97-98
+apps/api/app/contracts/agent_capabilities.py
+  s_3b95650d2eff5e::t_3e23e72c692bf4 19-22
+apps/web/src/contracts/agent-capabilities.ts
+  s_3b95650d2eff5e::t_b5447a0948bccf 15-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "48763b31eec7971e6459d27c014ad80ceb04e15c",
+  "prompts": {},
+  "sessions": {
+    "s_3b95650d2eff5e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e1626966-eaa6-44ee-b7a0-75d02d9ead19",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
