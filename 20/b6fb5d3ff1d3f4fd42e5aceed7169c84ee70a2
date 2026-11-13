@@ -1,0 +1,23 @@
+apps/web/src/lib/duration.ts
+  s_6b1a635e889bfd::t_b9f56454900888 11-17,22-24
+apps/web/src/features/process-panel/process-step-card.tsx
+  s_6b1a635e889bfd::t_8132aaa97f3e4c 25-29
+apps/web/tests/duration.test.ts
+  s_6b1a635e889bfd::t_346bdd4f666058 26-42,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20b6fb5d3ff1d3f4fd42e5aceed7169c84ee70a2",
+  "prompts": {},
+  "sessions": {
+    "s_6b1a635e889bfd": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "21a2d81d-bd8b-4fd2-b95b-c178a80ef8a5",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
