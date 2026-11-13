@@ -9,10 +9,27 @@ import type { AgentCapabilities } from '@/contracts/agent-capabilities'
 /** Who serves a run. `unresolved` means the browser cannot prove any route works. */
 export type RunRoute = 'fixtures' | 'byok' | 'server' | 'unresolved'
 
+/**
+ * Why a target is in its state. `route` alone cannot separate a run that is
+ * still loading from one whose connection failed from one that needs a
+ * provider, and the trigger label must never present the first two as the
+ * third.
+ */
+export type RunReason =
+  | 'fixtures'
+  | 'byok'
+  | 'server'
+  | 'checking'
+  | 'capabilities_unavailable'
+  | 'provider_needs_setup'
+  | 'no_server_gateway'
+  | 'server_gateway_unknown'
+
 export interface RunTarget {
   ready: boolean
   fixtures: boolean
   route: RunRoute
+  reason: RunReason
   message: string
 }
 
@@ -21,16 +38,6 @@ export interface RunTargetInput {
   capabilities?: AgentCapabilities
   providerReadiness: { ready: boolean; message: string }
   activeProviderId: string | null
-  /**
-   * Whether this deployment can serve an engine run from its own configured
-   * gateway with no `X-LLM-*` headers.
-   *
-   * `GET /api/agent/capabilities` does not report this yet, so callers pass
-   * `undefined`. Unknown is not the same as "not configured": the run stays
-   * unresolved instead of being promised and then failing mid-run. This is
-   * the single input a contract addition has to fill.
-   */
-  serverGatewayConfigured?: boolean
 }
 
 const CONNECT_FAILED =
@@ -50,36 +57,78 @@ const SERVER_GATEWAY_UNKNOWN =
   'Add a provider key in Settings → Providers, or configure a model gateway on this deployment.'
 
 /**
- * Resolves who serves a run, in precedence order: fixtures need no credentials,
- * an explicitly selected BYOK profile always wins over the server gateway, and
- * a confirmed server gateway runs without any `X-LLM-*` headers. Anything the
- * browser cannot verify stays unresolved, so the composer never promises a
- * route the next run cannot keep.
+ * Resolves who serves a run, in precedence order: fixtures need no credentials;
+ * an explicitly selected BYOK profile always wins, including when that profile
+ * still needs setup; and a deployment whose capabilities report a gateway
+ * serves runs that have no profile selected, without any `X-LLM-*` headers.
+ *
+ * `server_gateway_configured` is optional in the contract, so an older server
+ * that omits it leaves the value unknown. Unknown is not "not configured": the
+ * route stays unresolved rather than being promised and failing mid-run.
  */
 export function resolveRunTarget(input: RunTargetInput): RunTarget {
   if (input.capabilitiesError) {
-    return { ready: false, fixtures: false, route: 'unresolved', message: CONNECT_FAILED }
+    return {
+      ready: false,
+      fixtures: false,
+      route: 'unresolved',
+      reason: 'capabilities_unavailable',
+      message: CONNECT_FAILED,
+    }
   }
   const capabilities = input.capabilities
   if (!capabilities) {
-    return { ready: false, fixtures: false, route: 'unresolved', message: CHECKING }
+    return {
+      ready: false,
+      fixtures: false,
+      route: 'unresolved',
+      reason: 'checking',
+      message: CHECKING,
+    }
   }
   if (capabilities.agent_mode === 'fixtures') {
-    return { ready: true, fixtures: true, route: 'fixtures', message: FIXTURES_MESSAGE }
+    return {
+      ready: true,
+      fixtures: true,
+      route: 'fixtures',
+      reason: 'fixtures',
+      message: FIXTURES_MESSAGE,
+    }
   }
   if (input.providerReadiness.ready) {
-    return { ready: true, fixtures: false, route: 'byok', message: '' }
+    return { ready: true, fixtures: false, route: 'byok', reason: 'byok', message: '' }
   }
-  if (input.serverGatewayConfigured === true) {
-    return { ready: true, fixtures: false, route: 'server', message: SERVER_GATEWAY_MESSAGE }
+  // An explicitly selected profile owns the run even when it cannot serve one.
+  // Falling through to the deployment gateway would keep Settings showing that
+  // profile as active while the run quietly spent the operator's credentials.
+  if (input.activeProviderId) {
+    return {
+      ready: false,
+      fixtures: false,
+      route: 'unresolved',
+      reason: 'provider_needs_setup',
+      message: input.providerReadiness.message,
+    }
+  }
+  if (capabilities.server_gateway_configured === true) {
+    return {
+      ready: true,
+      fixtures: false,
+      route: 'server',
+      reason: 'server',
+      message: SERVER_GATEWAY_MESSAGE,
+    }
   }
   return {
     ready: false,
     fixtures: false,
     route: 'unresolved',
-    message: input.activeProviderId
-      ? input.providerReadiness.message
-      : input.serverGatewayConfigured === false
+    reason:
+      capabilities.server_gateway_configured === false
+        ? 'no_server_gateway'
+        : 'server_gateway_unknown',
+    message:
+      capabilities.server_gateway_configured === false
         ? NO_SERVER_GATEWAY
         : SERVER_GATEWAY_UNKNOWN,
   }
@@ -94,16 +143,27 @@ export function runTargetSendsProviderHeaders(target: RunTarget): boolean {
   return target.route === 'byok'
 }
 
-/** The label the composer shows for the run's serving route. */
+/**
+ * The label the composer shows for the run's serving route. Each unresolved
+ * cause keeps its own label so a loading query or an unreachable API never
+ * reads as a missing provider.
+ */
 export function runTargetLabel(target: RunTarget, byokLabel: string | null): string {
-  switch (target.route) {
+  switch (target.reason) {
     case 'fixtures':
       return 'Fixture mode'
     case 'server':
       return 'Server gateway'
     case 'byok':
       return byokLabel ?? 'Provider default model'
-    case 'unresolved':
+    case 'provider_needs_setup':
+      return 'Provider needs setup'
+    case 'checking':
+      return 'Checking agent…'
+    case 'capabilities_unavailable':
+      return 'Agent unavailable'
+    case 'no_server_gateway':
+    case 'server_gateway_unknown':
       return 'Provider not set'
   }
 }

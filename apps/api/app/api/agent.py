@@ -81,10 +81,27 @@ def get_engine_builder(request: Request) -> EngineBuilder:
 
 @router.get("/agent/capabilities", response_model=AgentCapabilities)
 async def agent_capabilities(request: Request) -> AgentCapabilities:
-    """Report the active run mode without disclosing provider configuration."""
+    """Report the active run mode and whether this deployment has a gateway.
+
+    The gateway flag is a boolean, never the configuration itself: it says
+    whether a run can be served without browser ``X-LLM-*`` headers, so the
+    composer can enable sending for a deployment that is already configured.
+    It is resolved from the same settings ``_build_lm`` reads, so the browser
+    and the engine cannot disagree about whether a server-side model exists.
+    It reports the ability to start a run, not that the gateway answers: an
+    unreachable gateway or a rejected key still fails at run time with its own
+    public error code (``provider_request_rejected``/``provider_unauthorized``).
+    """
     settings: Settings = request.app.state.settings
     return AgentCapabilities(
-        agent_mode=settings.agent_mode, supported_content_types=["text"]
+        agent_mode=settings.agent_mode,
+        supported_content_types=["text"],
+        # A key is required on both LM paths. Without a base URL, DSPy's hosted
+        # lm15 router needs the key to select a provider; with a base URL,
+        # GatewayEngine registers its credential per router and lm15 raises
+        # NotConfiguredError when that map is empty. A base URL alone therefore
+        # cannot serve a run, so it must not be reported as a gateway.
+        server_gateway_configured=settings.llm_api_key is not None,
     )
 
 

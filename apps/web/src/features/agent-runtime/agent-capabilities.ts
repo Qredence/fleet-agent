@@ -9,10 +9,13 @@ import { apiFetch } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 
 // Strict on purpose: an unexpected capability shape must fail closed rather
-// than silently change run behavior.
+// than silently change run behavior. `server_gateway_configured` is optional
+// in the contract, so a server that omits it leaves routing unknown, which
+// keeps the composer failing closed instead of guessing a route.
 const capabilitySchema = z.object({
   supported_content_types: z.tuple([z.literal('text')]),
   agent_mode: z.enum(capabilityContract.properties.agent_mode.enum as ['fixtures', 'engine']),
+  server_gateway_configured: z.boolean().optional(),
 }).strict()
 
 export const agentCapabilitiesOptions = queryOptions({
@@ -30,12 +33,8 @@ export function refreshAgentCapabilities(): Promise<AgentCapabilities> {
 
 /**
  * Run readiness is distinct from the credential readiness displayed in
- * provider settings.
- *
- * BLOCKED on a contract addition: `GET /api/agent/capabilities` reports only
- * the agent mode, so `serverGatewayConfigured` is passed as `undefined` here
- * and an engine run without a BYOK profile stays unresolved. Once the server
- * reports whether it has its own gateway, read it and pass it here.
+ * provider settings. It carries the deployment's own gateway capability, so an
+ * engine deployment that is already configured can run with no browser key.
  */
 export function useRunReadiness(): RunTarget {
   const capabilities = useQuery(agentCapabilitiesOptions, queryClient)
@@ -45,6 +44,5 @@ export function useRunReadiness(): RunTarget {
     capabilities: capabilities.data,
     providerReadiness: readiness,
     activeProviderId,
-    serverGatewayConfigured: undefined,
   })
 }

@@ -162,4 +162,24 @@ describe('run route precedence', () => {
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
     expect([...headers.keys()].filter((name) => name.startsWith('x-llm-'))).toEqual([])
   })
+
+  it('blocks a selected profile that still needs setup instead of running on the deployment gateway', async () => {
+    // The deployment reports a gateway, but the user picked their own provider.
+    // A missing key must fail closed rather than spend the operator's credentials.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({
+      agent_mode: 'engine',
+      supported_content_types: ['text'],
+      server_gateway_configured: true,
+    })
+    setActiveProviderId('openrouter')
+    clearApiKey()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await expect(
+      createAgentFetch()('http://localhost:8000/api/agent', {
+        method: 'POST',
+        body: '{"runId":"send"}',
+      }),
+    ).rejects.toThrow(/needs setup/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

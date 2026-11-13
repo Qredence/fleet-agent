@@ -554,13 +554,19 @@ export const ComposerModelPicker: FC = () => {
   })();
 
   const activeModelOption = modelOptions.find((option) => option.key === activeModelKey);
-  // The label states who serves the run. An unselected provider is not shown
-  // as a missing prerequisite, because an engine deployment may run its own
-  // gateway and this browser cannot see that configuration yet.
+  // Fixture mode is a deployment fact and outranks any browser choice.
+  // Beyond that the label comes from provider readiness, not from
+  // capabilities: a configured provider keeps its model name when the API is
+  // unreachable or still loading, so a connection problem never reads as a
+  // missing key. Only a selected profile that cannot serve says "needs setup".
   const activeModelLabel =
-    runReadiness.route === "unresolved" && activeProviderId
-      ? `${activeProfile?.name ?? "Provider"} needs setup`
-      : runTargetLabel(runReadiness, activeModelOption?.label ?? null);
+    runReadiness.reason === "fixtures"
+      ? "Fixture mode"
+      : readiness.ready
+        ? activeModelOption?.label ?? "Provider default model"
+        : runReadiness.reason === "provider_needs_setup"
+          ? `${activeProfile?.name ?? "Provider"} needs setup`
+          : runTargetLabel(runReadiness, null);
 
   const unconfiguredRoute = !runReadiness.ready;
 
