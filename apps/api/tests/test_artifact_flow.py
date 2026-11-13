@@ -46,7 +46,7 @@ def rich_builder(storage, steps):
         tools = [docs, report]
 
         def factory():
-            return dspy.ReActV2(AgentSignature, tools=tools, max_iters=6)
+            return dspy.ReAct(AgentSignature, tools=tools, max_iters=6)
 
         return DspyAgentEngine(
             program_factory=factory,

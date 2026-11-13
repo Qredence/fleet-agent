@@ -216,21 +216,11 @@ class TestSynthesizerPrompt:
         from app.agent.program import FleetAgent
         from app.agent.tool_registry import ToolMetadata, ToolRegistry
         from tests.helpers.scripted_lm import (
-            ScriptedLM,
+            RecordingScriptedLM,
             evidence_end,
             router_call,
             synthesis_call,
         )
-
-        prompts: list[str] = []
-
-        class RecordingLM(ScriptedLM):
-            def __call__(self, prompt=None, messages=None, **kwargs):  # noqa: ANN001, ANN201
-                for message in messages or []:
-                    content = message.get("content")
-                    if isinstance(content, str) and "evidence_json" in content:
-                        prompts.append(content)
-                return super().__call__(prompt=prompt, messages=messages, **kwargs)
 
         def big(query: str) -> str:
             """Return a large payload."""
@@ -243,7 +233,7 @@ class TestSynthesizerPrompt:
             program_factory=lambda: FleetAgent(
                 tool_profiles=build_tool_profiles(registry), max_iters=3
             ),
-            lm=RecordingLM(
+            lm=RecordingScriptedLM(
                 [
                     router_call("research"),
                     [{"name": "big", "args": {"query": "x"}}],
@@ -267,7 +257,12 @@ class TestSynthesizerPrompt:
         )
 
         assert result.status == "completed"
-        rendered = _evidence_section(prompts[-1])
+        # Rendered field values live in the message text, not the instructions.
+        synthesis_messages = engine._lm.messages_mentioning(  # type: ignore[attr-defined]
+            "[[ ## evidence_json ## ]]"
+        )
+        assert synthesis_messages, "the synthesis prompt must carry evidence_json"
+        rendered = _evidence_section(synthesis_messages[-1])
         assert len(rendered) <= 8000
         parsed = json.loads(rendered)
         assert parsed[0]["tool"] == "big"

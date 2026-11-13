@@ -135,10 +135,8 @@ async def test_engine_run_scrubs_model_echoed_secrets() -> None:
         """Return a credential in tool output."""
         return "token=sk-abc123def456ghi789jklmno"
 
-    def factory() -> dspy.ReActV2:
-        return dspy.ReActV2(
-            AgentSignature, tools=[create_dspy_tool(leaky)], max_iters=4
-        )
+    def factory() -> dspy.ReAct:
+        return dspy.ReAct(AgentSignature, tools=[create_dspy_tool(leaky)], max_iters=4)
 
     engine = DspyAgentEngine(
         program_factory=factory,

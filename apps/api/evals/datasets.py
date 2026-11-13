@@ -1,9 +1,9 @@
 """Versioned MLflow dataset for the least-privilege routing eval set.
 
-mlflow 3.16.0 keeps evaluation datasets as records on a tracking store, but its
+mlflow 3.18.0 keeps evaluation datasets as records on a tracking store, but its
 dataset *versioning* is Databricks-only: against a local store
 ``EvaluationDataset.version`` stays None and ``list_versions()`` /
-``get_dataset(version=...)`` raise NotImplementedError (verified 2026-09-17).
+``get_dataset(version=...)`` raise NotImplementedError (verified 2026-11-12).
 The version therefore lives in the dataset *name*
 (``fleet-agent-routing-eval-v1``) plus ``fleet.dataset.*`` tags carrying the
 version and a content digest, so ``load_dataset(version)`` is a versioned

@@ -152,7 +152,7 @@ class TestLogOptimizationRun:
             "candidate_mean": 1.0,
             "baseline_latency_s": 3.0,
             "candidate_latency_s": 3.1,
-            "dspy_version": "3.4.0",
+            "dspy_version": "3.5.0",
             "artifact_dir": None,
         }
         kwargs.update(overrides)

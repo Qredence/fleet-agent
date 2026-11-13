@@ -132,9 +132,12 @@ def routing_metric(
 ) -> dspy.Prediction:
     """Score exact route and provide feedback that GEPA can use.
 
-    The parameter list matches dspy 3.4.0's ``GEPAFeedbackMetric`` contract:
-    GEPA binds the metric with five positional arguments and calls it with
-    the target predictor's name and sub-trace during optimization.
+    The parameter list matches dspy 3.5.0's ``GEPAFeedbackMetric`` protocol:
+    during optimization GEPA binds the metric with five positional arguments
+    (``gold``, ``pred``, ``trace``, ``pred_name``, ``pred_trace``) so it can
+    name the predictor being optimized and pass that predictor's sub-trace.
+    ``program_trace`` is populated only at scoring time, and only when a
+    ``dspy.Flex`` submodule is optimized; it stays None otherwise.
     """
     del trace, pred_name, pred_trace, program_trace
     expected = coerce_route(getattr(gold, "expected_route", None))
@@ -224,6 +227,15 @@ def compile_gepa_candidate(
     This helper performs no persistence or promotion. The returned candidate
     remains local to the caller, which must compare it with the ReAct baseline
     before making any runtime decision.
+
+    The candidate LM and the routing adapter are bound here, not left ambient.
+    ``dspy.GEPA.compile`` only wraps the *reflection* calls in
+    ``dspy.context(lm=reflection_lm)``; the student's own evaluations run under
+    whatever ``dspy.settings.lm`` holds. With no ambient LM every example raises
+    ``No LM is loaded`` and is scored ``failure_score``, so GEPA silently
+    optimizes against a constant zero and returns the seed candidate unchanged.
+    Binding the production JSON adapter also keeps the student's format
+    identical to ``score_router``, which is how it will be measured.
     """
     if reflection_lm is None:
         raise ValueError(
@@ -236,11 +248,14 @@ def compile_gepa_candidate(
         seed=seed,
         log_dir=log_dir,
     )
-    return optimizer.compile(
-        program,
-        trainset=trainset or ROUTING_EXAMPLES,
-        valset=valset or ROUTING_EXAMPLES,
-    )
+    with dspy.context(
+        lm=reflection_lm, adapter=dspy.JSONAdapter(use_native_function_calling=True)
+    ):
+        return optimizer.compile(
+            program,
+            trainset=trainset or ROUTING_EXAMPLES,
+            valset=valset or ROUTING_EXAMPLES,
+        )
 
 
 # Surface-noise fixtures for coerce_route: (raw, expected). No LM required.

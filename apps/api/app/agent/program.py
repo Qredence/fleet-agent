@@ -31,7 +31,7 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
 
     ``tool_profiles`` is the capability lattice: one entry per route holding
     exactly the ``dspy.Tool`` objects that route may call. The program builds
-    one ``dspy.ReActV2`` per route, so a run can never reach a tool outside the
+    one ``dspy.ReAct`` per route, so a run can never reach a tool outside the
     profile the router selected. Tools that require approval are filtered out of
     every profile before the program is built, so the model never sees them
     unless the run authorized them up front.
@@ -68,7 +68,7 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             route: tuple(str(tool.name) for tool in tools)
             for route, tools in profiles.items()
         }
-        # prompts/evidence.md builds one ReActV2 node per least-privilege
+        # prompts/evidence.md builds one ReAct node per least-privilege
         # profile, each carrying that profile's tools only.
         #
         # A profile with no tools has nothing to gather - ``direct`` answers from
@@ -130,8 +130,8 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         # gathered, so the incoming history is used as-is.
         evidence_history = incoming_history
         if gatherer is not None:
-            # DSPy 3.4 ReActV2 makes one forced-submit LM call when the loop ends
-            # without ``submit``, and it raises when that call fails. ReActV2
+            # DSPy 3.5 ReAct makes one forced-submit LM call when the loop ends
+            # without ``submit``, and it raises when that call fails. ReAct
             # mutates the passed dspy.History in place, so the failed attempt's
             # partial tool turns are already in incoming_history; mapping here -
             # the one program boundary - keeps that history without any
@@ -487,14 +487,14 @@ def _validate_tools(tools: Sequence[dspy.Tool]) -> list[dspy.Tool]:
         if not name:
             raise ValueError("every tool must have a non-empty name")
         if name in RESERVED_TOOL_NAMES:
-            raise ValueError(f"tool name {name!r} is reserved by ReActV2")
+            raise ValueError(f"tool name {name!r} is reserved by ReAct")
         if name in seen:
             raise ValueError(f"duplicate tool: {name}")
         if not str(tool.desc or "").strip():
             raise ValueError(f"tool {name!r} must have a description or docstring")
         if is_async_tool(tool):
             raise TypeError(
-                f"tool {name!r} is async, but DSPy 3.4.0 ReActV2 executes "
+                f"tool {name!r} is async, but DSPy 3.5 ReAct executes "
                 "tools synchronously. Use a synchronous adapter or a future "
                 "async agent program instead of enabling implicit sync conversion."
             )

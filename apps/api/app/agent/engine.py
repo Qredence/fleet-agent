@@ -1,7 +1,7 @@
 """Provider-independent runtime boundary for a first-class DSPy program.
 
 FastAPI routes depend on ``AgentEngine.run()`` and ``AgentRunResult``. They do
-not know whether the program uses ReActV2, a compiled FleetAgent, or another
+not know whether the program uses ReAct, a compiled FleetAgent, or another
 DSPy Module. Raw ``dspy.History`` stays server-side because it may contain
 ``next_thought`` and tool observations.
 """
@@ -163,13 +163,15 @@ _REASON_TO_PUBLIC_CODE = {
 }
 
 
+# DSPy 3.5 names the loop class in this message ("ReAct failed to produce ..."),
+# so match the stable suffix only: the class name is not a contract.
 _FORCED_SUBMIT_REASON_RE = re.compile(
-    r"ReActV2 failed to produce final outputs after (?P<reason>\w+):"
+    r"failed to produce final outputs after (?P<reason>\w+):"
 )
 
 
 def _reason_from_react_exc(exc: BaseException) -> str | None:
-    """Extract the public termination_reason from a DSPy 3.4 forced-submit raise."""
+    """Extract the public termination_reason from a DSPy 3.5 forced-submit raise."""
     if isinstance(exc, ContextWindowExceededError):
         return "context_window_exceeded"
     if isinstance(exc, AdapterParseError):
@@ -183,7 +185,7 @@ def _reason_from_react_exc(exc: BaseException) -> str | None:
 def _capture_history(history: Any) -> dspy.History:
     """Return a ``dspy.History`` the program will mutate in place.
 
-    ReActV2's loop appends each turn to the ``dspy.History`` object it was
+    ReAct's loop appends each turn to the ``dspy.History`` object it was
     passed without ever copying it, so the engine keeps a handle it can read
     when a failure escapes the program's own boundary handling — the same
     partial history the old engine-side monkeypatch preserved, now through
@@ -195,7 +197,7 @@ def _capture_history(history: Any) -> dspy.History:
 def _map_react_raise(
     exc: BaseException, captured: dspy.History | None = None
 ) -> AgentRunResult | None:
-    """Map a ReActV2 raise that escaped the program into a public failure."""
+    """Map a ReAct raise that escaped the program into a public failure."""
     reason = _reason_from_react_exc(exc)
     if reason is None:
         return None

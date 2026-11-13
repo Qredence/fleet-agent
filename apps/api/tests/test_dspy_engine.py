@@ -8,7 +8,16 @@ import pytest
 from dspy.utils.exceptions import ContextWindowExceededError
 
 from app.agent.engine import AgentRunContext, AgentRunResult, DspyAgentEngine
-from tests.helpers.scripted_lm import ScriptedLM, submit_call
+from app.agent.program import FleetAgent
+from app.agent.tooling import create_dspy_tool
+from tests.helpers.scripted_lm import (
+    RecordingScriptedLM,
+    ScriptedLM,
+    evidence_end,
+    router_call,
+    submit_call,
+    synthesis_call,
+)
 from tests.helpers.signatures import AgentSignature
 
 CTX = AgentRunContext(thread_id="t-1", run_id="r-1")
@@ -24,8 +33,8 @@ def make_engine(
 
     lm = ScriptedLM(steps)
 
-    def factory() -> dspy.ReActV2:
-        return dspy.ReActV2(
+    def factory() -> dspy.ReAct:
+        return dspy.ReAct(
             AgentSignature,
             tools=tools if tools is not None else [SearchDocsTool()],
             max_iters=max_iters,
@@ -80,7 +89,7 @@ async def test_cleanup_runs_when_agent_construction_raises():
         nonlocal cleanup_calls
         cleanup_calls += 1
 
-    def factory() -> dspy.ReActV2:
+    def factory() -> dspy.ReAct:
         raise RuntimeError("agent construction failed")
 
     engine = DspyAgentEngine(
@@ -113,7 +122,7 @@ async def test_cleanup_waits_for_worker_after_outer_cancellation():
                 termination_reason="submit",
             )
 
-    def factory() -> dspy.ReActV2:
+    def factory() -> dspy.ReAct:
         return BlockingAgent()  # type: ignore[return-value]
 
     def cleanup() -> None:
@@ -323,3 +332,169 @@ async def test_usage_is_accumulated_across_model_calls():
     result = await run(engine)
     assert result.usage["total_tokens"] == 30
     assert result.usage["prompt_tokens"] == 20
+
+
+# ---------------------------------------------------------------------------
+# Engine/program boundary — the engine is strategy-neutral: it runs any
+# ``dspy.Module`` and also the first-class ``FleetAgent`` program.
+# ---------------------------------------------------------------------------
+
+
+class StaticProgram(dspy.Module):  # type: ignore[misc]
+    def forward(
+        self,
+        *,
+        user_request: str,
+        history: dspy.History | None = None,
+    ) -> dspy.Prediction:
+        del user_request
+        return dspy.Prediction(
+            answer="Done.",
+            process_summary="Used the DSPy program boundary.",
+            key_decisions=[],
+            caveats=[],
+            history=history or dspy.History(messages=[]),
+            termination_reason="submit",
+        )
+
+
+async def test_strategy_neutral_engine_runs_a_dspy_module() -> None:
+    program = StaticProgram()
+    engine = DspyAgentEngine(
+        program_factory=lambda: program,
+        lm=ScriptedLM([]),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(),
+    )
+
+    result = await engine.run(user_request="go", history=None, context=CTX)
+
+    assert result.status == "completed"
+    assert result.answer == "Done."
+    assert result.termination_reason == "submit"
+
+
+async def test_engine_runs_the_first_class_fleet_agent_program() -> None:
+    def lookup(query: str) -> str:
+        """Look up one deterministic value."""
+        return f"found:{query}"
+
+    tool = create_dspy_tool(lookup)
+    engine = DspyAgentEngine(
+        program_factory=lambda: FleetAgent(
+            tool_profiles={"research": [tool]}, max_iters=3
+        ),
+        lm=ScriptedLM(
+            [
+                router_call("research"),
+                [{"name": "lookup", "args": {"query": "x"}}],
+                evidence_end(),
+                synthesis_call(answer="Used the tool.", summary="Looked it up."),
+            ]
+        ),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(use_native_function_calling=True),
+    )
+
+    result = await engine.run(user_request="look it up", history=None, context=CTX)
+
+    assert result.status == "completed"
+    assert result.answer == "Used the tool."
+    assert result.termination_reason == "synthesis"
+    # Two evidence turns: the tool call, then the empty ``submit`` that ends the
+    # loop. ``submit`` is a real terminal condition, so it is recorded like any
+    # other turn rather than being an out-of-band loop exit.
+    assert len(result.history.messages) == 2
+    assert result.history.messages[-1]["tool_calls"].tool_calls[0].name == "submit"
+
+
+async def test_stream_does_not_require_react_internals() -> None:
+    engine = DspyAgentEngine(
+        program_factory=StaticProgram,
+        lm=ScriptedLM([]),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(),
+    )
+
+    updates = [
+        update
+        async for update in engine.stream(
+            user_request="go",
+            history=None,
+            context=CTX,
+        )
+    ]
+
+    assert [update.kind for update in updates] == ["final_fields", "result"]
+    assert updates[0].answer == "Done."
+    assert updates[1].result is not None
+    assert updates[1].result.answer == "Done."
+
+
+async def test_fleet_agent_multi_turn_stateful_history() -> None:
+    # Turn 1: direct route, answers the first question.
+    engine1 = DspyAgentEngine(
+        program_factory=lambda: FleetAgent(tool_profiles={"direct": []}, max_iters=3),
+        lm=RecordingScriptedLM(
+            [
+                router_call("direct"),
+                synthesis_call(
+                    answer="RLM is a recursive language model.",
+                    summary="Explained RLM.",
+                ),
+            ]
+        ),  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(use_native_function_calling=True),
+    )
+
+    result1 = await engine1.run(
+        user_request="can you explain to me what is a rlm",
+        history=None,
+        context=CTX,
+    )
+
+    assert result1.status == "completed"
+    assert result1.answer == "RLM is a recursive language model."
+    assert result1.history is not None
+    assert len(result1.history.messages) == 1
+    assert (
+        result1.history.messages[0]["user_request"]
+        == "can you explain to me what is a rlm"
+    )
+    assert result1.history.messages[0]["answer"] == "RLM is a recursive language model."
+
+    # Turn 2: follow-up passing continuation history.
+    turn2_lm = RecordingScriptedLM(
+        [
+            router_call("direct"),
+            synthesis_call(
+                answer=(
+                    "RLMs use recursion to decompose complex tasks "
+                    "into smaller prompts."
+                ),
+                summary="Detailed RLM mechanics.",
+            ),
+        ]
+    )
+    engine2 = DspyAgentEngine(
+        program_factory=lambda: FleetAgent(tool_profiles={"direct": []}, max_iters=3),
+        lm=turn2_lm,  # type: ignore[arg-type]
+        adapter=dspy.JSONAdapter(use_native_function_calling=True),
+    )
+
+    result2 = await engine2.run(
+        user_request="go in depth",
+        history=result1.history,
+        context=CTX,
+    )
+
+    assert result2.status == "completed"
+    assert "RLMs use recursion" in (result2.answer or "")
+    assert result2.history is not None
+    assert len(result2.history.messages) == 2
+
+    # The synthesis predictor received the prior turn in context: the
+    # recording LM captures the request DSPy 3.5 actually sends.
+    synthesis_requests = turn2_lm.requests_mentioning("evidence_json")
+    assert synthesis_requests, "Synthesizer must have been called"
+    synth_text = synthesis_requests[-1]
+    assert "can you explain to me what is a rlm" in synth_text
+    assert "RLM is a recursive language model." in synth_text
+    assert "go in depth" in synth_text

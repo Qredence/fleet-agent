@@ -3,7 +3,7 @@ ArtifactStarted -> ArtifactReady / ArtifactFailed lifecycle.
 
 Bounded by design: sanitized file name, capped content, storage confined to
 the per-run directory. Failures raise so the wrapper marks the tool call
-failed and ReActV2 can recover.
+failed and ReAct can recover.
 """
 
 import hashlib

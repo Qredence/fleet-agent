@@ -11,6 +11,7 @@ These documents define behavior and acceptance criteria. See [implementation sta
 | [005 - Feedback and evaluation provenance](005-feedback-evaluation-provenance.md) | Durable feedback, correct metrics and auditable candidates. |
 | [006 - DSPy runtime simplification](006-dspy-runtime-simplification.md) | Isolated predictors and optional measured decision experiments. |
 | [007 - Live acceptance and tracing](007-live-acceptance-and-tracing.md) | Command-provider acceptance, fault checks and metadata-only tracing. |
+| [008 - DSPy 3.5.0 migration](008-dspy-3.5-migration.md) | ReAct rename, class-name-independent error mapping and guard rationale. |
 
 Start with 001, the supported-input slice of 004, and 002. Use one focused implementation task per vertical slice; do not implement the entire program in a single large change.
 

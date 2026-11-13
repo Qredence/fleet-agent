@@ -1,6 +1,6 @@
 """Thread-safe domain event channel from the DSPy worker to the SSE loop.
 
-ReActV2 executes tools inside `asyncio.to_thread`, so instrumented tools
+ReAct executes tools inside `asyncio.to_thread`, so instrumented tools
 publish via `loop.call_soon_threadsafe`; the SSE generator drains the queue.
 One bus per run — events can never leak across concurrent runs.
 
@@ -25,7 +25,7 @@ class RunCancelToken:
 
     The coordinator sets the token when the client disconnects (or the run is
     cancelled); instrumented tools check it BEFORE doing work, which is the
-    guarantee "no new tool starts after cancellation is observed". A ReActV2
+    guarantee "no new tool starts after cancellation is observed". A ReAct
     iteration already inside a provider call may finish — that is the
     documented limit — but nothing new starts, and late bus events are never
     emitted.

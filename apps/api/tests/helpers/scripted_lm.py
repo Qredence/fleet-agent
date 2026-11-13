@@ -1,6 +1,6 @@
 """Scripted LM for provider-free engine tests.
 
-Drives ReActV2's native tool-calling loop by returning provider-format
+Drives ``dspy.ReAct``'s native tool-calling loop by returning provider-format
 tool_calls blocks; raises step entries in-loop so loop-recovery paths
 (e.g. context window) can be exercised.
 
@@ -13,11 +13,13 @@ A step is either:
 """
 
 import json
+from collections.abc import Callable
 from typing import Any, cast
 
 import dspy
 from dspy.lm15 import (
     Message,
+    Request,
     Response,
     StreamDeltaEvent,
     StreamEndEvent,
@@ -98,6 +100,77 @@ class ScriptedLM(dspy.LM):
         super().__init__("scripted", engine=engine_type(steps), cache=False)
 
 
+def message_text(message: Message) -> str:
+    """Flatten one message's text parts; the rendered field values live here."""
+    return "\n\n".join(
+        part.text for part in message.parts if isinstance(part, TextPart)
+    )
+
+
+def request_text(prompt: Request | str | None) -> str:
+    """Render a DSPy 3.5 ``Request`` as the plain text the model reads.
+
+    ``BaseLM.__call__`` takes a native ``Request`` (or a bare string): the
+    instructions live on ``request.system`` and each message carries typed
+    parts. Tests that inspect what reached the model flatten it here instead of
+    each reimplementing the part walk. The 3.4 OpenAI-dict ``messages=`` form is
+    gone, so there is no second shape to support.
+    """
+    if isinstance(prompt, str):
+        return prompt
+    if prompt is None:
+        return ""
+
+    texts: list[str] = []
+    system = prompt.system
+    if isinstance(system, str):
+        texts.append(system)
+    elif system:
+        texts.extend(part.text for part in system if isinstance(part, TextPart))
+    texts.extend(message_text(message) for message in prompt.messages)
+    return "\n\n".join(texts)
+
+
+class RecordingScriptedLM(ScriptedLM):
+    """A ``ScriptedLM`` that records every request and can act per response.
+
+    ``requests`` holds the flattened text of each model call (instructions plus
+    messages); ``messages`` holds each individual message's text, which is where
+    a predictor's *rendered* fields live (the instructions only carry the
+    field template). ``after_response`` runs once per model call, after the
+    scripted response is produced: the seam cancellation tests use to trip a
+    cancel token between turns without overriding ``__call__`` themselves.
+    """
+
+    def __init__(
+        self,
+        steps: list[Any],
+        *,
+        after_response: Callable[[], None] | None = None,
+    ):
+        super().__init__(steps)
+        self.requests: list[str] = []
+        self.messages: list[str] = []
+        self._after_response = after_response
+
+    def __call__(self, prompt: Request | str | None = None, **options: Any) -> Any:
+        self.requests.append(request_text(prompt))
+        if isinstance(prompt, Request):
+            self.messages.extend(message_text(message) for message in prompt.messages)
+        response = super().__call__(prompt, **options)
+        if self._after_response is not None:
+            self._after_response()
+        return response
+
+    def requests_mentioning(self, needle: str) -> list[str]:
+        """Rendered requests containing ``needle``, oldest first."""
+        return [text for text in self.requests if needle in text]
+
+    def messages_mentioning(self, needle: str) -> list[str]:
+        """Rendered messages containing ``needle``, oldest first."""
+        return [text for text in self.messages if needle in text]
+
+
 class StreamingScriptedLM(ScriptedLM):
     """DSPy selects native streaming when listeners exist."""
 
@@ -156,11 +229,11 @@ def router_call(route: str) -> dict[str, Any]:
 
 
 def evidence_end() -> dict[str, Any]:
-    """A step that ends an evidence-gathering ReActV2 loop.
+    """A step that ends an evidence-gathering ``dspy.ReAct`` loop.
 
     ``EvidenceSignature`` declares no output fields, so the model ends the loop by
     calling ``submit`` with no arguments - a real DSPy terminal condition. Ending
-    with an empty tool-call list instead makes vanilla ``dspy.ReActV2`` spend one
+    with an empty tool-call list instead makes vanilla ``dspy.ReAct`` spend one
     extra LM call on a forced submit, which no scripted sequence here accounts for.
     """
     return {"calls": [{"name": "submit", "args": {}}], "content": ""}

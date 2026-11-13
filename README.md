@@ -19,7 +19,7 @@ Agent treats the agent run as a first-class part of the product. A request
 belongs to a project and thread, the DSPy agent can use bounded typed tools,
 and the user can inspect what happened without receiving hidden model reasoning.
 
-DSPy is the core reasoning framework. In engine mode, `dspy.ReActV2` receives
+DSPy is the core reasoning framework. In engine mode, `dspy.ReAct` receives
 the user request and persisted branch history, chooses tools, and produces
 explicit user-facing fields:
 
@@ -36,10 +36,10 @@ The React frontend renders the conversation and the live process projection.
 
 ### DSPy-powered agent execution
 
-- ReActV2 is the default live agent loop, with provider configuration kept in
+- ReAct is the default live agent loop, with provider configuration kept in
   one server-side boundary.
 - The production `FleetAgent` class routes each request into a least-privileged
-  ReActV2 capability profile: direct, research, artifact, workspace read,
+  ReAct capability profile: direct, research, artifact, workspace read,
   workspace write, or workspace shell. The routed agents gather evidence only;
   a separate synthesis predictor produces the final answer and streams it
   token-by-token through public DSPy streaming APIs (`dspy.streamify`).
@@ -47,7 +47,7 @@ The React frontend renders the conversation and the live process projection.
   model unless the run authorizes them up front (`forwardedProps.approvedTools`),
   so an unauthorized tool is never offered rather than merely declined.
 - Prompt text lives in Markdown (`apps/api/app/agent/agents/prompts/`) and the
-  program's structure in YAML, compiled into real DSPy objects at build time.
+  program's structure composes real DSPy objects at build time.
 - `python -m evals.optimize` evolves the capability router's instructions with
   GEPA against the labelled routing set and promotes only a candidate that beats
   the baseline on a held-out split.
@@ -108,7 +108,7 @@ React workspace
 FastAPI run coordinator
   AgentEngine boundary + persistence + public-state reducer
                 │
-                ├── one DSPy program: routed ReActV2 evidence + synthesis
+                ├── one DSPy program: routed ReAct evidence + synthesis
                 ├── typed tools and evidence sources
                 └── PostgreSQL + controlled artifact storage
 ```
@@ -204,7 +204,7 @@ The API defaults to engine mode; fixture mode is an explicit local/CI choice:
 
 - `fixtures` replays canonical streams from `packages/contracts/fixtures` and
   does not need an LLM provider key.
-- `engine` runs the live DSPy ReActV2 bridge and requires a configured provider.
+- `engine` runs the live DSPy ReAct bridge and requires a configured provider.
 
 To use engine mode, edit `apps/api/.env` and restart the API:
 

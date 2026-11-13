@@ -5,7 +5,7 @@ inside the reasoning loop. A tool whose policy sets ``requires_approval`` is
 simply withheld from the model unless the run authorizes it up front, so the
 model can never call a mutating tool that was not approved in advance.
 
-The previous design paused ``dspy.ReActV2`` mid-loop to ask a human. That needed
+The previous design paused ``dspy.ReAct`` mid-loop to ask a human. That needed
 an 846-line fork of the loop over four private DSPy symbols, a hard version pin, a
 durable checkpoint table, a boot-time database dependency - and it covered a
 checkpoint with a five-minute TTL that was never written. Withholding the tool is

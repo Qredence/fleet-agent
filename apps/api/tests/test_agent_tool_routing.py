@@ -102,8 +102,9 @@ def test_routing_report_stays_quiet_when_nothing_raised(capsys):
 
 
 def test_routing_metric_satisfies_gepa_metric_contract():
-    # dspy 3.4.0's GEPA binds its metric with five positional arguments
-    # before optimization starts; the arity must stay compatible.
+    # DSPy 3.5's GEPA still binds its metric with five positional arguments
+    # (gold, pred, trace, pred_name, pred_trace) in __init__, so the arity must
+    # stay compatible; routing_metric's sixth optional program_trace is fine.
     optimizer = dspy.GEPA(
         metric=routing_metric,
         auto="light",
