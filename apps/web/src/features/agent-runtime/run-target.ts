@@ -163,7 +163,11 @@ export function runTargetLabel(target: RunTarget, byokLabel: string | null): str
     case 'capabilities_unavailable':
       return 'Agent unavailable'
     case 'no_server_gateway':
-    case 'server_gateway_unknown':
       return 'Provider not set'
+    case 'server_gateway_unknown':
+      // An older server that omits the flag. Naming a provider would assert
+      // the gateway is absent when it is only unknown, so this states the
+      // missing information instead.
+      return 'Gateway unknown'
   }
 }

@@ -28,6 +28,7 @@ import { queryClient } from "@/lib/query-client";
 import { ApprovalContext } from "./tool-permissions";
 import { API_BASE_URL, API_KEY } from "@/lib/env";
 import { refreshAgentCapabilities } from "@/features/agent-runtime/agent-capabilities";
+import type { AgentCapabilities } from "@/contracts/agent-capabilities";
 import { getAgentProviderHeaders, getActiveProviderId, getProviderReadiness, ProviderNotReadyError } from "@/features/providers/providers-store";
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`;
@@ -69,7 +70,16 @@ export function createAgentFetch(
         approvedTools: takeApprovals(),
       };
       requestInit = { ...requestInit, body: JSON.stringify(body) };
-      const capabilities = await refreshAgentCapabilities();
+      // A failed capabilities lookup must not escape as a raw query error: the
+      // route resolver owns that message, and an unresolved route has to fail
+      // closed here rather than producing a run the server cannot serve.
+      let capabilities: AgentCapabilities | undefined;
+      let capabilitiesError = false;
+      try {
+        capabilities = await refreshAgentCapabilities();
+      } catch {
+        capabilitiesError = true;
+      }
       // Never send stored credentials to fixture runs, including caller-supplied headers.
       const providerHeaderNames = Array.from(headers.keys()).filter((name) =>
         name.startsWith("x-llm-"),
@@ -82,7 +92,7 @@ export function createAgentFetch(
       // instead of producing a run the server cannot serve.
       const providerReadiness = getProviderReadiness();
       const target = resolveRunTarget({
-        capabilitiesError: false,
+        capabilitiesError,
         capabilities,
         providerReadiness,
         activeProviderId: getActiveProviderId(),

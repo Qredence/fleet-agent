@@ -128,4 +128,14 @@ describe('run target labels', () => {
     expect(runTargetLabel(needsSetup, null)).toBe('Provider needs setup')
     expect(runTargetLabel(noProvider, null)).toBe('Provider not set')
   })
+
+  it('separates an unknown gateway from a deployment that has none', () => {
+    // An older server omitting the flag only means unknown; claiming the
+    // gateway is absent would overstate what the browser knows.
+    const unknown = resolveRunTarget(input({ capabilities: capabilities('engine') }))
+    const none = resolveRunTarget(input({ capabilities: capabilities('engine', false) }))
+    expect(runTargetLabel(unknown, null)).toBe('Gateway unknown')
+    expect(runTargetLabel(none, null)).toBe('Provider not set')
+    expect(unknown.reason).not.toBe(none.reason)
+  })
 })

@@ -11,7 +11,15 @@ from tests.conftest import make_test_app
 
 @pytest.mark.parametrize("mode", ["fixtures", "engine"])
 async def test_capabilities_report_mode_and_require_configured_auth(mode):
-    app = make_test_app(agent_mode=mode, api_key="fixture-api-key")
+    # Pass the LLM settings explicitly as None: RUN_ENGINE_LIVE_TEST=1 keeps an
+    # ambient FLEET_AGENT_LLM_API_KEY, which would otherwise make this
+    # deployment report a gateway it was not given.
+    app = make_test_app(
+        agent_mode=mode,
+        api_key="fixture-api-key",
+        llm_api_key=None,
+        llm_base_url=None,
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -21,8 +29,6 @@ async def test_capabilities_report_mode_and_require_configured_auth(mode):
         )
     assert denied.status_code == 401
     assert allowed.status_code == 200
-    # tests/conftest.py clears every FLEET_AGENT_LLM_* value, so this
-    # deployment has no server-side gateway of its own.
     assert allowed.json() == {
         "agent_mode": mode,
         "supported_content_types": ["text"],
@@ -60,11 +66,35 @@ async def test_capabilities_report_a_configured_server_gateway():
         # credential per router, so lm15 raises NotConfiguredError with an
         # empty key map. Verified against a live gateway during this change.
         {"llm_base_url": "https://gateway.example/v1"},
-        {},
+        {"llm_base_url": None},
     ],
 )
 async def test_capabilities_report_no_gateway_without_a_server_key(overrides):
-    app = make_test_app(agent_mode="engine", api_key="fixture-api-key", **overrides)
+    # llm_api_key=None clears any ambient key RUN_ENGINE_LIVE_TEST=1 would keep.
+    app = make_test_app(
+        agent_mode="engine", api_key="fixture-api-key", llm_api_key=None, **overrides
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/api/agent/capabilities", headers={"X-API-Key": "fixture-api-key"}
+        )
+    assert response.status_code == 200
+    assert response.json()["server_gateway_configured"] is False
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+async def test_capabilities_treat_a_blank_key_as_no_gateway(blank):
+    """An empty key is not a credential.
+
+    ``_build_lm`` and GatewayEngine both treat a falsy SecretStr as absent, so
+    reporting it as configured would enable the composer for a run that dies
+    with NotConfiguredError.
+    """
+    app = make_test_app(
+        agent_mode="engine", api_key="fixture-api-key", llm_api_key=blank
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:

@@ -93,6 +93,13 @@ async def agent_capabilities(request: Request) -> AgentCapabilities:
     public error code (``provider_request_rejected``/``provider_unauthorized``).
     """
     settings: Settings = request.app.state.settings
+    # An empty or whitespace-only key is not a credential: ``_build_lm`` and
+    # GatewayEngine both treat a falsy SecretStr as absent, so reporting one as
+    # configured would enable the composer for a run that cannot start.
+    api_key = settings.llm_api_key
+    server_gateway_configured = bool(
+        api_key is not None and api_key.get_secret_value().strip()
+    )
     return AgentCapabilities(
         agent_mode=settings.agent_mode,
         supported_content_types=["text"],
@@ -101,7 +108,7 @@ async def agent_capabilities(request: Request) -> AgentCapabilities:
         # GatewayEngine registers its credential per router and lm15 raises
         # NotConfiguredError when that map is empty. A base URL alone therefore
         # cannot serve a run, so it must not be reported as a gateway.
-        server_gateway_configured=settings.llm_api_key is not None,
+        server_gateway_configured=server_gateway_configured,
     )
 
 

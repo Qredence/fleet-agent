@@ -108,9 +108,14 @@ it('omits stored and supplied provider headers for fixture sends and refreshes b
 })
 
 it('blocks the POST when capability lookup fails', async () => {
+  // The route resolver owns this message so a failed lookup reads the same
+  // here as it does in the composer ("Agent unavailable") instead of leaking
+  // a raw query error. The run still fails closed either way.
   vi.mocked(refreshAgentCapabilities).mockRejectedValueOnce(new Error('API unavailable'))
   const fetchMock = vi.spyOn(globalThis, 'fetch')
-  await expect(createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' })).rejects.toThrow('API unavailable')
+  await expect(
+    createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' }),
+  ).rejects.toThrow(/Cannot connect to the agent/)
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
@@ -181,5 +186,23 @@ describe('run route precedence', () => {
       }),
     ).rejects.toThrow(/needs setup/)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('runs on a configured server gateway with no profile and no X-LLM headers', async () => {
+    // The feature this contract addition exists for: a fresh browser on a
+    // deployment with its own model may send, and must not send a key.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({
+      agent_mode: 'engine',
+      supported_content_types: ['text'],
+      server_gateway_configured: true,
+    })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', {
+      method: 'POST',
+      body: '{"runId":"send"}',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect([...headers.keys()].filter((name) => name.startsWith('x-llm-'))).toEqual([])
   })
 })
