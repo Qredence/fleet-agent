@@ -1,0 +1,20 @@
+apps/web/oxlint-plugins/no-arbitrary-text-size.mjs
+  s_6b1a635e889bfd::t_f339aa2008bd48 9
+  s_6b1a635e889bfd::t_cc4e077911421d 43-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a343087c2bf61459b8f2dd3cc75b6b56273dbf1e",
+  "prompts": {},
+  "sessions": {
+    "s_6b1a635e889bfd": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "21a2d81d-bd8b-4fd2-b95b-c178a80ef8a5",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
