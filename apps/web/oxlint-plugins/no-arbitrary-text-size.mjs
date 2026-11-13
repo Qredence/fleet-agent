@@ -6,6 +6,7 @@
  *   text-[13px]  text-[13.5rem]  text-[100%]
  *   text-[length:13px]      (explicit type hint)
  *   text-(length:--fs)      (v4 parenthesis form)
+ *   text-(--fs)             (v4 shorthand for the same variable)
  *   text-[clamp(...)]  text-[min(...)]  text-[max(...)]  text-[calc(...)]
  *   text-[var(--fs)]        (variable whose name reads as a size)
  *
@@ -38,6 +39,12 @@ function isSize(content) {
     const name = value.match(VAR)?.[1];
     // Unknown variable: assume color, since blocking a color is worse.
     return Boolean(name && SIZE_VAR.test(name));
+  }
+  // v4 shorthand for a bare variable: text-(--fs) is the same utility as
+  // text-[var(--fs)], so classify the name identically instead of letting the
+  // parenthesis form slip through.
+  if (value.startsWith("--")) {
+    return SIZE_VAR.test(value.slice(2));
   }
   return false;
 }
