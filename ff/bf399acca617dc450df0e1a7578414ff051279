@@ -1,0 +1,99 @@
+apps/web/src/components/elements/web-search.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 65,68
+apps/web/src/features/providers/settings/settings-dialog.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 358,423,446,451,475,499,544,559,564,574,601,628,654,749,813
+apps/web/src/components/elements/tool-group.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 71,107
+apps/web/src/lib/size-context.tsx
+  s_72b709646c8c4c::t_bbb8ee61d322fb 71
+  s_72b709646c8c4c::t_741d7b7e5d6145 56
+apps/web/src/components/assistant-ui/reasoning-effort.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 47,52,56
+apps/web/src/lib/utils.ts
+  s_72b709646c8c4c::t_477f0732508c05 1-9,11-16,18-20,22-23,25-29
+  s_72b709646c8c4c::t_0c40425e65b8f0 10,17,21,24
+apps/web/src/components/elements/artifact-card.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 50
+apps/web/src/components/ui/card.tsx
+  s_72b709646c8c4c::t_bbb8ee61d322fb 645,693,897,949,1027
+apps/web/src/lib/surfaces.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 33
+apps/web/src/components/ui/tooltip.tsx
+  s_72b709646c8c4c::t_bbb8ee61d322fb 323
+apps/web/src/features/process-panel/process-step-card.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 64
+apps/web/src/features/projects/project-sidebar.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 192,264,359,444
+apps/web/src/index.css
+  s_72b709646c8c4c::t_33734bf6a32f5e 34-36,41-43,45-47,49-50
+  s_72b709646c8c4c::t_7f788048e68b45 37,44,48,51
+  s_72b709646c8c4c::t_0ea0695e904473 38-40
+apps/web/src/components/ui/sidebar-menu.tsx
+  s_72b709646c8c4c::t_a6171f7dad8bda 1130
+  s_72b709646c8c4c::t_d9c2225eb2bbd0 1049,1439
+  s_72b709646c8c4c::t_bbb8ee61d322fb 963,1458
+  s_72b709646c8c4c::t_741d7b7e5d6145 1211
+apps/web/src/components/assistant-ui/scroll-anchor.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 76
+apps/web/src/features/providers/settings/provider-card.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 34,40,43,46
+apps/web/src/components/ui/button.tsx
+  s_72b709646c8c4c::t_7b80c69c12f28e 338
+  s_72b709646c8c4c::t_741d7b7e5d6145 39
+  s_72b709646c8c4c::t_bbb8ee61d322fb 40
+apps/web/src/components/assistant-ui/tool-fallback.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 508,553
+apps/web/src/components/ui/sidebar-core.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 863
+  s_72b709646c8c4c::t_bbb8ee61d322fb 1465,1516
+  s_72b709646c8c4c::t_bccb097b660b47 1567
+apps/web/src/components/elements/agent-plan.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 49,72,79
+apps/web/src/features/process-panel/process-panel.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 183
+apps/web/src/components/ui/dialog.tsx
+  s_72b709646c8c4c::t_bbb8ee61d322fb 279,299
+apps/web/src/features/process-panel/run-activity-inline.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 195
+apps/web/src/app/routes/tools-route.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 96,101,106,110
+apps/web/src/features/process-panel/decision-card.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 29,34,42
+apps/web/.oxlintrc.json
+  s_72b709646c8c4c::t_3098a129c7d504 5-11
+apps/web/src/components/elements/research-report.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 51,80
+apps/web/oxlint-plugins/no-arbitrary-text-size.mjs
+  s_72b709646c8c4c::t_521f7d42ad90fc 1-31
+apps/web/src/components/elements/sources.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 70,77
+apps/web/src/features/providers/settings/provider-form.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 141,157,173,179
+apps/web/src/components/ui/dropdown-menu.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 92,310
+apps/web/src/features/process-panel/status-chip.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 107
+apps/web/src/components/assistant-ui/thread.tsx
+  s_72b709646c8c4c::t_bf59fbc5ebd8c2 1-2
+  s_72b709646c8c4c::t_741d7b7e5d6145 366,576,696,810
+apps/web/src/components/assistant-ui/composer-elements.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 205,256,260,291,305,631,635,654,661,799,804
+apps/web/src/components/elements/tool-call.tsx
+  s_72b709646c8c4c::t_741d7b7e5d6145 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ffbf399acca617dc450df0e1a7578414ff051279",
+  "prompts": {},
+  "sessions": {
+    "s_72b709646c8c4c": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "2fb04558-ce69-415c-a385-7f25513c612d",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
