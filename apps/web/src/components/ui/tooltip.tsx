@@ -320,7 +320,7 @@ function CustomTooltipWrapper({
                 >
                   <motion.div
                     className={cn(
-                      "bg-foreground text-background text-[12px] px-2 py-1",
+                      "bg-foreground text-background text-caption px-2 py-1",
                       shape.bg,
                       className
                     )}

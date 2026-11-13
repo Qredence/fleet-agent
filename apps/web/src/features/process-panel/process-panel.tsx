@@ -180,7 +180,7 @@ function AgUiTabCount({ tab }: { tab: ProcessPanelTab }) {
   if (count === 0) return null
 
   return (
-    <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">
+    <span className="rounded-full bg-muted px-1.5 py-px text-2xs font-semibold tabular-nums text-muted-foreground">
       {count}
     </span>
   )

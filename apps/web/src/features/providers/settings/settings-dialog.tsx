@@ -355,7 +355,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   {SETTINGS_CATEGORIES.find(({ id }) => id === activeCategory)?.description}
                 </DialogDescription>
               </DialogHeader>
-              <label className="flex w-full flex-col gap-1 text-[11px] text-muted-foreground sm:hidden">
+              <label className="flex w-full flex-col gap-1 text-meta text-muted-foreground sm:hidden">
                 Section
                 <select
                   aria-label="Settings section"
@@ -420,7 +420,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                   <CardTitle className="text-xs font-semibold truncate">
                                     {profile.name}
                                   </CardTitle>
-                                  <CardDescription className="text-[10px] text-muted-foreground truncate font-mono">
+                                  <CardDescription className="text-2xs text-muted-foreground truncate font-mono">
                                     {getProviderReadiness(profile.id).ready ? profile.modelId || 'Provider default model' : 'Needs setup'}
                                   </CardDescription>
                                 </div>
@@ -443,12 +443,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   description="Sign in directly via OAuth PKCE to connect your OpenRouter account."
                   action={
                     isAuthenticated ? (
-                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[11px] border-success/30 bg-success/10 text-success">
+                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-meta border-success/30 bg-success/10 text-success">
                         <CircleDot className="size-2 fill-success text-success" />
                         Connected
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[11px] border-warning/30 bg-warning/10 text-warning">
+                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-meta border-warning/30 bg-warning/10 text-warning">
                         Disconnected
                       </Badge>
                     )
@@ -472,7 +472,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <div className="space-y-3 pt-1">
                       <div className="flex items-center justify-between rounded-lg bg-muted/60 p-3 text-xs">
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground text-[11px]">Active API Key:</span>
+                          <span className="text-muted-foreground text-meta">Active API Key:</span>
                           <div className="font-mono text-foreground font-medium">
                             {maskApiKey(apiKey)}
                           </div>
@@ -496,7 +496,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                               <div className="font-medium text-foreground text-xs">
                                 App Attribution Configured
                               </div>
-                              <CardDescription className="text-[11px] text-muted-foreground">
+                              <CardDescription className="text-meta text-muted-foreground">
                                 Your requests include official app attribution (<code className="font-mono text-success">Fleet Agent</code>) and HTTP referer verification for OpenRouter stats and rankings.
                               </CardDescription>
                             </div>
@@ -541,7 +541,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                             </Button>
                           </div>
                           {manualKeyError && (
-                            <p className="text-[11px] text-destructive">{manualKeyError}</p>
+                            <p className="text-meta text-destructive">{manualKeyError}</p>
                           )}
                         </form>
                       )}
@@ -556,12 +556,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   description={`Paste an OpenCode Zen API key to route engine runs through ${OPENCODE_ZEN_BASE_URL}.`}
                   action={
                     openCodeZenAuthenticated ? (
-                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[11px] border-success/30 bg-success/10 text-success">
+                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-meta border-success/30 bg-success/10 text-success">
                         <CircleDot className="size-2 fill-success text-success" />
                         Connected
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-[11px] border-warning/30 bg-warning/10 text-warning">
+                      <Badge variant="outline" className="gap-1 px-2 py-0.5 text-meta border-warning/30 bg-warning/10 text-warning">
                         Disconnected
                       </Badge>
                     )
@@ -571,7 +571,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <div className="space-y-3 pt-1">
                       <div className="flex items-center justify-between rounded-lg bg-muted/60 p-3 text-xs">
                         <div className="space-y-0.5">
-                          <span className="text-muted-foreground text-[11px]">Active API Key:</span>
+                          <span className="text-muted-foreground text-meta">Active API Key:</span>
                           <div className="font-mono text-foreground font-medium">
                             {maskApiKey(openCodeZenApiKey)}
                           </div>
@@ -598,7 +598,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         >
                           {showOpenCodeZenKeyForm ? 'Cancel' : 'Add OpenCode Zen API Key'}
                         </Button>
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-meta text-muted-foreground">
                           Keys are stored in this browser only and never reach the Fleet API.
                         </span>
                       </div>
@@ -625,7 +625,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                             </Button>
                           </div>
                           {openCodeZenKeyError && (
-                            <p className="text-[11px] text-destructive">{openCodeZenKeyError}</p>
+                            <p className="text-meta text-destructive">{openCodeZenKeyError}</p>
                           )}
                         </form>
                       )}
@@ -651,7 +651,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   }
                 >
                   {customProfiles.length === 0 && !showProviderForm && (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-meta text-muted-foreground">
                       No custom providers yet. Add one to route engine runs through a different API key, model, or gateway.
                     </p>
                   )}
@@ -746,7 +746,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </div>
                     </form>
 
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-meta text-muted-foreground">
                       <Globe className="size-3" />
                       <span>Currently routed:</span>
                       <code className="font-mono text-foreground font-semibold">
@@ -810,7 +810,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </div>
                     </form>
 
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-meta text-muted-foreground">
                       <Globe className="size-3" />
                       <span>Currently routed:</span>
                       <code className="font-mono text-foreground font-semibold">

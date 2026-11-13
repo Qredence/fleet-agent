@@ -1,8 +1,9 @@
+"use client";
+
 import { MessageFeedbackControls } from "@/features/agent-runtime/message-feedback-controls";
 import { supportsTextFile } from "@/features/agent-runtime/text-attachments";
 import { RunSaveNotice } from '@/features/agent-runtime/run-save-notice';
 import { ToolPermissions } from '@/features/agent-runtime/tool-permissions';
-"use client";
 
 import {
   ComposerAddAttachment,
@@ -362,7 +363,7 @@ const Composer: FC<{ workspaceContext: ComposerWorkspaceContext }> = ({
           <ComposerAttachments />
           <ComposerPrimitive.Input
             placeholder="Ask anything"
-            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-11 min-w-0 w-full resize-none bg-transparent px-2.5 py-1 text-[15px] leading-6 outline-none"
+            className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-11 min-w-0 w-full resize-none bg-transparent px-2.5 py-1 text-title leading-6 outline-none"
             rows={1}
             autoFocus
             enterKeyHint="send"
@@ -572,7 +573,7 @@ const AssistantMessage: FC = () => {
                     aria-label="Assistant is working"
                   >
                     <span className="size-1.5 rounded-full bg-primary" />
-                    <span className="font-mono text-[11px]">Thinking...</span>
+                    <span className="font-mono text-meta">Thinking...</span>
                   </span>
                 );
               default:
@@ -692,7 +693,7 @@ const UserMessage: FC = () => {
       <div className="group relative max-w-[85%]">
         <div
           className={cn(
-            "aui-user-message-content peer bg-surface-2 shadow-surface-1 text-foreground px-4 py-2.5 text-[14.5px] leading-relaxed wrap-break-word empty:hidden border border-border/40 transition-shadow",
+            "aui-user-message-content peer bg-surface-2 shadow-surface-1 text-foreground px-4 py-2.5 text-subtitle-plus leading-relaxed wrap-break-word empty:hidden border border-border/40 transition-shadow",
             shape.bg
           )}
         >
@@ -806,7 +807,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
       >
         <ChevronLeftIcon className="size-3" />
       </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-mono text-[11px] px-1 font-medium">
+      <span className="aui-branch-picker-state font-mono text-meta px-1 font-medium">
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
       </span>
       <BranchPickerPrimitive.Next

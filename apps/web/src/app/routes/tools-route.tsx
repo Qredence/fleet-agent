@@ -93,21 +93,21 @@ function ToolCard({ tool, index }: { tool: ToolCatalogEntry; index?: number }) {
 
       <CardFooter className="flex-wrap gap-1.5">
         {tool.parallelizable && (
-          <Badge variant="secondary" className="text-[10px] font-normal">
+          <Badge variant="secondary" className="text-2xs font-normal">
             Parallelizable
           </Badge>
         )}
         {tool.idempotent && (
-          <Badge variant="secondary" className="text-[10px] font-normal">
+          <Badge variant="secondary" className="text-2xs font-normal">
             Idempotent
           </Badge>
         )}
         {tool.requires_approval && (
-          <Badge variant="outline" className="text-[10px] text-warning">
+          <Badge variant="outline" className="text-2xs text-warning">
             Approval required
           </Badge>
         )}
-        {tool.timeout_seconds !== undefined && <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+        {tool.timeout_seconds !== undefined && <Badge variant="outline" className="text-2xs font-mono text-muted-foreground">
           <Clock className="size-3" aria-hidden="true" /> {tool.timeout_seconds}s
         </Badge>}
       </CardFooter>

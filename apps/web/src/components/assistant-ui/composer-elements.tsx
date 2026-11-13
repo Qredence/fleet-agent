@@ -202,7 +202,7 @@ export const ComposerModelTrigger = forwardRef<
       data-slot="composer-model-trigger"
       data-unconfigured={unconfigured || undefined}
       className={cn(
-        "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/90 dark:hover:bg-foreground/[0.09] flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors motion-reduce:transition-none",
+        "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/90 dark:hover:bg-foreground/[0.09] flex h-8 items-center gap-1.5 rounded-full px-3 text-caption-plus transition-colors motion-reduce:transition-none",
         className,
       )}
       {...props}
@@ -253,11 +253,11 @@ export function ComposerContext({
       >
         <div className="flex items-baseline justify-between">
           <div className="min-w-0">
-            <p className="text-[13.5px] font-medium">
+            <p className="text-body-plus font-medium">
               {usage.estimated ? "Estimated context" : "Context"}
             </p>
             {usage.description && (
-              <p className="text-foreground/45 mt-0.5 text-[11px] leading-4">
+              <p className="text-foreground/45 mt-0.5 text-meta leading-4">
                 {usage.description}
               </p>
             )}
@@ -288,7 +288,7 @@ export function ComposerContext({
           {segments.map((segment) => (
             <div
               key={segment.label}
-              className="text-foreground/55 flex items-center gap-2.5 text-[13px]"
+              className="text-foreground/55 flex items-center gap-2.5 text-body"
             >
               <span
                 aria-hidden
@@ -302,7 +302,7 @@ export function ComposerContext({
           ))}
         </div>
         <div className="bg-foreground/[0.06] h-px" />
-        <div className="text-foreground/55 flex items-center justify-between text-[13px]">
+        <div className="text-foreground/55 flex items-center justify-between text-body">
           <span>{usage.estimated ? "Estimate" : "Total"}</span>
           <span className={cn(mono, "text-foreground/40 tabular-nums")}>
             {used}k / {usage.total}k
@@ -628,11 +628,11 @@ export const ComposerModelPicker: FC = () => {
         }}
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <DropdownMenuLabel className="px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
             Model
           </DropdownMenuLabel>
           {unconfiguredRoute && (
-            <p className="mx-2 mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-2 py-1.5 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+            <p className="mx-2 mb-1.5 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-2 py-1.5 text-2xs leading-4 text-amber-700 dark:text-amber-300">
               <CircleAlertIcon aria-hidden className="mt-0.5 size-3 shrink-0" />
               <span>
                 {runReadiness.message}
@@ -651,14 +651,14 @@ export const ComposerModelPicker: FC = () => {
               >
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium">{option.label}</span>
-                  <span className="truncate text-[10px] text-muted-foreground">
+                  <span className="truncate text-2xs text-muted-foreground">
                     {option.description}
                   </span>
                 </span>
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
-          <p className="px-2 pb-0.5 pt-1 text-[10px] leading-4 text-muted-foreground">
+          <p className="px-2 pb-0.5 pt-1 text-2xs leading-4 text-muted-foreground">
             Selecting a model chooses its configured route. Manage keys and
             model identifiers in Settings → Providers &amp; Models.
           </p>
@@ -796,12 +796,12 @@ function TriggerItems({ items }: { items: readonly Unstable_TriggerItem[] }) {
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate font-medium">{item.label}</span>
             {item.description && (
-              <span className="truncate text-[10px] text-muted-foreground group-data-highlighted:text-accent-foreground/70">
+              <span className="truncate text-2xs text-muted-foreground group-data-highlighted:text-accent-foreground/70">
                 {item.description}
               </span>
             )}
           </span>
-          <kbd className="shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground group-data-highlighted:bg-background/40">
+          <kbd className="shrink-0 rounded bg-muted px-1 font-mono text-2xs text-muted-foreground group-data-highlighted:bg-background/40">
             ↵
           </kbd>
         </ComposerPrimitive.Unstable_TriggerPopoverItem>

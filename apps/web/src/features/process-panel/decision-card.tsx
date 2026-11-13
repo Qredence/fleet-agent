@@ -26,12 +26,12 @@ export function DecisionCard({ decision }: { decision: ProcessDecision }) {
         <div className="min-w-0 flex-1">
           {isRoute && (
             <span
-              className={cn(mono, 'mb-0.5 block text-[10px] text-foreground/35')}
+              className={cn(mono, 'mb-0.5 block text-2xs text-foreground/35')}
             >
               Route
             </span>
           )}
-          <span className="block truncate text-[13.5px] text-foreground/70">
+          <span className="block truncate text-body-plus text-foreground/70">
             {decision.title}
           </span>
         </div>
@@ -39,7 +39,7 @@ export function DecisionCard({ decision }: { decision: ProcessDecision }) {
           <span
             className={cn(
               mono,
-              'shrink-0 text-[11px] text-foreground/45',
+              'shrink-0 text-meta text-foreground/45',
             )}
           >
             {decision.selected}

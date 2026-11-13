@@ -192,7 +192,7 @@ export function RunActivityInlineContent({
             className="size-3 text-foreground/25 transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-open/trigger:rotate-90 group-data-panel-open/trigger:rotate-90 motion-reduce:transition-none"
           />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[13.5px] leading-5">
+        <span className="min-w-0 flex-1 truncate text-body-plus leading-5">
           Run activity
         </span>
         <span

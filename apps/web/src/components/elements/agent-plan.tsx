@@ -46,7 +46,7 @@ export function AgentPlan({
       {...props}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[13.5px] font-medium">Plan</span>
+        <span className="text-body-plus font-medium">Plan</span>
         <span className={cn(mono, "text-foreground/35 tabular-nums")}>
           {completed} of {total}
         </span>
@@ -69,14 +69,14 @@ export function AgentPlan({
           const failed = status === "failed";
           const skipped = status === "skipped";
           return (
-            <li key={`${i}-${step}`} className="flex items-center gap-2.5 text-[13.5px]">
+            <li key={`${i}-${step}`} className="flex items-center gap-2.5 text-body-plus">
               <span className="flex size-4 shrink-0 items-center justify-center">
                 {done ? (
                   <CheckIcon className="text-foreground/35 size-3.5" />
                 ) : failed ? (
                   <span className="text-destructive text-xs font-semibold">×</span>
                 ) : skipped ? (
-                  <span className="text-muted-foreground text-[10px]">—</span>
+                  <span className="text-muted-foreground text-2xs">—</span>
                 ) : active ? (
                   <Loader2Icon className="text-foreground/90 size-3.5 animate-spin motion-reduce:animate-none" />
                 ) : (
