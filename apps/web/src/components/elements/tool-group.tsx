@@ -68,7 +68,7 @@ export function ToolGroup({
             open && "rotate-90",
           )}
         />
-        <span className="min-w-0 flex-1 truncate text-[13.5px]">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-body-plus">{label}</span>
         <span className={cn(mono, "text-foreground/30 shrink-0 tabular-nums")}>
           {running > 0
             ? `${tools.length - running}/${tools.length}`
@@ -104,7 +104,7 @@ export function ToolGroup({
               <span className={cn(mono, "text-foreground/55 shrink-0")}>
                 {tool.name}
               </span>
-              <span className="text-foreground/80 min-w-0 flex-1 truncate text-[13px]">
+              <span className="text-foreground/80 min-w-0 flex-1 truncate text-body">
                 {tool.target}
               </span>
               {tool.durationMs !== undefined && (

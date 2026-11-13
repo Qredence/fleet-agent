@@ -61,7 +61,7 @@ export function ProcessStepCard({
       <StatusIcon status={step.status} />
       <span
         className={cn(
-          'min-w-0 flex-1 truncate text-[13.5px] leading-5',
+          'min-w-0 flex-1 truncate text-body-plus leading-5',
           isActive ? 'text-foreground/90' : 'text-foreground/55',
         )}
       >

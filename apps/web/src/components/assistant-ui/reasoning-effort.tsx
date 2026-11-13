@@ -44,16 +44,16 @@ export function ReasoningEffort<TKey extends string = string>({
       {...props}
     >
       <div className="flex items-center justify-between px-0.5">
-        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
           <BrainIcon className="size-3" />
           Reasoning effort
         </span>
         {hasBudget ? (
-          <span className={cn(mono, "text-foreground/35 tabular-nums text-[10px]")}>
+          <span className={cn(mono, "text-foreground/35 tabular-nums text-2xs")}>
             {fmt(spent)} / {fmt(budget)}
           </span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-2xs text-muted-foreground">
             {selected?.description}
           </span>
         )}

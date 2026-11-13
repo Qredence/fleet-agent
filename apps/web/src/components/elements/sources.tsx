@@ -67,14 +67,14 @@ export function Sources({
               )}
             >
               <div className="flex items-center gap-1.5">
-                <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-medium">
+                <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-3xs font-medium">
                   {source.domain.charAt(0).toUpperCase()}
                 </span>
                 <span className={cn(mono, "text-foreground/40 truncate")}>
                   {source.domain}
                 </span>
               </div>
-              <span className="text-foreground/90 line-clamp-2 text-[13px] leading-snug font-medium">
+              <span className="text-foreground/90 line-clamp-2 text-body leading-snug font-medium">
                 {source.title}
               </span>
             </div>

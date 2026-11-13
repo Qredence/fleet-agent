@@ -505,7 +505,7 @@ function ToolFallbackApproval({
           <p
             data-slot="tool-fallback-approval-preview"
             title={interruptPreview}
-            className="aui-tool-fallback-approval-preview w-full truncate text-[11px] text-muted-foreground"
+            className="aui-tool-fallback-approval-preview w-full truncate text-meta text-muted-foreground"
           >
             <code className="font-mono">{interruptPreview}</code>
           </p>
@@ -550,7 +550,7 @@ function ToolFallbackApproval({
         <p
           data-slot="tool-fallback-approval-preview"
           title={interruptPreview}
-          className="aui-tool-fallback-approval-preview w-full truncate text-[11px] text-muted-foreground"
+          className="aui-tool-fallback-approval-preview w-full truncate text-meta text-muted-foreground"
         >
           <code className="font-mono">{interruptPreview}</code>
         </p>

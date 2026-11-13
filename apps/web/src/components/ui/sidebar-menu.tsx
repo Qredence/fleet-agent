@@ -960,7 +960,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
           : sizeClasses.variant === "compact"
             ? "h-7"
             : "h-8";
-    const textClass = size === "sm" ? "text-[12px]" : sizeClasses.text;
+    const textClass = size === "sm" ? "text-caption" : sizeClasses.text;
 
     // Roving tabindex: the active rows' buttons are the menu's tab stops; with
     // no active row, the menu's first row keeps it keyboard-reachable.
@@ -1046,7 +1046,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
           className
         ),
         ...props,
-        style: { ...gutterVars, ...(props.style ?? {}) },
+        style: { ...gutterVars, ...props.style },
       },
       inner
     );
@@ -1127,7 +1127,7 @@ const SidebarMenuAction = forwardRef<HTMLButtonElement, SidebarMenuActionProps>(
           onClick?.(event);
         },
         ...props,
-        style: { ...({ "--icon-size": `${sizeClasses.icon}px` } as CSSProperties), ...(props.style ?? {}) },
+        style: { ...({ "--icon-size": `${sizeClasses.icon}px` } as CSSProperties), ...props.style },
       },
       content
     );
@@ -1208,7 +1208,7 @@ const SidebarMenuBadge = forwardRef<HTMLDivElement, SidebarMenuBadgeProps>(
         data-sidebar="menu-badge"
         className={cn(
           "pointer-events-none absolute right-2 z-10 flex h-5 min-w-5 items-center justify-center px-1 tabular-nums",
-          sizeClasses.variant === "compact" ? "top-1 text-[10px]" : "top-1.5 text-[11px]",
+          sizeClasses.variant === "compact" ? "top-1 text-2xs" : "top-1.5 text-meta",
           "transition-[color,font-variation-settings] duration-80",
           lit ? "text-foreground" : "text-muted-foreground",
           className
@@ -1436,7 +1436,7 @@ const SidebarMenuSubButton = forwardRef<HTMLAnchorElement, SidebarMenuSubButtonP
           className
         ),
         ...props,
-        style: { ...gutterVars, ...(props.style ?? {}) },
+        style: { ...gutterVars, ...props.style },
       },
       <>
         {Icon && (
@@ -1455,7 +1455,7 @@ const SidebarMenuSubButton = forwardRef<HTMLAnchorElement, SidebarMenuSubButtonP
           content={content}
           lit={lit}
           emphasized={isActive}
-          textClass={size === "sm" ? "text-[12px]" : sizeClasses.text}
+          textClass={size === "sm" ? "text-caption" : sizeClasses.text}
         />
       </>
     );

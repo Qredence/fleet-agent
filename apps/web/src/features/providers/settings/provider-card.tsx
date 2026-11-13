@@ -31,19 +31,19 @@ export function CustomProviderCard({
               {isActive && (
                 <Badge
                   variant="outline"
-                  className="px-2 py-0 text-[10px] border-success/30 bg-success/10 text-success"
+                  className="px-2 py-0 text-2xs border-success/30 bg-success/10 text-success"
                 >
                   Active
                 </Badge>
               )}
             </div>
-            <CardDescription className="font-mono text-[11px] truncate">
+            <CardDescription className="font-mono text-meta truncate">
               {profile.modelId || 'provider default model'}
             </CardDescription>
-            <div className="font-mono text-[11px] text-muted-foreground truncate">
+            <div className="font-mono text-meta text-muted-foreground truncate">
               {profile.baseUrl}
             </div>
-            <div className="font-mono text-[11px] text-muted-foreground">
+            <div className="font-mono text-meta text-muted-foreground">
               Key: {maskApiKey(profile.apiKey)}
             </div>
           </div>

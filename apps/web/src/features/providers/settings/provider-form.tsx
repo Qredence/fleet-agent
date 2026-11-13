@@ -138,7 +138,7 @@ export function ProviderForm({
           options={[{ value: 'openai-chat-completions', label: 'OpenAI chat completions' }]}
           onChange={() => undefined}
         />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-meta text-muted-foreground">
           The engine's stable wire format; forward-compatible with DSPy's
           typed LMRequest/LMResponse API.
         </p>
@@ -154,7 +154,7 @@ export function ProviderForm({
           options={RESPONSE_FORMAT_OPTIONS}
           onChange={(responseFormat) => onChange((prev) => ({ ...prev, responseFormat }))}
         />
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+        <p className="text-meta text-muted-foreground flex items-center gap-1.5">
           <Cpu className="size-3" />
           Native function calling uses provider tool calls; JSON tool calls prompt tools as JSON for gateways without native support.
         </p>
@@ -170,13 +170,13 @@ export function ProviderForm({
           options={MESSAGES_FORMAT_OPTIONS}
           onChange={(messagesFormat) => onChange((prev) => ({ ...prev, messagesFormat }))}
         />
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+        <p className="text-meta text-muted-foreground flex items-center gap-1.5">
           <MessageSquare className="size-3" />
           System role sends system messages as-is; developer role uses the newer developer role for OpenAI-style APIs.
         </p>
       </div>
 
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {error && <p className="text-meta text-destructive">{error}</p>}
 
       <div className="flex justify-end gap-2">
         <Button

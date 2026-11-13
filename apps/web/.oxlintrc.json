@@ -1,8 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
-    "src/components/ui/**",
-    "src/components/assistant-ui/**",
     "src/contracts/**"
-  ]
+  ],
+  "jsPlugins": [
+    "./oxlint-plugins/no-arbitrary-text-size.mjs"
+  ],
+  "rules": {
+    "fleet/no-arbitrary-text-size": "error"
+  }
 }

@@ -860,7 +860,7 @@ export type SidebarTriggerProps = ButtonProps;
 /** Keystroke chip rendered inside the (inverted) tooltip surface. */
 function ShortcutKbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="-my-1 flex h-4 min-w-4 items-center justify-center rounded border border-background/30 px-1 font-sans text-[10px] text-background/80">
+    <kbd className="-my-1 flex h-4 min-w-4 items-center justify-center rounded border border-background/30 px-1 font-sans text-2xs text-background/80">
       {children}
     </kbd>
   );
@@ -1462,7 +1462,7 @@ const SidebarGroupLabel = forwardRef<HTMLDivElement, SidebarGroupLabelProps>(
             group.actionsCount > 0 && "pr-[var(--group-actions-pad)]",
             "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
             shape.item,
-            sizeVariant === "compact" ? "text-[11px]" : "text-[12px]",
+            sizeVariant === "compact" ? "text-meta" : "text-caption",
             className
           ),
           ...props,
@@ -1513,7 +1513,7 @@ const SidebarGroupLabel = forwardRef<HTMLDivElement, SidebarGroupLabelProps>(
         "data-sidebar": "group-label",
         className: cn(
           "flex h-8 shrink-0 items-center gap-2 px-2 text-muted-foreground/70 outline-none",
-          sizeVariant === "compact" ? "text-[11px]" : "text-[12px]",
+          sizeVariant === "compact" ? "text-meta" : "text-caption",
           className
         ),
         ...props,
@@ -1564,7 +1564,7 @@ const SidebarGroupAction = forwardRef<HTMLButtonElement, SidebarGroupActionProps
         // wholesale and drop the icon-size the glyph is sized from.
         style: {
           ...({ "--icon-size": `${sizeClasses.icon}px` } as CSSProperties),
-          ...(props.style ?? {}),
+          ...props.style,
         },
       },
       content

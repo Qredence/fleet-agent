@@ -48,7 +48,7 @@ export function ResearchReport({
       {...props}
     >
       <div className="flex flex-col gap-1">
-        <span className="text-[13.5px] font-medium">{title}</span>
+        <span className="text-body-plus font-medium">{title}</span>
         <span className={cn(mono, "text-foreground/30 tabular-nums")}>
           {done}/{sections.length} sections · {sourcesRead} sources read
         </span>
@@ -77,7 +77,7 @@ export function ResearchReport({
               </span>
               <span
                 className={cn(
-                  "min-w-0 flex-1 truncate text-[13px]",
+                  "min-w-0 flex-1 truncate text-body",
                   section.state === "pending"
                     ? "text-foreground/35"
                     : section.state === "failed"

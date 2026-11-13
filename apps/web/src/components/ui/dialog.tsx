@@ -276,7 +276,7 @@ const DialogTitle = forwardRef<
     <DialogPrimitive.Title
       ref={ref}
       className={cn(
-        compact ? "text-[15px]" : "text-[16px]",
+        compact ? "text-title" : "text-title-plus",
         "text-foreground leading-tight",
         className
       )}
@@ -296,7 +296,7 @@ const DialogDescription = forwardRef<
     <DialogPrimitive.Description
       ref={ref}
       className={cn(
-        compact ? "text-[12px]" : "text-[13px]",
+        compact ? "text-caption" : "text-body",
         "text-muted-foreground",
         className
       )}

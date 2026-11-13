@@ -62,10 +62,10 @@ export function WebSearch({
             key={`${cycle}-${index}-${result.domain}-${result.title}`}
             className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both hover:bg-foreground/[0.03] -mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors duration-300"
           >
-            <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-medium">
+            <span className="bg-foreground/[0.06] text-foreground/45 flex size-4 shrink-0 items-center justify-center rounded text-3xs font-medium">
               {result.domain.charAt(0).toUpperCase()}
             </span>
-            <span className="text-foreground/90 min-w-0 flex-1 truncate text-[13.5px]">
+            <span className="text-foreground/90 min-w-0 flex-1 truncate text-body-plus">
               {result.title}
             </span>
             <span className={cn(mono, "text-foreground/35 shrink-0")}>

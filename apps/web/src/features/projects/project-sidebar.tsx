@@ -189,7 +189,7 @@ export function ProjectSidebar() {
 
         {/* Dynamic Project Groups */}
         <SidebarContent>
-          <div className="flex items-center justify-between px-3 pt-2 pb-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground/80">
+          <div className="flex items-center justify-between px-3 pt-2 pb-1 text-meta font-medium tracking-wider uppercase text-muted-foreground/80">
             <span>Projects</span>
             <button
               type="button"
@@ -261,7 +261,7 @@ export function ProjectSidebar() {
               <CircleUser className="size-4" />
               <span className="font-semibold text-foreground">Qredence</span>
             </div>
-            <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">
+            <span className="text-2xs bg-muted px-1.5 py-0.5 rounded font-mono">
               v0.1.0
             </span>
           </div>
@@ -356,7 +356,7 @@ function NewThreadMenuItem() {
         className="justify-between"
       >
         <span>New</span>
-        <kbd className="pointer-events-none ms-auto text-[10px] text-muted-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
+        <kbd className="pointer-events-none ms-auto text-2xs text-muted-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
           ⇧⌘O
         </kbd>
       </SidebarMenuButton>
@@ -441,7 +441,7 @@ function ProjectSection({
           </SidebarGroupLabel>
 
           {threads.data && (
-            <SidebarMenuBadge className="me-1 text-[10px]">
+            <SidebarMenuBadge className="me-1 text-2xs">
               {all.length}
             </SidebarMenuBadge>
           )}

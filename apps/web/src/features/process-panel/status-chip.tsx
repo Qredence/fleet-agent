@@ -104,7 +104,7 @@ export function StatusChip({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 text-[13px] leading-none',
+        'inline-flex shrink-0 items-center gap-1.5 text-body leading-none',
         tone,
         className,
       )}
