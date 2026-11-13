@@ -37,6 +37,7 @@ import {
   type ReasoningEffortLevel,
 } from "@/components/assistant-ui/reasoning-effort";
 import { useRunReadiness } from "@/features/agent-runtime/agent-capabilities";
+import { runTargetLabel } from "@/features/agent-runtime/run-target";
 import { useProviders } from "@/features/providers/use-providers";
 import { useOpenCodeZenAuth } from "@/features/providers/use-opencode-zen-auth";
 import { useOpenRouterAuth } from "@/features/providers/use-openrouter-auth";
@@ -553,7 +554,19 @@ export const ComposerModelPicker: FC = () => {
   })();
 
   const activeModelOption = modelOptions.find((option) => option.key === activeModelKey);
-  const activeModelLabel = runReadiness.fixtures ? "Fixture mode" : activeModelOption?.label ?? (activeProviderId ? `${activeProfile?.name ?? "Provider"} needs setup` : "Choose a provider");
+  // Fixture mode is a deployment fact and outranks any browser choice.
+  // Beyond that the label comes from provider readiness, not from
+  // capabilities: a configured provider keeps its model name when the API is
+  // unreachable or still loading, so a connection problem never reads as a
+  // missing key. Only a selected profile that cannot serve says "needs setup".
+  const activeModelLabel =
+    runReadiness.reason === "fixtures"
+      ? "Fixture mode"
+      : readiness.ready
+        ? activeModelOption?.label ?? "Provider default model"
+        : runReadiness.reason === "provider_needs_setup"
+          ? `${activeProfile?.name ?? "Provider"} needs setup`
+          : runTargetLabel(runReadiness, null);
 
   const unconfiguredRoute = !runReadiness.ready;
 

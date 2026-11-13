@@ -12,4 +12,8 @@ export interface AgentCapabilities {
    * @maxItems 1
    */
   supported_content_types: ["text"];
+  /**
+   * Whether this deployment can start an engine run from its own configured model gateway with no browser X-LLM-* headers. True only when a server-side model API key is configured, which both LM paths require. It reports the ability to start a run, not that the gateway answers: an unreachable gateway or rejected key still fails at run time with a public error code. Optional: a server that omits it leaves the browser unable to prove a route, which keeps the composer failing closed rather than guessing.
+   */
+  server_gateway_configured?: boolean;
 }

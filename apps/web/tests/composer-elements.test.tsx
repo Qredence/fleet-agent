@@ -217,7 +217,10 @@ describe('composer preferences', () => {
 
     const getModelTrigger = () =>
       screen.getByRole('button', { name: 'Model and reasoning preferences' })
-    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
+    // These capabilities omit the gateway field, so the deployment's gateway is
+    // unknown rather than absent. The label states the missing information
+    // instead of claiming a provider is required.
+    expect(getModelTrigger()).toHaveTextContent('Gateway unknown')
 
     await user.click(getModelTrigger())
     expect(await screen.findByText('Model')).toBeInTheDocument()
@@ -396,7 +399,7 @@ describe('composer preferences', () => {
     expect(
       await screen.findByRole('radio', { name: /^Low/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
+    expect(getModelTrigger()).toHaveTextContent('Gateway unknown')
   })
 })
 

@@ -76,7 +76,7 @@ describe('agent request provider headers', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
     const fetchAgent = createAgentFetch()
     for (const body of ['{"runId":"send"}', '{"runId":"regenerate"}', '{"runId":"queued"}']) {
-      await expect(fetchAgent('http://localhost:8000/api/agent', { method: 'POST', body })).rejects.toThrow(/Choose a provider/)
+      await expect(fetchAgent('http://localhost:8000/api/agent', { method: 'POST', body })).rejects.toThrow(/Settings → Providers/)
     }
     expect(fetchMock).not.toHaveBeenCalled()
     setApiKey('test-key')
@@ -108,9 +108,14 @@ it('omits stored and supplied provider headers for fixture sends and refreshes b
 })
 
 it('blocks the POST when capability lookup fails', async () => {
+  // The route resolver owns this message so a failed lookup reads the same
+  // here as it does in the composer ("Agent unavailable") instead of leaking
+  // a raw query error. The run still fails closed either way.
   vi.mocked(refreshAgentCapabilities).mockRejectedValueOnce(new Error('API unavailable'))
   const fetchMock = vi.spyOn(globalThis, 'fetch')
-  await expect(createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' })).rejects.toThrow('API unavailable')
+  await expect(
+    createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' }),
+  ).rejects.toThrow(/Cannot connect to the agent/)
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
@@ -128,4 +133,76 @@ it('requires a fresh approval selection for regenerated requests', async () => {
   await send('http://localhost:8000/api/agent', request)
   expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).forwardedProps.approvedTools).toEqual(['write_file'])
   expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).forwardedProps.approvedTools).toEqual([])
+})
+
+describe('run route precedence', () => {
+  it('keeps engine runs unresolved without a BYOK profile because the server does not report its gateway', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await expect(
+      createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST', body: '{"runId":"send"}' }),
+    ).rejects.toThrow(/configure a model gateway/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends BYOK headers when a profile is selected, even in engine mode', async () => {
+    setApiKey('sk-or-browser')
+    setActiveProviderId('openrouter')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' })
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('X-LLM-Key')).toBe('sk-or-browser')
+  })
+
+  it('strips a selected profile key from a run whose route serves no BYOK credentials', async () => {
+    // Fixtures are the route that exists today without browser credentials,
+    // so a selected profile must not leak its key into that run.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({ agent_mode: 'fixtures', supported_content_types: ['text'] })
+    setApiKey('sk-or-browser')
+    setActiveProviderId('openrouter')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', {
+      method: 'POST',
+      headers: { 'X-LLM-Key': 'caller-supplied' },
+    })
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect([...headers.keys()].filter((name) => name.startsWith('x-llm-'))).toEqual([])
+  })
+
+  it('blocks a selected profile that still needs setup instead of running on the deployment gateway', async () => {
+    // The deployment reports a gateway, but the user picked their own provider.
+    // A missing key must fail closed rather than spend the operator's credentials.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({
+      agent_mode: 'engine',
+      supported_content_types: ['text'],
+      server_gateway_configured: true,
+    })
+    setActiveProviderId('openrouter')
+    clearApiKey()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await expect(
+      createAgentFetch()('http://localhost:8000/api/agent', {
+        method: 'POST',
+        body: '{"runId":"send"}',
+      }),
+    ).rejects.toThrow(/needs setup/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('runs on a configured server gateway with no profile and no X-LLM headers', async () => {
+    // The feature this contract addition exists for: a fresh browser on a
+    // deployment with its own model may send, and must not send a key.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({
+      agent_mode: 'engine',
+      supported_content_types: ['text'],
+      server_gateway_configured: true,
+    })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', {
+      method: 'POST',
+      body: '{"runId":"send"}',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect([...headers.keys()].filter((name) => name.startsWith('x-llm-'))).toEqual([])
+  })
 })

@@ -388,7 +388,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <SettingsSection
                   icon={Server}
                   title="Active Provider"
-                  description="Choose and configure a provider before sending a message."
+                  description="Choose the provider whose credentials this browser uses for agent runs. A key stays in this browser and is sent only with an agent run."
                 >
                   <CardGroup
                     columns={isMobile ? 1 : Math.min(3, profiles.length)}

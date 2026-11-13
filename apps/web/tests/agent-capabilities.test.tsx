@@ -37,3 +37,26 @@ it('reports loading, then fixture readiness, then an API failure', async () => {
   await waitFor(() => expect(result.current.ready).toBe(false))
   expect(result.current.message).toContain('Cannot connect')
 })
+
+it('is ready for a fresh user on an engine deployment with a configured gateway', async () => {
+  localStorage.clear()
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response('{"agent_mode":"engine","supported_content_types":["text"],"server_gateway_configured":true}'),
+  )
+  const { result } = renderHook(useRunReadiness)
+  await waitFor(() => expect(result.current.ready).toBe(true))
+  expect(result.current.route).toBe('server')
+  expect(result.current.fixtures).toBe(false)
+  expect(result.current.message).toContain('Server gateway')
+})
+
+it('stays blocked on an engine deployment that reports no gateway', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response('{"agent_mode":"engine","supported_content_types":["text"],"server_gateway_configured":false}'),
+  )
+  const { result } = renderHook(useRunReadiness)
+  // "Checking…" is also not-ready, so wait for the resolved decision itself.
+  await waitFor(() => expect(result.current.message).toContain('no model gateway configured'))
+  expect(result.current.ready).toBe(false)
+  expect(result.current.route).toBe('unresolved')
+})
