@@ -1,0 +1,36 @@
+apps/web/src/lib/duration.ts
+  s_56d7d11c669095::t_3f0fa0087d34f9 1-21
+apps/web/src/features/process-panel/process-step-card.tsx
+  s_56d7d11c669095::t_8ba25eaf3a59d5 4,6
+apps/web/src/features/process-panel/run-metrics.tsx
+  s_56d7d11c669095::t_f9097c23ca49fa 5
+apps/web/src/features/process-panel/run-activity-inline.tsx
+  s_56d7d11c669095::t_30bf63a4f29130 16
+  s_56d7d11c669095::t_4d83137157afa5 14
+apps/web/tests/duration.test.ts
+  s_56d7d11c669095::t_dcff581f310eb2 1-43
+apps/web/src/components/elements/tool-group.tsx
+  s_56d7d11c669095::t_5d02412a64253d 11
+  s_56d7d11c669095::t_b297174b1e3792 118
+apps/web/src/features/process-panel/tool-execution-card.tsx
+  s_56d7d11c669095::t_478d7a613f01ab 2-3
+apps/web/src/components/assistant-ui/tool-fallback.tsx
+  s_56d7d11c669095::t_d6d6f27417e4be 27
+  s_56d7d11c669095::t_f4cc196dcd1636 117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13e3523ad736dcd19b9d8dc7143d741099c3c92b",
+  "prompts": {},
+  "sessions": {
+    "s_56d7d11c669095": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "5a98f0fa-72da-4d6f-99ad-637c268118c9",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
