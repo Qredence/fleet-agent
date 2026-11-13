@@ -1,0 +1,19 @@
+apps/web/src/features/agent-runtime/agent-runtime-provider.tsx
+  s_3b95650d2eff5e::t_30ffbfc37b2156 80-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad19e3021ce5872ec301972906c118dd71e69548",
+  "prompts": {},
+  "sessions": {
+    "s_3b95650d2eff5e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e1626966-eaa6-44ee-b7a0-75d02d9ead19",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
