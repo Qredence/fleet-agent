@@ -202,7 +202,7 @@ export const ComposerModelTrigger = forwardRef<
       data-slot="composer-model-trigger"
       data-unconfigured={unconfigured || undefined}
       className={cn(
-        "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/90 dark:hover:bg-foreground/[0.09] flex h-8 items-center gap-1.5 rounded-full px-3 text-xs-plus transition-colors motion-reduce:transition-none",
+        "text-foreground/55 hover:bg-foreground/[0.06] hover:text-foreground/90 dark:hover:bg-foreground/[0.09] flex h-8 items-center gap-1.5 rounded-full px-3 text-caption-plus transition-colors motion-reduce:transition-none",
         className,
       )}
       {...props}

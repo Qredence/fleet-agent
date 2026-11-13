@@ -42,7 +42,7 @@
     --text-2xs: 0.625rem; /* 10px — badge / caption floor */
     --text-meta: 0.6875rem; /* 11px — compact caption, meta rows */
     --text-caption: 0.75rem; /* 12px — caption role */
-    --text-xs-plus: 0.78125rem; /* 12.5px */
+    --text-caption-plus: 0.78125rem; /* 12.5px — between caption and body */
     --text-body: 0.8125rem; /* 13px — default control and body label */
     --text-body-plus: 0.84375rem; /* 13.5px — emphasized body */
     --text-subtitle: 0.875rem; /* 14px — card titles, subtitle role */

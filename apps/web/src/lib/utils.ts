@@ -8,14 +8,16 @@ import { createCn } from "cn/config"
  * `cn("text-meta", "text-muted-foreground")` would drop the size and keep
  * only the color. Registering the names keeps size and color independent,
  * exactly as they were when sizes were arbitrary pixel values.
- * Keep this list in step with the `--text-*` tokens in `index.css`.
+ *
+ * This list must mirror the `--text-*` tokens in `index.css`;
+ * `tests/cn-type-scale.test.ts` fails when the two drift apart.
  */
-const typeScale = [
+export const typeScale = [
   "3xs",
   "2xs",
   "meta",
   "caption",
-  "xs-plus",
+  "caption-plus",
   "body",
   "body-plus",
   "subtitle",
