@@ -77,7 +77,9 @@ export function createAgentFetch(
       let capabilitiesError = false;
       try {
         capabilities = await refreshAgentCapabilities();
-      } catch {
+      } catch (error) {
+        // Keep the cause visible: the user sees the routed message, not this.
+        console.error("[ag-ui] capabilities lookup failed", error);
         capabilitiesError = true;
       }
       // Never send stored credentials to fixture runs, including caller-supplied headers.
