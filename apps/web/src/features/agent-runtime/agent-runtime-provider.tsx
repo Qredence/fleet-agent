@@ -15,6 +15,10 @@ import {
   type UserMessagePersistedHandler,
   waitForThreadHistoryWrites,
 } from "@/features/threads/assistant-thread-adapter";
+import {
+  resolveRunTarget,
+  runTargetSendsProviderHeaders,
+} from "@/features/agent-runtime/run-target";
 import { AgUiRuntimePresenceProvider } from "@/features/agent-runtime/ag-ui-presence";
 import { ArtifactDataUIRegistration } from "@/features/artifacts/artifact-data-ui";
 import { InlineAgentDataUIRegistration } from "@/features/agent-runtime/inline-agent-data-ui";
@@ -24,7 +28,7 @@ import { queryClient } from "@/lib/query-client";
 import { ApprovalContext } from "./tool-permissions";
 import { API_BASE_URL, API_KEY } from "@/lib/env";
 import { refreshAgentCapabilities } from "@/features/agent-runtime/agent-capabilities";
-import { getAgentProviderHeaders } from "@/features/providers/providers-store";
+import { getAgentProviderHeaders, getActiveProviderId, getProviderReadiness, ProviderNotReadyError } from "@/features/providers/providers-store";
 
 const AGENT_URL = `${API_BASE_URL}/api/agent`;
 const AGENT_PATHNAME = new URL(AGENT_URL).pathname;
@@ -71,8 +75,22 @@ export function createAgentFetch(
         name.startsWith("x-llm-"),
       );
       for (const name of providerHeaderNames) headers.delete(name);
-      const providerHeaders =
-        capabilities.agent_mode === "fixtures" ? {} : getAgentProviderHeaders();
+      // Only a verified route proceeds. A BYOK profile carries browser
+      // credentials; fixture and server gateway runs must never receive a key
+      // they would not use. An unresolved route (for example engine mode with
+      // no browser profile and no confirmed server gateway) fails closed here
+      // instead of producing a run the server cannot serve.
+      const providerReadiness = getProviderReadiness();
+      const target = resolveRunTarget({
+        capabilitiesError: false,
+        capabilities,
+        providerReadiness,
+        activeProviderId: getActiveProviderId(),
+      });
+      if (!target.ready) throw new ProviderNotReadyError(target.message);
+      const providerHeaders = runTargetSendsProviderHeaders(target)
+        ? getAgentProviderHeaders()
+        : {};
       for (const [k, v] of Object.entries(providerHeaders)) {
         headers.set(k, v);
       }

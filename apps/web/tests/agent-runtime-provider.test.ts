@@ -76,7 +76,7 @@ describe('agent request provider headers', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
     const fetchAgent = createAgentFetch()
     for (const body of ['{"runId":"send"}', '{"runId":"regenerate"}', '{"runId":"queued"}']) {
-      await expect(fetchAgent('http://localhost:8000/api/agent', { method: 'POST', body })).rejects.toThrow(/Choose a provider/)
+      await expect(fetchAgent('http://localhost:8000/api/agent', { method: 'POST', body })).rejects.toThrow(/Settings → Providers/)
     }
     expect(fetchMock).not.toHaveBeenCalled()
     setApiKey('test-key')
@@ -128,4 +128,38 @@ it('requires a fresh approval selection for regenerated requests', async () => {
   await send('http://localhost:8000/api/agent', request)
   expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).forwardedProps.approvedTools).toEqual(['write_file'])
   expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).forwardedProps.approvedTools).toEqual([])
+})
+
+describe('run route precedence', () => {
+  it('keeps engine runs unresolved without a BYOK profile because the server does not report its gateway', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await expect(
+      createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST', body: '{"runId":"send"}' }),
+    ).rejects.toThrow(/configure a model gateway/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends BYOK headers when a profile is selected, even in engine mode', async () => {
+    setApiKey('sk-or-browser')
+    setActiveProviderId('openrouter')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', { method: 'POST' })
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('X-LLM-Key')).toBe('sk-or-browser')
+  })
+
+  it('strips a selected profile key from a run whose route serves no BYOK credentials', async () => {
+    // Fixtures are the route that exists today without browser credentials,
+    // so a selected profile must not leak its key into that run.
+    vi.mocked(refreshAgentCapabilities).mockResolvedValueOnce({ agent_mode: 'fixtures', supported_content_types: ['text'] })
+    setApiKey('sk-or-browser')
+    setActiveProviderId('openrouter')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'))
+    await createAgentFetch()('http://localhost:8000/api/agent', {
+      method: 'POST',
+      headers: { 'X-LLM-Key': 'caller-supplied' },
+    })
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect([...headers.keys()].filter((name) => name.startsWith('x-llm-'))).toEqual([])
+  })
 })

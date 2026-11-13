@@ -388,7 +388,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <SettingsSection
                   icon={Server}
                   title="Active Provider"
-                  description="Choose and configure a provider before sending a message."
+                  description="Engine runs use this deployment's model gateway when configured. Pick a provider to bill runs to your own key instead."
                 >
                   <CardGroup
                     columns={isMobile ? 1 : Math.min(3, profiles.length)}

@@ -217,7 +217,9 @@ describe('composer preferences', () => {
 
     const getModelTrigger = () =>
       screen.getByRole('button', { name: 'Model and reasoning preferences' })
-    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
+    // No browser provider is selected; the label says so without claiming a
+    // key is mandatory, because an engine deployment may run its own gateway.
+    expect(getModelTrigger()).toHaveTextContent('Provider not set')
 
     await user.click(getModelTrigger())
     expect(await screen.findByText('Model')).toBeInTheDocument()
@@ -396,7 +398,7 @@ describe('composer preferences', () => {
     expect(
       await screen.findByRole('radio', { name: /^Low/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    expect(getModelTrigger()).toHaveTextContent('Choose a provider')
+    expect(getModelTrigger()).toHaveTextContent('Provider not set')
   })
 })
 

@@ -37,6 +37,7 @@ import {
   type ReasoningEffortLevel,
 } from "@/components/assistant-ui/reasoning-effort";
 import { useRunReadiness } from "@/features/agent-runtime/agent-capabilities";
+import { runTargetLabel } from "@/features/agent-runtime/run-target";
 import { useProviders } from "@/features/providers/use-providers";
 import { useOpenCodeZenAuth } from "@/features/providers/use-opencode-zen-auth";
 import { useOpenRouterAuth } from "@/features/providers/use-openrouter-auth";
@@ -553,7 +554,13 @@ export const ComposerModelPicker: FC = () => {
   })();
 
   const activeModelOption = modelOptions.find((option) => option.key === activeModelKey);
-  const activeModelLabel = runReadiness.fixtures ? "Fixture mode" : activeModelOption?.label ?? (activeProviderId ? `${activeProfile?.name ?? "Provider"} needs setup` : "Choose a provider");
+  // The label states who serves the run. An unselected provider is not shown
+  // as a missing prerequisite, because an engine deployment may run its own
+  // gateway and this browser cannot see that configuration yet.
+  const activeModelLabel =
+    runReadiness.route === "unresolved" && activeProviderId
+      ? `${activeProfile?.name ?? "Provider"} needs setup`
+      : runTargetLabel(runReadiness, activeModelOption?.label ?? null);
 
   const unconfiguredRoute = !runReadiness.ready;
 
