@@ -1,5 +1,6 @@
 import { TerminalBlock } from '@/components/elements/terminal-block'
-import { StatusIcon, formatDuration } from './status-chip'
+import { StatusIcon } from './status-chip'
+import { formatDuration } from '@/lib/duration'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { ToolExecution } from '@/contracts/generated'

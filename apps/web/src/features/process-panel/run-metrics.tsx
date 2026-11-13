@@ -2,7 +2,7 @@ import { AlertTriangleIcon, CheckIcon, InfoIcon } from 'lucide-react'
 
 import errorCodes from '@fleet-agent/contracts/error-codes.json'
 
-import { formatDuration } from './status-chip'
+import { formatDuration } from '@/lib/duration'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { RunMetrics } from '@/contracts/generated'

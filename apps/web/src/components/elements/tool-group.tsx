@@ -8,6 +8,7 @@
 import type { ComponentProps } from "react";
 import { CheckIcon, ChevronRightIcon, Loader2Icon, XIcon } from "lucide-react";
 import { useShape } from "@/lib/shape-context";
+import { formatDuration } from "@/lib/duration";
 import { cn } from "@/lib/utils";
 import { mono, paper } from "@/lib/surfaces";
 
@@ -114,7 +115,7 @@ export function ToolGroup({
                     "text-foreground/25 shrink-0 tabular-nums",
                   )}
                 >
-                  {tool.durationMs}ms
+                  {formatDuration(tool.durationMs)}
                 </span>
               )}
             </div>
