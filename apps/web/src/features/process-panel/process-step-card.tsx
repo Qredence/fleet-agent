@@ -1,8 +1,9 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { StatusIcon, formatDuration } from './status-chip'
+import { StatusIcon } from './status-chip'
 import { ToolExecutionCard } from './tool-execution-card'
+import { formatDuration } from '@/lib/duration'
 import { mono } from '@/lib/surfaces'
 import { cn } from '@/lib/utils'
 import type { ProcessStep, ToolExecution } from '@/contracts/generated'
@@ -21,7 +22,11 @@ interface ProcessStepCardProps {
  * Expanded: nested tool cards and evidence. Steps with no tool or evidence
  * detail stay quiet rows. Active and failed steps with detail open by default
  * so the process panel timeline stays scannable without a hunt.
- * Durations under a tenth of a second are noise and stay hidden.
+ *
+ * Steps under a tenth of a second hide their duration: a whole pipeline step
+ * that took 2ms reads as noise beside real work, unlike an individual tool
+ * call where the number is the point. `formatDuration` still decides the
+ * wording, so this only suppresses the row, it never reformats the value.
  */
 const DURATION_FLOOR_MS = 100
 

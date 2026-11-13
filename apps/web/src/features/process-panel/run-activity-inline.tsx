@@ -11,12 +11,9 @@ import {
   RunMetricsLine,
   TerminationNotice,
 } from './run-metrics'
-import {
-  StatusIcon,
-  StatusChip,
-  formatDuration,
-} from './status-chip'
+import { StatusIcon, StatusChip } from './status-chip'
 import { ToolExecutionCard } from './tool-execution-card'
+import { formatDuration } from '@/lib/duration'
 import {
   Collapsible,
   CollapsibleContent,

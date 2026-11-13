@@ -24,6 +24,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useShape } from "@/lib/shape-context";
+import { formatDuration } from "@/lib/duration";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -97,14 +98,6 @@ const statusIconMap: Record<ToolStatus, React.ElementType> = {
   "requires-action": AlertCircleIcon,
 };
 
-const formatToolDuration = (ms: number) => {
-  if (ms < 1000) return "<1s";
-  const seconds = ms / 1000;
-  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
-  if (seconds < 60) return `${Math.floor(seconds)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
-};
-
 function ToolFallbackDuration({
   className,
   ...props
@@ -121,7 +114,7 @@ function ToolFallbackDuration({
       )}
       {...props}
     >
-      {formatToolDuration(elapsedMs)}
+      {formatDuration(elapsedMs)}
     </span>
   );
 }
