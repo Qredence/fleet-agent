@@ -31,7 +31,7 @@
     "clsx": "^2.1.1",
     "cn": "^0.5.2",
     "framer-motion": "^13.5.1",
-    "katex": "0.16.47",
+    "katex": "0.19.1",
     "lucide-react": "^1.72.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
