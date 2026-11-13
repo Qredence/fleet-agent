@@ -1,0 +1,35 @@
+apps/web/tests/agent-runtime-provider.test.ts
+  s_3b95650d2eff5e::t_3e3b2060f004e4 190-207
+  s_3b95650d2eff5e::t_bd844067dc8107 111-113,116-118
+apps/web/tests/composer-elements.test.tsx
+  s_3b95650d2eff5e::t_b0c2e3b283ff34 220-223
+  s_3b95650d2eff5e::t_9a0e238b994ed7 402
+apps/web/src/features/agent-runtime/agent-runtime-provider.tsx
+  s_3b95650d2eff5e::t_dc257c24797fa6 31
+  s_3b95650d2eff5e::t_0e8ec6ff4d641c 73-82,95
+apps/web/src/features/agent-runtime/run-target.ts
+  s_3b95650d2eff5e::t_6611d74798a692 167-171
+apps/api/tests/test_agent_capabilities.py
+  s_3b95650d2eff5e::t_6733e15b0db295 69,73-97
+  s_3b95650d2eff5e::t_2aa47fa03d3d16 14-22
+apps/api/app/api/agent.py
+  s_3b95650d2eff5e::t_cda7df3e903596 96-102,111
+apps/web/tests/run-target.test.ts
+  s_3b95650d2eff5e::t_f1176295055007 131-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3308efb21d67befb906279e4a4962ccbf2db8157",
+  "prompts": {},
+  "sessions": {
+    "s_3b95650d2eff5e": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e1626966-eaa6-44ee-b7a0-75d02d9ead19",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
