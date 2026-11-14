@@ -6,15 +6,9 @@ import { EmptyTabState } from "./empty-tab-state";
 import { StatusChip } from "./status-chip";
 import { Button } from "@/components/ui/button";
 import { apiFetchBlob, apiFetchText } from "@/lib/api-client";
+import { formatByteSize } from "@/lib/byte-size";
 import { cn } from "@/lib/utils";
 import type { AgentArtifact } from "@/contracts/generated";
-
-function formatSize(sizeBytes: number | undefined): string | undefined {
-  if (sizeBytes === undefined) return undefined;
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 interface ArtifactsTabProps {
   artifacts: AgentArtifact[];
@@ -142,6 +136,7 @@ export function ArtifactsTab({
         const canDownload = /^\/api\/artifacts\/[A-Za-z0-9_-]+$/.test(
           artifact.downloadUrl ?? "",
         );
+        const sizeLabel = formatByteSize(artifact.sizeBytes);
         return (
           <article
             key={artifact.id}
@@ -162,9 +157,7 @@ export function ArtifactsTab({
               <p className="truncate text-sm font-medium">{artifact.name}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {artifact.mediaType}
-                {formatSize(artifact.sizeBytes)
-                  ? ` · ${formatSize(artifact.sizeBytes)}`
-                  : ""}
+                {sizeLabel ? ` · ${sizeLabel}` : ""}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
