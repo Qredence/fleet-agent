@@ -1,0 +1,28 @@
+apps/web/src/components/assistant-ui/file.tsx
+  s_222cbc2ff52392::t_f3f932e2af28c4 156
+  s_222cbc2ff52392::t_94e1f9529e6bfe 15
+apps/web/src/lib/byte-size.ts
+  s_222cbc2ff52392::t_e2057982489c95 1-37
+apps/web/src/features/process-panel/artifacts-tab.tsx
+  s_222cbc2ff52392::t_32f0f08c926268 160
+  s_222cbc2ff52392::t_6dfa6ad3b930a8 139
+  s_222cbc2ff52392::t_2c78b8b36b6c5c 9
+apps/web/tests/byte-size.test.ts
+  s_222cbc2ff52392::t_968ad8f6f46bc0 1-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd56fff65904ae80de6a27c056c710a9e47a0cd3",
+  "prompts": {},
+  "sessions": {
+    "s_222cbc2ff52392": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "5b340ac0-a700-4831-9b22-93e8219ce983",
+        "model": "custom:Deepseek-V4.1-Flash-1017---Command-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
