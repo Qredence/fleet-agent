@@ -12,6 +12,7 @@ import {
   DownloadIcon,
 } from "lucide-react";
 import type { FileMessagePartComponent } from "@assistant-ui/react";
+import { formatByteSize } from "@/lib/byte-size";
 import { cn } from "@/lib/utils";
 
 const fileVariants = cva(
@@ -77,16 +78,6 @@ function getBase64Size(base64: string): number {
   const base64Data = commaIndex >= 0 ? base64.slice(commaIndex + 1) : base64;
   const padding = (base64Data.match(/=/g) || []).length;
   return Math.floor((base64Data.length * 3) / 4) - padding;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export type FileRootProps = React.ComponentProps<"div"> &
@@ -162,7 +153,7 @@ function FileSize({ bytes, className, ...props }: FileSizeProps) {
       className={cn("text-muted-foreground shrink-0", className)}
       {...props}
     >
-      {formatFileSize(bytes)}
+      {formatByteSize(bytes)}
     </span>
   );
 }
@@ -261,5 +252,4 @@ export {
   getMimeTypeIcon,
   getFileDataKind,
   getBase64Size,
-  formatFileSize,
 };
