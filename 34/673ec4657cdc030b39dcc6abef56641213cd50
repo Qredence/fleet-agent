@@ -1,0 +1,73 @@
+apps/api/app/agent/tools/docs.py
+  s_51d1204127ef10::t_f165f9d1501513 3
+apps/api/app/api/threads.py
+  s_51d1204127ef10::t_9973384f2c5148 12-18
+  s_51d1204127ef10::t_ded8b48a5d5b3f 32
+  s_51d1204127ef10::t_47de76aa6d2258 214,217
+  s_51d1204127ef10::t_3287f4f0658f17 432
+  s_51d1204127ef10::t_6e1ff26d8475d2 279-281
+  s_51d1204127ef10::t_74c31d625b02af 101
+apps/api/app/agent/instrumented.py
+  s_51d1204127ef10::t_6344d7b3bfd25e 87-88
+apps/api/tests/test_tools_web.py
+  s_51d1204127ef10::t_02709b86389a63 50,122,148,160,185,217
+  s_51d1204127ef10::t_7f51b3c90f9609 202-205
+  s_51d1204127ef10::t_b242ef31c1ad02 134,186,218
+apps/api/app/agui/run.py
+  s_51d1204127ef10::t_a767104fba7196 374,380,386-402,404-407,410-416,418-423
+  s_51d1204127ef10::t_209a71a173d51b 13
+  s_51d1204127ef10::t_61833cc599fe4b 44
+apps/api/app/agent/callbacks.py
+  s_51d1204127ef10::t_092c0d916c70ef 197
+apps/api/app/kernel/storage.py
+  s_51d1204127ef10::t_d14f5b4ae6543d 39
+apps/api/app/agent/tool_registry.py
+  s_51d1204127ef10::t_bdfe840c291a1f 199,212-214
+  s_51d1204127ef10::t_2dc8304f284fb0 321,338
+apps/api/app/api/agent.py
+  s_51d1204127ef10::t_de72e9f1cc063b 23
+  s_51d1204127ef10::t_a311bb4dae7aad 119-121
+apps/api/app/agent/tools/__init__.py
+  s_51d1204127ef10::t_80425a095a45f1 3
+apps/api/app/persistence/repositories.py
+  s_51d1204127ef10::t_f9101773323515 783-784,786-787
+  s_51d1204127ef10::t_91ac5be8756720 444,447,453
+  s_51d1204127ef10::t_cb6ee1401b7f1b 44
+  s_51d1204127ef10::t_ed50846b58ab8a 557-558
+  s_51d1204127ef10::t_2ad38cd23bdd41 583
+apps/api/app/contracts/domain.py
+  s_51d1204127ef10::t_ef626d0d881d28 133
+  s_51d1204127ef10::t_7b9c281411a060 64
+apps/api/app/services/mock_run.py
+  s_51d1204127ef10::t_25eb5e2de2d459 44,48
+apps/api/app/agent/tools/web.py
+  s_51d1204127ef10::t_2b22d3a7c1cfc4 306
+  s_51d1204127ef10::t_77a6342caed1a4 310
+  s_51d1204127ef10::t_c8650db68ffa69 179,182
+  s_51d1204127ef10::t_f0a1fbab0e23a2 243,246
+apps/api/app/api/deps.py
+  s_51d1204127ef10::t_5763b177606319 8-9
+  s_51d1204127ef10::t_7dfdb206fd2b9c 40-58
+apps/api/app/agent/tools/corpus.py
+  s_51d1204127ef10::t_403798303b4e8c 4
+apps/api/app/services/metrics.py
+  s_51d1204127ef10::t_fd3a6cc37055dc 1
+apps/api/app/persistence/models.py
+  s_51d1204127ef10::t_a4f020f76c8e72 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34673ec4657cdc030b39dcc6abef56641213cd50",
+  "prompts": {},
+  "sessions": {
+    "s_51d1204127ef10": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "c9da7622-5b11-4615-af3b-fcf962ea9029",
+        "model": "custom:GLM-5.3-0"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
