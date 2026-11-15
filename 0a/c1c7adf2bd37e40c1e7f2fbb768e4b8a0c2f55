@@ -1,0 +1,59 @@
+apps/api/app/agui/run.py
+  s_3fa497c878d85f::t_821da51843f8c2 927-928
+  s_3fa497c878d85f::t_01f3a0627f355c 712-716,726-732
+  s_3fa497c878d85f::t_de537b858bf95b 401-432,435,449-464
+  s_3fa497c878d85f::t_a56ae627064f5a 433-434,436-448
+  s_3fa497c878d85f::t_318fdb833d3111 815-823
+  s_3fa497c878d85f::t_39d8142ed3d403 881-882,907-909
+  s_3fa497c878d85f::t_0179b90f9b8782 622-641
+apps/api/tests/test_bootstrap_selection.py
+  s_3fa497c878d85f::t_3d073288336fa1 1-88,90-92,94-99,101-140
+  s_3fa497c878d85f::t_9585c0b2c34a80 89,93,100
+apps/web/src/features/providers/openrouter-auth.ts
+  s_3fa497c878d85f::t_951b9866788f77 6,22,91-99,170,173,175,185,210,217,221,272-273,277,280-289
+apps/api/app/persistence/bootstrap_selection.py
+  s_3fa497c878d85f::t_1747f05d1a8a45 1-87
+apps/web/tests/openrouter-auth.test.ts
+  s_3fa497c878d85f::t_931dfb148104e1 123,130
+  s_3fa497c878d85f::t_2666f57d12c7fa 20
+  s_3fa497c878d85f::t_1708b2b697edbb 268,280,288,293,300,311,325,330,347
+  s_3fa497c878d85f::t_8e6c3d994b16b4 143-148,161,174-185
+  s_3fa497c878d85f::t_ec50c05a10c173 209,212-213,219
+  s_3fa497c878d85f::t_754df8e00eb3c7 186-187
+apps/web/tests/assistant-thread-adapter.test.ts
+  s_3fa497c878d85f::t_fc1a3380f6af64 180-235
+  s_75d40a29dbeb59::t_84ac52827deed4 179
+apps/web/src/features/threads/assistant-thread-adapter.ts
+  s_3fa497c878d85f::t_de068f0ea7c304 243-254
+apps/api/tests/test_live_coordinator.py
+  s_3fa497c878d85f::t_f1ccad98d0a851 674-762
+apps/api/app/persistence/repositories.py
+  s_3fa497c878d85f::t_f40af5a4b628ff 961,991-995
+  s_3fa497c878d85f::t_c3c5fba68c0470 26
+CONTRIBUTING.md
+  s_3fa497c878d85f::t_5bc7c13aabb4c9 149-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ac1c7adf2bd37e40c1e7f2fbb768e4b8a0c2f55",
+  "prompts": {},
+  "sessions": {
+    "s_3fa497c878d85f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "de47c894-db87-41dd-964e-28a8c02d074b",
+        "model": "default"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    },
+    "s_75d40a29dbeb59": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ef684093-880b-43d2-8198-34f37ef46d94",
+        "model": "z-ai/glm-5.3-flash"
+      },
+      "human_author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
