@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.kernel.content_safety import scrub_json_strings
+
 _MAX_NESTING_DEPTH = 64
 _REASONING_VALUES = frozenset(
     {
@@ -168,10 +170,13 @@ def _walk_dicts(value: Any) -> Iterator[tuple[str, Any]]:
 
 
 def sanitize_message_content(value: dict[str, Any]) -> dict[str, Any]:
-    """Remove legacy/internal parts before a message reaches the browser."""
+    """Remove legacy/internal parts and scrub secret strings before returning."""
 
     sanitized = _sanitize_value(value)
-    return sanitized if isinstance(sanitized, dict) else {}
+    if not isinstance(sanitized, dict):
+        return {}
+    scrubbed = scrub_json_strings(sanitized)
+    return scrubbed if isinstance(scrubbed, dict) else {}
 
 
 def _sanitize_value(

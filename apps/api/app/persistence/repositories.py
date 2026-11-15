@@ -9,14 +9,18 @@ the session plumbing stay in one place.
 
 from __future__ import annotations
 
+import builtins
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.contracts.message_feedback import MessageFeedback
+from app.kernel.content_safety import scrub_public_text
 from app.kernel.history_safety import sanitize_message_content
 from app.kernel.identity import canonical_source_key, disambiguated_source_id
 from app.persistence.branch import nearest_anchor
@@ -33,7 +37,9 @@ from app.persistence.models import (
 
 __all__ = [
     "ArtifactsRepository",
+    "BootstrapData",
     "DspyHistoriesRepository",
+    "MessageConflictError",
     "MessagesRepository",
     "ProjectsRepository",
     "RunAlreadyExistsError",
@@ -44,6 +50,32 @@ __all__ = [
     "cap_source_excerpt",
     "new_id",
 ]
+
+
+def _head_conflict_target(head_message_id: str | None) -> dict[str, Any]:
+    """Return PostgreSQL conflict target args matching the unique indexes."""
+    if head_message_id is None:
+        return {
+            "index_elements": ["thread_id"],
+            "index_where": text("head_message_id IS NULL"),
+        }
+    return {"index_elements": ["thread_id", "head_message_id"]}
+
+
+class MessageConflictError(ValueError):
+    """Typed 409 conflict raised on invalid branch message persistence."""
+
+
+@dataclass(frozen=True, slots=True)
+class BootstrapData:
+    """Consistent single-transaction snapshot used to render thread bootstrap."""
+
+    thread: Thread
+    messages: list[Message]
+    state_row: RunState | None
+    latest_run: Run | None
+    completed_states: list[tuple[RunState, Run]]
+    artifacts: list[Artifact]
 
 
 # --- helpers ------------------------------------------------------------
@@ -151,29 +183,38 @@ class DspyHistoriesRepository:
         history_json: dict[str, Any],
         head_message_id: str | None = None,
     ) -> DspyHistory:
-        query = select(DspyHistory).where(DspyHistory.thread_id == thread_id)
-        if head_message_id is None:
-            query = query.where(DspyHistory.head_message_id.is_(None))
-        else:
-            query = query.where(DspyHistory.head_message_id == head_message_id)
-        existing = await session.scalar(query.with_for_update())
-        if existing is None:
-            existing = DspyHistory(
+        now = datetime.now(UTC)
+        stmt = (
+            pg_insert(DspyHistory)
+            .values(
                 id=new_id("history"),
                 thread_id=thread_id,
                 head_message_id=head_message_id,
                 schema_version=schema_version,
                 dspy_version=dspy_version,
                 history_json=history_json,
+                updated_at=now,
             )
-            session.add(existing)
-        else:
-            existing.schema_version = schema_version
-            existing.dspy_version = dspy_version
-            existing.history_json = history_json
-            existing.updated_at = datetime.now(UTC)
+            .on_conflict_do_update(
+                **_head_conflict_target(head_message_id),
+                set_={
+                    "schema_version": schema_version,
+                    "dspy_version": dspy_version,
+                    "history_json": history_json,
+                    "updated_at": now,
+                },
+            )
+            .returning(DspyHistory)
+        )
+        row = await session.scalar(
+            select(DspyHistory)
+            .from_statement(stmt)
+            .execution_options(populate_existing=True)
+        )
+        if row is None:
+            raise RuntimeError("DspyHistory upsert failed to return a row.")
         await session.flush()
-        return existing
+        return cast(DspyHistory, row)
 
     async def get(
         self, thread_id: str, head_message_id: str | None = None
@@ -240,6 +281,12 @@ class MessagesRepository:
         resolved_id = message_id or str(message_json.get("id") or new_id("message"))
         if parent_message_id == resolved_id:
             raise ValueError("A message cannot parent itself.")
+        safe_message_json = sanitize_message_content(message_json)
+        safe_run_config_json = (
+            sanitize_message_content(run_config_json)
+            if run_config_json is not None
+            else None
+        )
         result = await session.execute(
             select(Message)
             .where(
@@ -257,8 +304,8 @@ class MessagesRepository:
                 parent_message_id=parent_message_id,
                 role=role,
                 format=format,
-                message_json=message_json,
-                run_config_json=run_config_json,
+                message_json=safe_message_json,
+                run_config_json=safe_run_config_json,
             )
             session.add(row)
             await session.flush()
@@ -271,9 +318,9 @@ class MessagesRepository:
         # A server fallback must never overwrite an exact assistant-ui row.
         if row.format != "aui/v0" or format == "aui/v0":
             row.format = format
-            row.message_json = message_json
-            if run_config_json is not None or format != "aui/v0":
-                row.run_config_json = run_config_json
+            row.message_json = safe_message_json
+            if safe_run_config_json is not None or format != "aui/v0":
+                row.run_config_json = safe_run_config_json
         if row.parent_message_id is None:
             row.parent_message_id = parent_message_id
         row.updated_at = datetime.now(UTC)
@@ -299,7 +346,177 @@ class MessagesRepository:
                 .where(Message.thread_id == thread_id)
                 .order_by(Message.created_at.asc(), Message.id.asc())
             )
-            return list(rows.scalars())
+            return [sanitize_message_content(item) for item in rows.scalars()]
+
+    async def persist_branch_node(
+        self,
+        *,
+        thread_id: str,
+        message_id: str,
+        parent_id: str | None,
+        role: str,
+        format: str,
+        message_json: dict[str, Any],
+        run_config_json: dict[str, Any] | None,
+    ) -> None:
+        """Persist a branch message node idempotently and advance active head."""
+        if parent_id == message_id:
+            raise MessageConflictError("A message cannot parent itself.")
+        async with self._sessions() as session:
+            async with session.begin():
+                if parent_id is not None:
+                    parent_rows = (
+                        await session.execute(
+                            select(Message.message_id, Message.parent_message_id).where(
+                                Message.thread_id == thread_id
+                            )
+                        )
+                    ).all()
+                    parents = {mid: pid for mid, pid in parent_rows}
+                    if parent_id not in parents:
+                        raise MessageConflictError("Unknown message parent.")
+                    seen: set[str] = set()
+                    cursor: str | None = parent_id
+                    while cursor is not None and cursor not in seen:
+                        if cursor == message_id:
+                            raise MessageConflictError(
+                                "Message parent would create a branch cycle."
+                            )
+                        seen.add(cursor)
+                        cursor = parents.get(cursor)
+                if role == "assistant" and message_id.startswith("msg-"):
+                    owning_run = await session.get(
+                        Run, message_id.removeprefix("msg-"), with_for_update=True
+                    )
+                    if owning_run is not None and (
+                        owning_run.thread_id != thread_id
+                        or owning_run.status != "completed"
+                        or owning_run.output_message_id != message_id
+                    ):
+                        raise MessageConflictError(
+                            "The run has not been durably saved."
+                        )
+                    if owning_run is not None:
+                        return
+                try:
+                    row = await self.upsert_in_session(
+                        session,
+                        thread_id=thread_id,
+                        role=role,
+                        message_json=message_json,
+                        message_id=message_id,
+                        parent_message_id=parent_id,
+                        format=format,
+                        run_config_json=run_config_json,
+                    )
+                except ValueError as exc:
+                    raise MessageConflictError(str(exc)) from exc
+                head_update = update(Thread).where(Thread.id == thread_id)
+                if role == "user" and format == "aui/v0":
+                    if parent_id is None:
+                        head_update = head_update.where(
+                            or_(
+                                Thread.active_head_message_id.is_(None),
+                                Thread.active_head_message_id == row.message_id,
+                            )
+                        )
+                    else:
+                        head_update = head_update.where(
+                            or_(
+                                Thread.active_head_message_id == parent_id,
+                                Thread.active_head_message_id == row.message_id,
+                            )
+                        )
+                elif parent_id is None:
+                    head_update = head_update.where(
+                        Thread.active_head_message_id.is_(None)
+                    )
+                else:
+                    head_update = head_update.where(
+                        Thread.active_head_message_id == parent_id
+                    )
+                await session.execute(
+                    head_update.values(
+                        active_head_message_id=row.message_id,
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+
+    async def list_feedback_rows(self, thread_id: str) -> list[tuple[str, Any]]:
+        async with self._sessions() as session:
+            rows = await session.execute(
+                select(Message.message_id, Message.feedback_json).where(
+                    Message.thread_id == thread_id,
+                    Message.feedback_json.is_not(None),
+                )
+            )
+            return [(row[0], row[1]) for row in rows.all()]
+
+    async def save_feedback(
+        self,
+        *,
+        thread_id: str,
+        message_id: str,
+        feedback_type: str,
+        reason: str | None,
+    ) -> MessageFeedback | None:
+        async with self._sessions() as session:
+            async with session.begin():
+                message = await session.scalar(
+                    select(Message)
+                    .where(
+                        Message.thread_id == thread_id,
+                        Message.message_id == message_id,
+                    )
+                    .with_for_update()
+                )
+                if message is None or message.role != "assistant":
+                    return None
+                run = await session.scalar(
+                    select(Run).where(
+                        Run.thread_id == thread_id, Run.output_message_id == message_id
+                    )
+                )
+                snapshot = (
+                    await session.scalar(
+                        select(RunState).where(RunState.run_id == run.id)
+                    )
+                    if run
+                    else None
+                )
+                version = (
+                    snapshot.state_json.get("run", {}).get("programVersion", "unknown")
+                    if snapshot
+                    else "unknown"
+                )
+                feedback = MessageFeedback(
+                    messageId=message_id,
+                    type=cast(Any, feedback_type),
+                    reason=scrub_public_text(reason) if reason else None,
+                    runId=run.id if run else None,
+                    branchParentId=message.parent_message_id,
+                    programVersion=str(version)[:128],
+                )
+                message.feedback_json = feedback.model_dump(
+                    mode="json", exclude_none=True
+                )
+                return feedback
+
+    async def delete_feedback(self, *, thread_id: str, message_id: str) -> bool:
+        async with self._sessions() as session:
+            async with session.begin():
+                message = await session.scalar(
+                    select(Message)
+                    .where(
+                        Message.thread_id == thread_id,
+                        Message.message_id == message_id,
+                    )
+                    .with_for_update()
+                )
+                if message is None or message.role != "assistant":
+                    return False
+                message.feedback_json = None
+                return True
 
 
 # --- projects -----------------------------------------------------------
@@ -314,7 +531,7 @@ class ProjectsRepository:
             await session.commit()
             return project
 
-    async def list(self, *, owner_id: str = "local") -> list[Project]:
+    async def list(self, *, owner_id: str = "local") -> builtins.list[Project]:
         async with self._sessions() as session:
             rows = await session.execute(
                 select(Project)
@@ -339,25 +556,11 @@ class ProjectsRepository:
 
     async def delete(self, project_id: str) -> bool:
         async with self._sessions() as session:
-            project = await session.get(Project, project_id)
-            if project is None:
-                return False
-            threads = list(
-                (
-                    await session.execute(
-                        select(Thread).where(Thread.project_id == project_id)
-                    )
-                ).scalars()
+            result = await session.execute(
+                delete(Project).where(Project.id == project_id)
             )
-            thread_ids = [thread.id for thread in threads]
-            for model in (Message, Run, RunState, DspyHistory, Source, Artifact):
-                await session.execute(
-                    delete(model).where(model.thread_id.in_(thread_ids))
-                )
-            await session.execute(delete(Thread).where(Thread.project_id == project_id))
-            await session.delete(project)
             await session.commit()
-            return True
+            return bool(getattr(result, "rowcount", 0))
 
 
 # --- runs ---------------------------------------------------------------
@@ -504,27 +707,38 @@ class RunStatesRepository:
         run_id: str | None = None,
         head_message_id: str | None = None,
     ) -> RunState:
-        query = select(RunState).where(RunState.thread_id == thread_id)
-        if head_message_id is None:
-            query = query.where(RunState.head_message_id.is_(None))
-        else:
-            query = query.where(RunState.head_message_id == head_message_id)
-        existing = await session.scalar(query.with_for_update())
-        if existing is None:
-            existing = RunState(
+        now = datetime.now(UTC)
+        set_values: dict[str, Any] = {
+            "state_json": state_json,
+            "updated_at": now,
+        }
+        if run_id:
+            set_values["run_id"] = run_id
+        stmt = (
+            pg_insert(RunState)
+            .values(
                 id=new_id("state"),
                 thread_id=thread_id,
                 run_id=run_id,
                 head_message_id=head_message_id,
                 state_json=state_json,
+                updated_at=now,
             )
-            session.add(existing)
-        else:
-            existing.run_id = run_id or existing.run_id
-            existing.state_json = state_json
-            existing.updated_at = datetime.now(UTC)
+            .on_conflict_do_update(
+                **_head_conflict_target(head_message_id),
+                set_=set_values,
+            )
+            .returning(RunState)
+        )
+        row = await session.scalar(
+            select(RunState)
+            .from_statement(stmt)
+            .execution_options(populate_existing=True)
+        )
+        if row is None:
+            raise RuntimeError("RunState upsert failed to return a row.")
         await session.flush()
-        return existing
+        return cast(RunState, row)
 
     @staticmethod
     async def nearest_in_session(
@@ -578,9 +792,15 @@ class SourcesRepository:
         uri: str | None,
         excerpt: str | None,
     ) -> Source:
-        # Sources are persisted and later served by several endpoints, so cap
-        # excerpts here rather than relying only on the live reducer preview.
-        excerpt = cap_source_excerpt(excerpt)
+        # Sources are persisted and later served by several endpoints, so scrub
+        # and cap excerpts here rather than relying only on the live reducer preview.
+        title = scrub_public_text(title)
+        uri = scrub_public_text(uri) if uri is not None else None
+        excerpt = (
+            cap_source_excerpt(scrub_public_text(excerpt))
+            if excerpt is not None
+            else None
+        )
         identity_key = canonical_source_key({"id": source_id, "uri": uri})
         collision = await session.scalar(
             select(Source.row_id).where(
@@ -699,14 +919,9 @@ class ThreadsRepository:
 
     async def delete(self, thread_id: str) -> bool:
         async with self._sessions() as session:
-            thread = await session.get(Thread, thread_id)
-            if thread is None:
-                return False
-            for model in (Message, Run, RunState, DspyHistory, Source, Artifact):
-                await session.execute(delete(model).where(model.thread_id == thread_id))
-            await session.delete(thread)
+            result = await session.execute(delete(Thread).where(Thread.id == thread_id))
             await session.commit()
-            return True
+            return bool(getattr(result, "rowcount", 0))
 
     async def set_active_head(self, thread_id: str, head_id: str | None) -> None:
         async with self._sessions() as session:
@@ -739,7 +954,7 @@ class ThreadsRepository:
 
     async def get_bootstrap_data(
         self, thread_id: str, *, owner_id: str
-    ) -> tuple[Thread, list[Message], RunState | None, Run | None] | None:
+    ) -> BootstrapData | None:
         async with self._sessions() as session:
             async with session.begin():
                 await session.execute(
@@ -762,43 +977,101 @@ class ThreadsRepository:
                     thread_id=thread_id,
                     head_message_id=thread.active_head_message_id,
                 )
-                latest: Run | None = (
-                    await session.get(Run, state_row.run_id)
-                    if state_row is not None and state_row.run_id is not None
-                    else None
-                )
-                if latest is None:
-                    candidates = list(
-                        (
-                            await session.execute(
-                                select(Run)
-                                .where(Run.thread_id == thread_id)
-                                .order_by(
-                                    Run.reserved_at.desc().nullslast(), Run.id.desc()
-                                )
-                            )
-                        ).scalars()
-                    )
-                    if thread.active_head_message_id is not None:
-                        # message_rows was already loaded above in this same
-                        # transaction; reuse it instead of re-querying.
-                        parents = {
-                            row.message_id: row.parent_message_id
-                            for row in message_rows
-                        }
-                        branch_ids: set[str] = set()
-                        current_id: str | None = thread.active_head_message_id
-                        while current_id is not None and current_id not in branch_ids:
-                            branch_ids.add(current_id)
-                            current_id = parents.get(current_id)
-                        latest = next(
-                            (
-                                candidate
-                                for candidate in candidates
-                                if candidate.output_message_id in branch_ids
-                                or candidate.input_message_id in branch_ids
-                            ),
-                            None,
+                candidates = list(
+                    (
+                        await session.execute(
+                            select(Run)
+                            .where(Run.thread_id == thread_id)
+                            .order_by(Run.reserved_at.desc().nullslast(), Run.id.desc())
                         )
-                    latest = latest or (candidates[0] if candidates else None)
-                return thread, message_rows, state_row, latest
+                    ).scalars()
+                )
+                state_run = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if state_row is not None and candidate.id == state_row.run_id
+                    ),
+                    None,
+                )
+                latest: Run | None
+                if thread.active_head_message_id is None:
+                    latest = state_run or (candidates[0] if candidates else None)
+                else:
+                    parents = {
+                        row.message_id: row.parent_message_id for row in message_rows
+                    }
+                    branch_ids: set[str] = set()
+                    current_id: str | None = thread.active_head_message_id
+                    while current_id is not None and current_id not in branch_ids:
+                        branch_ids.add(current_id)
+                        current_id = parents.get(current_id)
+                    branch_latest = next(
+                        (
+                            candidate
+                            for candidate in candidates
+                            if (
+                                candidate.output_message_id in branch_ids
+                                if candidate.output_message_id is not None
+                                else candidate.input_message_id in branch_ids
+                            )
+                        ),
+                        None,
+                    )
+                    exact_state = state_row is not None and (
+                        state_row.head_message_id == thread.active_head_message_id
+                        or (
+                            state_row.run_id is not None
+                            and thread.active_head_message_id
+                            == f"msg-tools-{state_row.run_id}"
+                        )
+                    )
+                    branch_latest_is_at_head = branch_latest is not None and (
+                        branch_latest.output_message_id == thread.active_head_message_id
+                        or (
+                            branch_latest.output_message_id is None
+                            and branch_latest.input_message_id
+                            == thread.active_head_message_id
+                        )
+                    )
+                    if branch_latest_is_at_head or not exact_state:
+                        latest = (
+                            branch_latest
+                            or state_run
+                            or (candidates[0] if candidates else None)
+                        )
+                    else:
+                        latest = (
+                            state_run
+                            or branch_latest
+                            or (candidates[0] if candidates else None)
+                        )
+
+                completed_states: list[tuple[RunState, Run]] = [
+                    (row[0], row[1])
+                    for row in (
+                        await session.execute(
+                            select(RunState, Run)
+                            .join(Run, RunState.run_id == Run.id)
+                            .where(
+                                RunState.thread_id == thread_id,
+                                Run.status == "completed",
+                            )
+                        )
+                    ).all()
+                ]
+                artifacts = list(
+                    (
+                        await session.scalars(
+                            select(Artifact).where(Artifact.thread_id == thread_id)
+                        )
+                    ).all()
+                )
+                return BootstrapData(
+                    thread=thread,
+                    messages=message_rows,
+                    state_row=state_row,
+                    latest_run=latest,
+                    completed_states=completed_states,
+                    artifacts=artifacts,
+                )

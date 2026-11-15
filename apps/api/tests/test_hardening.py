@@ -501,3 +501,262 @@ async def test_startup_sweep_also_rewrites_the_restored_snapshot(db_sessions):
     assert run["status"] == "failed"
     assert run["terminationReason"] == "server_restart"
     assert run["errorCode"] == "internal_error"
+
+
+@pytest.mark.parametrize("raw_length", ["-5", "not-a-number"])
+async def test_request_guard_rejects_invalid_content_length(raw_length: str):
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/agent",
+            content=b"{}",
+            headers={"Content-Type": "application/json", "Content-Length": raw_length},
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid Content-Length header."
+
+
+async def test_request_guard_enforces_limit_on_streaming_chunked_body():
+    app = create_app()
+    app.state.settings = Settings(max_body_bytes=64, agent_mode="fixtures")
+
+    async def oversized_chunks():
+        yield b'{"threadId":"t","runId":"r","state":null,'
+        yield (
+            b'"messages":[{"id":"m1","role":"user","content":"' + (b"x" * 100) + b'"}]}'
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/agent",
+            content=oversized_chunks(),
+            headers={"Content-Type": "application/json"},
+        )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Request body too large."
+
+
+def test_settings_rejects_wildcard_cors_with_credentials():
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    with _pytest.raises(ValidationError, match="cors_allow_credentials"):
+        Settings(cors_origins=["*"], cors_allow_credentials=True)
+
+    assert Settings(cors_origins=["*"], cors_allow_credentials=False).cors_origins == [
+        "*"
+    ]
+    assert Settings(
+        cors_origins=["http://localhost:5173"], cors_allow_credentials=True
+    ).cors_origins == ["http://localhost:5173"]
+
+
+async def test_run_agent_prestream_failure_releases_semaphore_and_fails_run(
+    db_sessions, monkeypatch
+):
+    import asyncio
+
+    from app.agui.run import LiveDSPyCoordinator
+    from app.persistence.repositories import RunsRepository
+
+    project = await ProjectsRepository(db_sessions).create(name="H")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Pre-stream cleanup"
+    )
+
+    def broken_stream(self, **kwargs):
+        del self, kwargs
+        raise RuntimeError("pre-stream boom")
+
+    monkeypatch.setattr(LiveDSPyCoordinator, "stream", broken_stream)
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    app.state.settings = Settings(
+        agent_mode="engine", llm_api_key=None, max_concurrent_runs=1
+    )
+    app.state.run_semaphore = asyncio.Semaphore(1)
+    app.state.engine_builder = scripted_builder([[submit_call(answer="ok")]])
+
+    payload = {
+        "threadId": thread.id,
+        "runId": "run-prestream-fail",
+        "state": None,
+        "messages": [{"id": "m1", "role": "user", "content": "hi"}],
+        "tools": [],
+        "context": [],
+        "forwardedProps": None,
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/api/agent", json=payload)
+
+    assert response.status_code == 503
+    assert "pre-stream boom" not in response.text
+    assert app.state.run_semaphore._value == 1
+    run = await RunsRepository(db_sessions).get("run-prestream-fail")
+    assert run is not None
+    assert run.status == "failed"
+    assert run.error_code == "internal_error"
+
+
+async def test_run_agent_missing_engine_builder_does_not_leak_semaphore_or_run(
+    db_sessions,
+):
+    import asyncio
+
+    from app.persistence.repositories import RunsRepository
+
+    project = await ProjectsRepository(db_sessions).create(name="H2")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Missing builder"
+    )
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    app.state.settings = Settings(
+        agent_mode="engine", llm_api_key=None, max_concurrent_runs=1
+    )
+    app.state.run_semaphore = asyncio.Semaphore(1)
+
+    payload = {
+        "threadId": thread.id,
+        "runId": "run-no-builder",
+        "state": None,
+        "messages": [{"id": "m1", "role": "user", "content": "hi"}],
+        "tools": [],
+        "context": [],
+        "forwardedProps": None,
+    }
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        response = await client.post("/api/agent", json=payload)
+
+    assert response.status_code == 500
+    assert app.state.run_semaphore._value == 1
+    assert await RunsRepository(db_sessions).get("run-no-builder") is None
+
+
+async def test_fixtures_mode_enforces_concurrency_cap_and_metrics(monkeypatch):
+    import asyncio
+
+    from ag_ui.core import EventType, RunStartedEvent
+
+    from app.agui.run import TimedEvent
+    from app.api import agent as agent_api
+    from app.services.metrics import MetricsRegistry
+
+    app = create_app()
+    app.state.settings = Settings(
+        agent_mode="fixtures", max_concurrent_runs=1, run_timeout_seconds=0.02
+    )
+    app.state.run_semaphore = asyncio.Semaphore(1)
+    app.state.metrics = MetricsRegistry()
+
+    payload = {
+        "threadId": "any-thread",
+        "runId": "fixture-run-1",
+        "state": None,
+        "messages": [{"id": "m1", "role": "user", "content": "hi"}],
+        "tools": [],
+        "context": [],
+        "forwardedProps": None,
+    }
+
+    await app.state.run_semaphore.acquire()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            busy = await client.post("/api/agent", json=payload)
+        assert busy.status_code == 429
+    finally:
+        app.state.run_semaphore.release()
+
+    monkeypatch.setattr(
+        agent_api,
+        "load_fixture",
+        lambda name: [
+            TimedEvent(
+                at_ms=500,
+                event=RunStartedEvent(
+                    type=EventType.RUN_STARTED, thread_id="t", run_id="r"
+                ),
+            )
+        ],
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        timed_out = await client.post("/api/agent", json=payload)
+        metrics_resp = await client.get("/metrics")
+
+    assert timed_out.status_code == 200
+    assert "agent_timeout" in timed_out.text
+    assert app.state.run_semaphore._value == 1
+    snapshot = metrics_resp.json()
+    assert snapshot["counters"]["agent_runs_total"] == 1
+    assert snapshot["counters"]["agent_run_errors_total"] == 1
+    assert snapshot["gauges"]["active_sse_connections"] == 0
+    assert snapshot["durations"]["agent_run_duration_ms"]["count"] == 1
+
+
+async def test_run_agent_and_artifact_enforce_thread_ownership(db_sessions, tmp_path):
+    from app.persistence.models import Project, Run, Thread
+    from app.persistence.repositories import ArtifactsRepository
+    from app.services.artifact_storage import LocalArtifactStorage
+
+    storage = LocalArtifactStorage(tmp_path)
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add(Project(id="p-other", owner_id="other-owner", name="Other"))
+            await session.flush()
+            session.add(
+                Thread(id="t-other", project_id="p-other", title="Other Thread")
+            )
+            await session.flush()
+            session.add(
+                Run(id="run-other-art", thread_id="t-other", status="completed")
+            )
+    storage.save(storage_key="t-other/art-other/note.txt", content=b"secret")
+    artifacts = ArtifactsRepository(db_sessions)
+    await artifacts.add(
+        artifact_id="art-other",
+        thread_id="t-other",
+        run_id="run-other-art",
+        name="note.txt",
+        media_type="text/plain",
+        storage_key="t-other/art-other/note.txt",
+    )
+    await artifacts.mark_ready("art-other", size_bytes=6)
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    app.state.artifact_storage = storage
+    app.state.settings = Settings(agent_mode="engine", llm_api_key=None)
+    app.state.engine_builder = scripted_builder([[submit_call(answer="ok")]])
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        art_resp = await client.get("/api/artifacts/art-other")
+        run_resp = await client.post(
+            "/api/agent",
+            json={
+                "threadId": "t-other",
+                "runId": "run-other",
+                "state": None,
+                "messages": [{"id": "m1", "role": "user", "content": "hi"}],
+                "tools": [],
+                "context": [],
+                "forwardedProps": None,
+            },
+        )
+    assert art_resp.status_code == 404
+    assert run_resp.status_code == 404

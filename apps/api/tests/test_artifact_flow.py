@@ -288,3 +288,128 @@ async def test_artifact_persistence_failure_preserves_answer_without_download(tm
     assert "downloadUrl" not in state["artifacts"][0]
     assert "private driver detail" not in json.dumps(events)
     assert not any(event.get("name") == "artifact" for event in events)
+
+
+async def test_download_missing_artifact_file_returns_404(db_sessions, tmp_path):
+    from app.persistence.models import Run
+
+    project = await ProjectsRepository(db_sessions).create(name="P")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Missing File"
+    )
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add(
+                Run(
+                    id="run-missing-file",
+                    thread_id=thread.id,
+                    status="completed",
+                )
+            )
+    artifacts = ArtifactsRepository(db_sessions)
+    await artifacts.add(
+        artifact_id="art-missing-file",
+        thread_id=thread.id,
+        run_id="run-missing-file",
+        name="missing.md",
+        media_type="text/markdown",
+        storage_key=f"{thread.id}/art-missing-file/missing.md",
+    )
+    await artifacts.mark_ready("art-missing-file", size_bytes=12)
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    app.state.artifact_storage = LocalArtifactStorage(tmp_path)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/artifacts/art-missing-file")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Artifact not found."
+
+
+async def test_artifact_ready_persistence_failure_marks_artifact_failed(
+    db_sessions, tmp_path, monkeypatch
+):
+    project = await ProjectsRepository(db_sessions).create(name="P")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Ready Failure"
+    )
+
+    async def fail_mark_ready(self, *args, **kwargs) -> None:
+        del self, args, kwargs
+        raise RuntimeError("disk db blip")
+
+    monkeypatch.setattr(ArtifactsRepository, "mark_ready", fail_mark_ready)
+
+    storage = LocalArtifactStorage(tmp_path)
+    persistence = RunPersistence(db_sessions)
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(
+            {
+                "threadId": thread.id,
+                "runId": "ready-fail-run",
+                "state": None,
+                "messages": [
+                    {"id": "user-1", "role": "user", "content": "Make a report"}
+                ],
+                "tools": [],
+                "context": [],
+            }
+        ),
+        engine_builder=rich_builder(
+            storage,
+            [
+                [
+                    {
+                        "name": "write_report",
+                        "args": {"title": "Report", "content": "Useful evidence"},
+                    }
+                ],
+                [submit_call(answer="Done")],
+            ],
+        ),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        persistence=persistence,
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    assert "disk db blip" not in json.dumps(events)
+    rows = await ArtifactsRepository(db_sessions).list_for_thread(thread.id)
+    assert len(rows) == 1
+    assert rows[0].status == "failed"
+
+
+def test_wire_suppresses_falsy_artifact_card(monkeypatch):
+    from app.agui import wire
+    from app.agui.state import TraceReducer
+    from app.contracts.domain import ArtifactReady, ArtifactResult, ArtifactStarted
+
+    monkeypatch.setattr(wire, "make_card", lambda *args, **kwargs: None)
+    reducer = TraceReducer(thread_id="t-1", run_id="r-1")
+    started = ArtifactStarted(
+        artifact=ArtifactResult(
+            id="art-1",
+            name="report.md",
+            media_type="text/markdown",
+            storage_key="t-1/art-1/report.md",
+        )
+    )
+    wire.map_domain_event(started, assistant_message_id="msg-1", reducer=reducer)
+    ready = ArtifactReady(
+        artifact=ArtifactResult(
+            id="art-1",
+            name="report.md",
+            media_type="text/markdown",
+            storage_key="t-1/art-1/report.md",
+            size_bytes=10,
+        ),
+        download_url="/api/artifacts/art-1",
+    )
+    agui_events = wire.map_domain_event(
+        ready, assistant_message_id="msg-1", reducer=reducer
+    )
+    assert len(agui_events) == 1
+    assert agui_events[0].type == "STATE_DELTA"

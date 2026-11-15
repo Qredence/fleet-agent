@@ -361,6 +361,46 @@ class TraceReducer:
         """Publish the final status, summary, metrics, decisions and caveats."""
         return self._diff(lambda: self._finalize(result))
 
+    def cancel_run(self, result: AgentRunResult) -> list[JsonPatchOp]:
+        """Finalize a cancelled run and emit the resulting state patch."""
+
+        def _apply() -> None:
+            self._finalize(result)
+            run = self.state.setdefault("run", {})
+            run["status"] = "cancelled"
+            run["errorCode"] = result.error_code or "run_cancelled"
+
+        return self._diff(_apply)
+
+    def set_save_status(self, status: str) -> list[JsonPatchOp]:
+        """Update ``run.saveStatus`` and return the resulting state patch."""
+        return self._diff(
+            lambda: self.state.setdefault("run", {}).__setitem__("saveStatus", status)
+        )
+
+    def snapshot_for_persistence(self, *, save_status: str = "saved") -> dict[str, Any]:
+        """Return a deep-copied state snapshot ready for durable persistence."""
+        snapshot = deepcopy(self.state)
+        snapshot.setdefault("run", {})["saveStatus"] = save_status
+        return snapshot
+
+    def record_terminal_fallback(self, result: AgentRunResult) -> None:
+        """Apply minimal terminal run metadata if full finalization fails."""
+        run = self.state.setdefault("run", {})
+        run["status"] = (
+            "cancelled" if result.error_code == "run_cancelled" else "failed"
+        )
+        run["finishedAt"] = _utc_now()
+        if result.termination_reason:
+            run["terminationReason"] = result.termination_reason
+        if result.error_code:
+            run["errorCode"] = result.error_code
+        run.pop("activeStepId", None)
+
+    @property
+    def tool_call_count(self) -> int:
+        return len(self.state.get("toolCalls", []))
+
     def _finalize(self, result: AgentRunResult) -> None:
         if "step-research" in self._step_index:
             self._complete_step("step-research")
@@ -380,6 +420,9 @@ class TraceReducer:
             else "Composed the final answer."
         )
         self._complete_step("step-synthesis", public_summary=summary)
+        for step in self.state["steps"]:
+            if step.get("status") in {"pending", "running"}:
+                self._complete_step(step["id"])
 
         run = self.state["run"]
         run["status"] = "completed" if result.status == "completed" else "failed"
@@ -391,7 +434,7 @@ class TraceReducer:
         if result.evidence_status:
             run["evidenceStatus"] = result.evidence_status
         if result.evidence_reason:
-            run["evidenceStopReason"] = result.evidence_reason
+            run["evidenceStopReason"] = result.evidence_reason[:64]
 
         metrics = self.state["metrics"]
         usage_metric_names = (

@@ -17,6 +17,7 @@ already bounded) are displayed as-is, like a browser rendering a page.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 # Ordered high-precision patterns. The generic assignment pattern runs last
@@ -44,17 +45,23 @@ _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
     # Bearer credentials in Authorization-style text.
     re.compile(r"\bBearer[ \t]+[A-Za-z0-9._~+/-]{20,}={0,2}", re.IGNORECASE),
-    # Explicit credential assignments: a credential-shaped key name followed
-    # by a long secret-shaped value. Spaces inside the value break the match,
-    # which keeps ordinary sentences intact.
+    # Explicit credential assignments: preserve the key name, delimiter, and
+    # optional opening quote (group 1) while redacting the secret value so
+    # JSON payloads (e.g. ``{"api_key": "..."}``) stay valid JSON.
     re.compile(
-        r"\b(?:api[_-]?key|apikey|secret|access[_-]?token|auth[_-]?token|"
-        r"password|passwd|pwd)\b['\"]?[ \t]*[:=][ \t]*['\"]?[A-Za-z0-9_+/=-]{16,}",
+        r"(\b(?:api[_-]?key|apikey|secret|access[_-]?token|auth[_-]?token|"
+        r"password|passwd|pwd)\b['\"]?[ \t]*[:=][ \t]*['\"]?)[A-Za-z0-9_+/=-]{16,}",
         re.IGNORECASE,
     ),
 )
 
 _MASK = "[redacted]"
+
+
+def _redact_match(match: re.Match[str]) -> str:
+    if match.lastindex:
+        return f"{match.group(1)}{_MASK}"
+    return _MASK
 
 
 def scrub_public_text(value: str) -> str:
@@ -65,7 +72,7 @@ def scrub_public_text(value: str) -> str:
     """
     scrubbed = value
     for pattern in _SECRET_PATTERNS:
-        scrubbed = pattern.sub(_MASK, scrubbed)
+        scrubbed = pattern.sub(_redact_match, scrubbed)
     return scrubbed
 
 
@@ -94,42 +101,136 @@ def scrub_json_strings(value: Any) -> Any:
 # caught before any of its fragments reach the browser.
 _STREAM_HOLDBACK_CHARS = 80
 
-# Anchor prefixes that could still complete into a secret pattern.  While any
-# unresolved anchor is pending (the scrubber has not masked it away), the
-# stream holds back from its position: prefix-closed patterns like
-# ``sk-<unbounded>`` cannot be disproved until more text arrives or the field
-# ends.  Every pattern in ``_SECRET_PATTERNS`` must start with one of these
-# anchors, which is what makes the emitted prefix stable.  Benign anchors
-# (``Bearer of...``, ``the password field``) simply lag until flush instead
-# of leaking a partial secret.
-_STREAM_ANCHORS = (
-    "-----begin",
-    "sk-",
-    "akia",
-    "aiza",
-    "ghp_",
-    "gho_",
-    "ghu_",
-    "ghs_",
-    "ghr_",
-    "github_pat_",
-    "xox",
-    "eyj",
-    "bearer",
-    "apikey",
-    "api_key",
-    "api-key",
-    "secret",
-    "accesstoken",
-    "access_token",
-    "access-token",
-    "authtoken",
-    "auth_token",
-    "auth-token",
-    "password",
-    "passwd",
-    "pwd",
+
+# Anchor prefixes that could still complete into a secret pattern.  While an
+# unresolved candidate anchor is still a valid open prefix of a secret pattern,
+# the stream holds back from its position.  Once subsequent characters disprove
+# it (e.g. ``Bearer of `` or ``the password policy``) or a word-boundary check
+# rejects it upfront (e.g. ``task-oriented``), it expires and streaming resumes
+# without waiting for flush.
+@dataclass(frozen=True, slots=True)
+class _AnchorPrefix:
+    text: str
+    word_start: bool = True
+    ignore_case: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _CandidateSpec:
+    start: re.Pattern[str]
+    live_prefix: re.Pattern[str]
+
+
+_STREAM_ANCHOR_PREFIXES: tuple[_AnchorPrefix, ...] = (
+    _AnchorPrefix("-----BEGIN", word_start=False),
+    _AnchorPrefix("sk-"),
+    _AnchorPrefix("AKIA"),
+    _AnchorPrefix("AIza"),
+    _AnchorPrefix("ghp_"),
+    _AnchorPrefix("gho_"),
+    _AnchorPrefix("ghu_"),
+    _AnchorPrefix("ghs_"),
+    _AnchorPrefix("ghr_"),
+    _AnchorPrefix("github_pat_"),
+    _AnchorPrefix("xox"),
+    _AnchorPrefix("eyJ"),
+    _AnchorPrefix("bearer", ignore_case=True),
+    _AnchorPrefix("apikey", ignore_case=True),
+    _AnchorPrefix("api_key", ignore_case=True),
+    _AnchorPrefix("api-key", ignore_case=True),
+    _AnchorPrefix("secret", ignore_case=True),
+    _AnchorPrefix("accesstoken", ignore_case=True),
+    _AnchorPrefix("access_token", ignore_case=True),
+    _AnchorPrefix("access-token", ignore_case=True),
+    _AnchorPrefix("authtoken", ignore_case=True),
+    _AnchorPrefix("auth_token", ignore_case=True),
+    _AnchorPrefix("auth-token", ignore_case=True),
+    _AnchorPrefix("password", ignore_case=True),
+    _AnchorPrefix("passwd", ignore_case=True),
+    _AnchorPrefix("pwd", ignore_case=True),
 )
+
+_MAX_ANCHOR_PREFIX_LEN = (
+    max(
+        max(len(anchor.text) for anchor in _STREAM_ANCHOR_PREFIXES),
+        len(_MASK),
+    )
+    - 1
+)
+
+_CANDIDATE_SPECS: tuple[_CandidateSpec, ...] = (
+    _CandidateSpec(
+        re.compile(r"-----BEGIN"),
+        re.compile(
+            r"(?:-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*"
+            r"|-----BEGIN(?: [A-Z0-9 ]*(?:PRIVATE KEY-{1,4})?)?)",
+            re.DOTALL,
+        ),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bsk-"),
+        re.compile(r"sk-[A-Za-z0-9_-]*"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bAKIA"),
+        re.compile(r"AKIA[0-9A-Z]{0,16}"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bAIza"),
+        re.compile(r"AIza[0-9A-Za-z_-]{0,35}"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bgh[pousr]_"),
+        re.compile(r"gh[pousr]_[A-Za-z0-9]*"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bgithub_pat_"),
+        re.compile(r"github_pat_[A-Za-z0-9_]*"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bxox"),
+        re.compile(r"xox(?:[abprs](?:-[A-Za-z0-9-]*)?)?"),
+    ),
+    _CandidateSpec(
+        re.compile(r"\beyJ"),
+        re.compile(
+            r"eyJ[A-Za-z0-9_-]*(?:\.(?:e(?:y(?:J[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*)?)?)?)?)?"
+        ),
+    ),
+    _CandidateSpec(
+        re.compile(r"\bBearer", re.IGNORECASE),
+        re.compile(
+            r"Bearer(?:[ \t]+(?:[A-Za-z0-9._~+/-]+={0,2})?)?",
+            re.IGNORECASE,
+        ),
+    ),
+    _CandidateSpec(
+        re.compile(
+            r"\b(?:api[_-]?key|apikey|secret|access[_-]?token|auth[_-]?token|"
+            r"password|passwd|pwd)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"(?:api[_-]?key|apikey|secret|access[_-]?token|auth[_-]?token|"
+            r"password|passwd|pwd)"
+            r"(?:['\"]?[ \t]*(?:[:=][ \t]*['\"]?[A-Za-z0-9_+/=-]*)?)?",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+# Patterns whose trailing \b allows a match at EOF to un-match if a word
+# character arrives in the next delta (relevant for small holdbacks).
+_BOUNDED_TRAILING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    _SECRET_PATTERNS[2],
+    _SECRET_PATTERNS[3],
+    _SECRET_PATTERNS[4],
+    _SECRET_PATTERNS[5],
+    _SECRET_PATTERNS[6],
+    _SECRET_PATTERNS[7],
+)
+
+_WORD_CHAR_RE = re.compile(r"\w")
 
 
 class StreamingScrubber:
@@ -137,14 +238,12 @@ class StreamingScrubber:
 
     Token deltas arrive before the full field text is known, so a secret can
     be split across deltas.  The scrubber emits only stable prefixes of the
-    scrubbed text: up to the first secret anchor the scrubber has not yet
-    masked away (masked secrets leave no anchor text), minus a partial-anchor
-    prefix at the boundary and a small holdback window.  When a growing
-    secret completes, its mask is emitted in place without ever emitting the
-    secret itself.  ``flush`` returns the final remainder with the same
-    semantics as a full-text scrub, so the concatenation of everything
-    emitted always equals ``scrub_public_text(full_text)``.  Benign anchors
-    (``Bearer of...``, ``the password field``) merely lag until flush.
+    scrubbed text: up to the first unresolved candidate secret anchor, minus a
+    partial-anchor prefix at the end of the pending buffer and a small holdback
+    window.  When a growing secret completes, its mask is emitted in place
+    without ever emitting the secret itself.  When an anchor is disproved by
+    subsequent characters (e.g. ``Bearer of `` or ``password policy``), it
+    expires and streaming resumes without waiting for flush.
     """
 
     def __init__(self, *, holdback_chars: int = _STREAM_HOLDBACK_CHARS) -> None:
@@ -169,18 +268,28 @@ class StreamingScrubber:
     def _release_locked(self) -> str:
         scrubbed = scrub_public_text(self._pending)
         stable = len(scrubbed) - self._holdback
-        if stable <= 0:
+        if stable <= self._emitted:
             return ""
-        # An anchor still visible in the scrubbed text is benign or a secret
-        # still being received; either way nothing from it onward is stable.
-        scrubbed_lower = scrubbed.lower()
-        for anchor in _STREAM_ANCHORS:
-            index = scrubbed_lower.find(anchor)
-            if index != -1:
-                stable = min(stable, index)
-        if stable <= 0:
+        # A bounded-token match touching EOF could still un-match if the next
+        # delta appends a word character; hold the trailing mask until resolved.
+        for pattern in _BOUNDED_TRAILING_PATTERNS:
+            for match in pattern.finditer(self._pending):
+                if match.end() == len(self._pending):
+                    stable = min(stable, len(scrubbed) - len(_MASK))
+                    break
+        if stable <= self._emitted:
             return ""
-        stable = self._partial_anchor_hold(scrubbed_lower, stable)
+        for spec in _CANDIDATE_SPECS:
+            for match in spec.start.finditer(scrubbed, self._emitted):
+                idx = match.start()
+                if idx >= stable:
+                    break
+                if spec.live_prefix.fullmatch(scrubbed, idx) is not None:
+                    stable = idx
+                    break
+        if stable <= self._emitted:
+            return ""
+        stable = self._partial_anchor_hold(scrubbed, stable, self._emitted)
         if stable <= self._emitted:
             return ""
         remainder = scrubbed[self._emitted : stable]
@@ -188,36 +297,29 @@ class StreamingScrubber:
         return remainder
 
     @staticmethod
-    def _partial_anchor_hold(scrubbed_lower: str, stable: int) -> int:
-        """Hold back anchor or mask prefixes that straddle the emit boundary.
+    def _partial_anchor_hold(scrubbed: str, stable: int, start_floor: int) -> int:
+        """Hold back partial anchor prefixes at EOF and unsplit masks."""
+        # Do not split an already-materialized ``[redacted]`` mask across deltas.
+        search_from = max(start_floor, stable - len(_MASK) + 1)
+        search_to = min(len(scrubbed), stable + len(_MASK) - 1)
+        idx = scrubbed.find(_MASK, search_from, search_to)
+        if idx != -1 and idx < stable < idx + len(_MASK):
+            stable = idx
 
-        ``...the pass`` could continue into ``password = <secret>`` with the
-        next delta, so a fragment ending at the boundary that is a proper
-        prefix of an anchor must not be emitted yet.  A boundary inside the
-        ``[redacted]`` mask would split it across emissions, so mask
-        prefixes hold too.  Retreating exposes a new boundary, so this
-        repeats to a fixpoint.  Together with the anchor scan this makes the
-        emitted concatenation equal the batch scrub of the full text for
-        every possible delta split.
-        """
-        window = (
-            max(
-                max(len(anchor) for anchor in _STREAM_ANCHORS),
-                len(_MASK),
+        tail_start = max(start_floor, len(scrubbed) - _MAX_ANCHOR_PREFIX_LEN)
+        for pos in range(tail_start, min(stable, len(scrubbed))):
+            tail = scrubbed[pos:]
+            at_word_boundary = (
+                pos == 0 or _WORD_CHAR_RE.match(scrubbed[pos - 1]) is None
             )
-            - 1
-        )
-        while stable > 0:
-            retreat = 0
-            for length in range(min(window, stable), 0, -1):
-                fragment = scrubbed_lower[stable - length : stable]
-                if any(anchor.startswith(fragment) for anchor in _STREAM_ANCHORS):
-                    retreat = length
-                    break
-                if _MASK.startswith(fragment):
-                    retreat = length
-                    break
-            if retreat == 0:
-                return stable
-            stable -= retreat
+            for anchor in _STREAM_ANCHOR_PREFIXES:
+                if len(tail) >= len(anchor.text):
+                    continue
+                if anchor.word_start and not at_word_boundary:
+                    continue
+                if anchor.ignore_case:
+                    if anchor.text.startswith(tail.lower()):
+                        return pos
+                elif anchor.text.startswith(tail):
+                    return pos
         return stable

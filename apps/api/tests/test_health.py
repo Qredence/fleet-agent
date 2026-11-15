@@ -110,3 +110,38 @@ async def test_lifespan_starts_without_a_reachable_database(monkeypatch):
             response = await client.get("/health")
 
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize("raise_missing_table", [False, True])
+async def test_ready_returns_503_when_migrations_unapplied(raise_missing_table: bool):
+    from contextlib import asynccontextmanager
+
+    from sqlalchemy.exc import ProgrammingError
+
+    class _FakeConnection:
+        async def execute(self, statement):
+            del statement
+            return None
+
+        async def scalar(self, statement):
+            sql = str(statement)
+            if raise_missing_table:
+                raise ProgrammingError(
+                    sql, {}, Exception("relation alembic_version does not exist")
+                )
+            return None
+
+    class _FakeEngine:
+        @asynccontextmanager
+        async def connect(self):
+            yield _FakeConnection()
+
+    app = create_app()
+    app.state.db_engine = _FakeEngine()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready", "migrations": "unapplied"}

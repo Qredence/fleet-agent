@@ -30,7 +30,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from app.kernel.content_safety import scrub_public_text
 from app.settings import Settings
@@ -254,5 +254,25 @@ def configure_mlflow(settings: Settings) -> bool:
     # Operator-facing startup fact: warn so it survives a default logging
     # setup, where the app's own INFO records are dropped. Enabling tracing
     # changes what the operator's store receives, so it must be confirmable.
-    logger.warning("MLflow dspy tracing enabled (store: %s)", uri)
+    logger.warning("MLflow dspy tracing enabled (store: %s)", _redact_tracking_uri(uri))
     return True
+
+
+def _redact_tracking_uri(uri: str) -> str:
+    """Strip userinfo (username/password/token) from tracking URIs before logging."""
+    parsed = urlsplit(uri)
+    if parsed.username is None and parsed.password is None:
+        return uri
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return urlunsplit(
+        (
+            parsed.scheme,
+            f"[redacted]@{host}{port}",
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )

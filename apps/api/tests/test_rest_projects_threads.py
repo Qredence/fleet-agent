@@ -208,3 +208,147 @@ async def test_bootstrap_passes_an_unexpected_message_format_through(db_sessions
     assert response.status_code == 200
     entries = response.json()["messageRepository"]["messages"]
     assert [entry["format"] for entry in entries] == ["legacy/v9"]
+
+
+async def test_rename_missing_thread_returns_404(db_sessions):
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.patch(
+            "/api/threads/missing-thread-id", json={"title": "Renamed"}
+        )
+    assert response.status_code == 404
+
+
+async def test_list_feedback_skips_corrupt_rows_and_logs_warning(db_sessions, caplog):
+    import logging
+    import uuid
+
+    from app.persistence.models import Message
+    from app.persistence.repositories import ProjectsRepository, ThreadsRepository
+
+    project = await ProjectsRepository(db_sessions).create(name="Feedback")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Corrupt feedback"
+    )
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add_all(
+                [
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread.id,
+                        message_id="m-valid",
+                        role="assistant",
+                        message_json={"role": "assistant", "content": "ok"},
+                        feedback_json={
+                            "messageId": "m-valid",
+                            "type": "positive",
+                            "reason": "Helpful",
+                        },
+                    ),
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread.id,
+                        message_id="m-corrupt",
+                        role="assistant",
+                        message_json={"role": "assistant", "content": "ok"},
+                        feedback_json={"corrupt": True},
+                    ),
+                ]
+            )
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    caplog.set_level(logging.WARNING)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"/api/threads/{thread.id}/feedback")
+
+    assert response.status_code == 200
+    assert list(response.json().keys()) == ["m-valid"]
+    assert "ignoring invalid persisted feedback for message m-corrupt" in caplog.text
+
+
+async def test_persist_thread_message_rejects_branch_cycle(db_sessions):
+    from app.persistence.repositories import ProjectsRepository, ThreadsRepository
+
+    project = await ProjectsRepository(db_sessions).create(name="Cycles")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Cycle check"
+    )
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        assert (
+            await client.put(
+                f"/api/threads/{thread.id}/messages/m1",
+                json={
+                    "format": "aui/v0",
+                    "content": {"id": "m1", "role": "user", "content": "one"},
+                },
+            )
+        ).status_code == 200
+        assert (
+            await client.put(
+                f"/api/threads/{thread.id}/messages/m2",
+                json={
+                    "format": "aui/v0",
+                    "parentId": "m1",
+                    "content": {"id": "m2", "role": "assistant", "content": "two"},
+                },
+            )
+        ).status_code == 200
+        cycle = await client.put(
+            f"/api/threads/{thread.id}/messages/m1",
+            json={
+                "format": "aui/v0",
+                "parentId": "m2",
+                "content": {"id": "m1", "role": "user", "content": "one"},
+            },
+        )
+    assert cycle.status_code == 409
+
+
+async def test_list_sources_scrubs_stored_secrets(db_sessions):
+    import uuid
+
+    from app.persistence.models import Run, Source
+    from app.persistence.repositories import ProjectsRepository, ThreadsRepository
+
+    project = await ProjectsRepository(db_sessions).create(name="Sources")
+    thread = await ThreadsRepository(db_sessions).create(
+        project_id=project.id, title="Source scrub"
+    )
+    secret = "sk-1234567890abcdefghijklmnop"
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add(Run(id="run-raw-src", thread_id=thread.id, status="completed"))
+            session.add(
+                Source(
+                    row_id=str(uuid.uuid4()),
+                    id="src-raw",
+                    thread_id=thread.id,
+                    run_id="run-raw-src",
+                    identity_key="https://example.com",
+                    title=f"Secret title {secret}",
+                    source_type="web",
+                    uri=f"https://example.com/?k={secret}",
+                    excerpt=f"excerpt {secret}",
+                )
+            )
+
+    app = create_app()
+    app.state.db_sessions = db_sessions
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"/api/threads/{thread.id}/sources")
+    assert response.status_code == 200
+    assert secret not in response.text
+    assert "[redacted]" in response.text

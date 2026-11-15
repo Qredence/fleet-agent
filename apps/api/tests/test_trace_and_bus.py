@@ -382,3 +382,45 @@ def test_second_run_inherits_prior_evidence():
     assert second_state["artifacts"][0]["name"] == "report.md"
     assert len(second_state["sources"]) == 2
     assert second_state["metrics"]["toolCallCount"] == 0
+
+
+def test_finalize_caps_evidence_stop_reason_and_completes_open_steps():
+    from app.contracts.domain import StepFailed
+
+    reducer = TraceReducer(thread_id="t-1", run_id="run-cap")
+    wire = WireConsumer(reducer)
+    wire.feed(reducer.begin())
+    wire.feed(
+        reducer.apply_event(
+            StepStarted(step_id="step-plan", phase="planning", title="Plan steps")
+        )
+    )
+    wire.feed(
+        reducer.apply_event(
+            StepStarted(step_id="step-failed", phase="research", title="Failed step")
+        )
+    )
+    wire.feed(
+        reducer.apply_event(
+            StepFailed(step_id="step-failed", public_summary="Substep failed")
+        )
+    )
+    long_reason = "reason_" + ("x" * 100)
+    final_state = wire.feed(
+        reducer.complete_run(
+            AgentRunResult(
+                status="completed",
+                answer="Done.",
+                process_summary="Finished.",
+                evidence_reason=long_reason,
+                termination_reason="submit",
+            )
+        )
+    )
+    wire.matches(reducer)
+    assert final_state["run"]["evidenceStopReason"] == long_reason[:64]
+    assert len(final_state["run"]["evidenceStopReason"]) == 64
+    statuses = {step["id"]: step["status"] for step in final_state["steps"]}
+    assert statuses["step-plan"] == "completed"
+    assert statuses["step-failed"] == "failed"
+    assert all(status in {"completed", "failed"} for status in statuses.values())

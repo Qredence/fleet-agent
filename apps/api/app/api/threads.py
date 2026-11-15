@@ -1,12 +1,10 @@
 """Threads REST resources + the /bootstrap payload for restoration."""
 
 import logging
-from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlalchemy import or_, select, update
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import (
@@ -20,12 +18,19 @@ from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.cards import settled_cards
 from app.contracts.constants import ERROR_MESSAGES, TERMINATION_REASONS
 from app.contracts.message_feedback import MessageFeedback
-from app.contracts.thread_bootstrap import ThreadBootstrap, ThreadOut
+from app.contracts.thread_bootstrap import (
+    LatestRun,
+    MessageRepository,
+    MessageStorageEntry,
+    ThreadBootstrap,
+    ThreadOut,
+)
 from app.kernel.content_safety import scrub_json_strings, scrub_public_text
 from app.kernel.history_safety import MessageWrite, sanitize_message_content
-from app.persistence.models import Artifact, Message, Run, RunState, Thread
+from app.persistence.models import Run
 from app.persistence.repositories import (
     ArtifactsRepository,
+    MessageConflictError,
     MessagesRepository,
     SourcesRepository,
     ThreadsRepository,
@@ -163,13 +168,17 @@ async def thread_bootstrap(
     )
     if data is None:
         raise HTTPException(status_code=404, detail="Thread not found.")
-    thread, message_rows, state_row, latest = data
+    thread = data.thread
+    message_rows = data.messages
+    state_row = data.state_row
+    latest = data.latest_run
+
     storage = [MessagesRepository.storage_dict(row) for row in message_rows]
     latest_payload = _safe_latest_run_payload(latest)
-    repository = {
-        "headId": thread.active_head_message_id,
-        "messages": storage,
-    }
+    repository = MessageRepository(
+        headId=thread.active_head_message_id,
+        messages=[MessageStorageEntry.model_validate(item) for item in storage],
+    )
     messages_by_id = {row.message_id: row for row in message_rows}
     saved_head = (
         (
@@ -197,38 +206,25 @@ async def thread_bootstrap(
         )
     )
     cards = {}
-    async with sessions() as session:
-        states = (
-            await session.execute(
-                select(RunState, Run)
-                .join(Run, RunState.run_id == Run.id)
-                .where(RunState.thread_id == thread_id, Run.status == "completed")
+    artifact_owners = {artifact.id: artifact.run_id for artifact in data.artifacts}
+    message_ids = set(messages_by_id)
+    for snapshot, run in data.completed_states:
+        if (
+            run.output_message_id in message_ids
+            and run.output_message_id == snapshot.head_message_id
+        ):
+            safe_state = _safe_bootstrap_agent_state(
+                snapshot.state_json, thread_id=thread_id, terminal_saved=True
             )
-        ).all()
-        artifact_rows = (
-            await session.scalars(
-                select(Artifact).where(Artifact.thread_id == thread_id)
-            )
-        ).all()
-        artifact_owners = {artifact.id: artifact.run_id for artifact in artifact_rows}
-        message_ids = {row.message_id for row in message_rows}
-        for snapshot, run in states:
-            if (
-                run.output_message_id in message_ids
-                and run.output_message_id == snapshot.head_message_id
-            ):
-                safe_state = _safe_bootstrap_agent_state(
-                    snapshot.state_json, thread_id=thread_id, terminal_saved=True
+            if safe_state and safe_state["run"]["id"] == run.id:
+                safe_state["artifacts"] = [
+                    artifact
+                    for artifact in safe_state.get("artifacts", [])
+                    if artifact_owners.get(artifact.get("id")) == run.id
+                ]
+                cards[run.output_message_id] = settled_cards(
+                    safe_state, run_id=run.id, message_id=run.output_message_id
                 )
-                if safe_state and safe_state["run"]["id"] == run.id:
-                    safe_state["artifacts"] = [
-                        artifact
-                        for artifact in safe_state.get("artifacts", [])
-                        if artifact_owners.get(artifact.get("id")) == run.id
-                    ]
-                    cards[run.output_message_id] = settled_cards(
-                        safe_state, run_id=run.id, message_id=run.output_message_id
-                    )
     return ThreadBootstrap(
         schemaVersion=2,
         cards=cards,
@@ -258,7 +254,11 @@ async def thread_bootstrap(
             if state_row
             else None
         ),
-        latestRun=latest_payload,
+        latestRun=(
+            LatestRun.model_validate(latest_payload)
+            if latest_payload is not None
+            else None
+        ),
     )
 
 
@@ -279,101 +279,18 @@ async def persist_thread_message(
         reject_unsupported_user_input(
             body.content.get("content"), body.content.get("attachments")
         )
-    parent_id = body.parentId
-    if parent_id == message_id:
-        raise HTTPException(status_code=409, detail="A message cannot parent itself.")
-    async with sessions() as session:
-        async with session.begin():
-            if parent_id is not None:
-                parent = await session.scalar(
-                    select(Message).where(
-                        Message.thread_id == thread_id,
-                        Message.message_id == parent_id,
-                    )
-                )
-                if parent is None:
-                    raise HTTPException(
-                        status_code=409, detail="Unknown message parent."
-                    )
-                # Do not permit an update to attach a node below its own
-                # descendant.  The common self-parent case is rejected
-                # above; walking the short branch chain also protects legacy
-                # rows whose parent was previously null.
-                seen: set[str] = set()
-                cursor: str | None = parent_id
-                while cursor is not None and cursor not in seen:
-                    if cursor == message_id:
-                        raise HTTPException(
-                            status_code=409,
-                            detail="Message parent would create a branch cycle.",
-                        )
-                    seen.add(cursor)
-                    cursor = await session.scalar(
-                        select(Message.parent_message_id).where(
-                            Message.thread_id == thread_id,
-                            Message.message_id == cursor,
-                        )
-                    )
-            if role == "assistant" and message_id.startswith("msg-"):
-                owning_run = await session.get(
-                    Run, message_id.removeprefix("msg-"), with_for_update=True
-                )
-                if owning_run is not None and (
-                    owning_run.thread_id != thread_id
-                    or owning_run.status != "completed"
-                    or owning_run.output_message_id != message_id
-                ):
-                    raise HTTPException(
-                        status_code=409, detail="The run has not been durably saved."
-                    )
-                if owning_run is not None:
-                    # Terminal persistence owns runtime answers and branch identity.
-                    return {"id": message_id}
-            try:
-                row = await MessagesRepository.upsert_in_session(
-                    session,
-                    thread_id=thread_id,
-                    role=str(role),
-                    message_json={**body.content, "id": message_id},
-                    message_id=message_id,
-                    parent_message_id=parent_id,
-                    format=body.format,
-                    run_config_json=body.runConfig,
-                )
-            except ValueError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            head_update = update(Thread).where(Thread.id == thread_id)
-            if role == "user" and body.format == "aui/v0":
-                # A user edit may update the currently selected node, while a
-                # new user fork appends below the current head.  Permit either
-                # case, but never let a stale branch update win a concurrent
-                # head change.
-                if parent_id is None:
-                    head_update = head_update.where(
-                        or_(
-                            Thread.active_head_message_id.is_(None),
-                            Thread.active_head_message_id == row.message_id,
-                        )
-                    )
-                else:
-                    head_update = head_update.where(
-                        or_(
-                            Thread.active_head_message_id == parent_id,
-                            Thread.active_head_message_id == row.message_id,
-                        )
-                    )
-            elif parent_id is None:
-                head_update = head_update.where(Thread.active_head_message_id.is_(None))
-            else:
-                head_update = head_update.where(
-                    Thread.active_head_message_id == parent_id
-                )
-            await session.execute(
-                head_update.values(
-                    active_head_message_id=row.message_id,
-                    updated_at=datetime.now(UTC),
-                )
-            )
+    try:
+        await MessagesRepository(sessions).persist_branch_node(
+            thread_id=thread_id,
+            message_id=message_id,
+            parent_id=body.parentId,
+            role=str(role),
+            format=body.format,
+            message_json={**body.content, "id": message_id},
+            run_config_json=body.runConfig,
+        )
+    except MessageConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"id": message_id}
 
 
@@ -406,12 +323,17 @@ async def rename_thread(
     if not title:
         raise HTTPException(status_code=422, detail="Thread title must not be empty.")
     thread = await ThreadsRepository(sessions).rename(thread_id, title=title)
-    return thread_to_out(thread)  # type: ignore[arg-type]
+    if thread is None:
+        raise HTTPException(status_code=404, detail="Thread not found.")
+    return thread_to_out(thread)
 
 
 @router.delete("/threads/{thread_id}", status_code=204)
-async def delete_thread(thread_id: str, request: Request) -> None:
-    sessions = request.app.state.db_sessions
+async def delete_thread(
+    thread_id: str,
+    request: Request,
+    sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
+) -> None:
     await require_thread(thread_id, sessions)
     await ThreadsRepository(sessions).delete(thread_id)
     # Retention: a deleted thread's artifact files are removed with it.
@@ -419,17 +341,23 @@ async def delete_thread(thread_id: str, request: Request) -> None:
 
 
 @router.get("/threads/{thread_id}/sources")
-async def list_sources(thread_id: str, request: Request) -> list[dict[str, Any]]:
-    sessions = request.app.state.db_sessions
+async def list_sources(
+    thread_id: str,
+    sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
+) -> list[dict[str, Any]]:
     await require_thread(thread_id, sessions)
     sources = await SourcesRepository(sessions).list_for_thread(thread_id)
     return [
         {
             "id": s.id,
-            "title": s.title,
+            "title": scrub_public_text(s.title),
             "sourceType": s.source_type,
-            "uri": s.uri,
-            "excerpt": cap_source_excerpt(s.excerpt),
+            "uri": scrub_public_text(s.uri) if s.uri is not None else None,
+            "excerpt": (
+                cap_source_excerpt(scrub_public_text(s.excerpt))
+                if s.excerpt is not None
+                else None
+            ),
             "toolCallId": s.tool_call_id,
         }
         for s in sources
@@ -437,8 +365,10 @@ async def list_sources(thread_id: str, request: Request) -> list[dict[str, Any]]
 
 
 @router.get("/threads/{thread_id}/artifacts")
-async def list_artifacts(thread_id: str, request: Request) -> list[dict[str, Any]]:
-    sessions = request.app.state.db_sessions
+async def list_artifacts(
+    thread_id: str,
+    sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
+) -> list[dict[str, Any]]:
     await require_thread(thread_id, sessions)
     artifacts = await ArtifactsRepository(sessions).list_for_thread(thread_id)
     return [artifact_to_out(a) for a in artifacts]
@@ -450,19 +380,20 @@ async def list_feedback(
     sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
 ) -> dict[str, MessageFeedback]:
     await require_thread(thread_id, sessions)
-    async with sessions() as session:
-        rows = (
-            await session.scalars(
-                select(Message).where(
-                    Message.thread_id == thread_id, Message.feedback_json.is_not(None)
-                )
+    rows = await MessagesRepository(sessions).list_feedback_rows(thread_id)
+    result: dict[str, MessageFeedback] = {}
+    for message_id, feedback_json in rows:
+        if not isinstance(feedback_json, dict):
+            continue
+        try:
+            result[message_id] = MessageFeedback.model_validate(feedback_json)
+        except (TypeError, ValidationError):
+            logger.warning(
+                "ignoring invalid persisted feedback for message %s in thread %s",
+                message_id,
+                thread_id,
             )
-        ).all()
-        return {
-            row.message_id: MessageFeedback.model_validate(row.feedback_json)
-            for row in rows
-            if isinstance(row.feedback_json, dict)
-        }
+    return result
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")
@@ -475,42 +406,15 @@ async def save_feedback(
     await require_thread(thread_id, sessions)
     if body.messageId != message_id:
         raise HTTPException(status_code=422, detail="Message ID does not match path.")
-    async with sessions() as session:
-        async with session.begin():
-            message = await session.scalar(
-                select(Message)
-                .where(Message.thread_id == thread_id, Message.message_id == message_id)
-                .with_for_update()
-            )
-            if message is None or message.role != "assistant":
-                raise HTTPException(
-                    status_code=404, detail="Assistant message not found."
-                )
-            run = await session.scalar(
-                select(Run).where(
-                    Run.thread_id == thread_id, Run.output_message_id == message_id
-                )
-            )
-            snapshot = (
-                await session.scalar(select(RunState).where(RunState.run_id == run.id))
-                if run
-                else None
-            )
-            version = (
-                snapshot.state_json.get("run", {}).get("programVersion", "unknown")
-                if snapshot
-                else "unknown"
-            )
-            feedback = MessageFeedback(
-                messageId=message_id,
-                type=body.type,
-                reason=scrub_public_text(body.reason) if body.reason else None,
-                runId=run.id if run else None,
-                branchParentId=message.parent_message_id,
-                programVersion=str(version)[:128],
-            )
-            message.feedback_json = feedback.model_dump(mode="json", exclude_none=True)
-        return feedback
+    feedback = await MessagesRepository(sessions).save_feedback(
+        thread_id=thread_id,
+        message_id=message_id,
+        feedback_type=body.type,
+        reason=body.reason,
+    )
+    if feedback is None:
+        raise HTTPException(status_code=404, detail="Assistant message not found.")
+    return feedback
 
 
 @router.delete("/threads/{thread_id}/messages/{message_id}/feedback", status_code=204)
@@ -520,15 +424,8 @@ async def delete_feedback(
     sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
 ) -> None:
     await require_thread(thread_id, sessions)
-    async with sessions() as session:
-        async with session.begin():
-            message = await session.scalar(
-                select(Message)
-                .where(Message.thread_id == thread_id, Message.message_id == message_id)
-                .with_for_update()
-            )
-            if message is None or message.role != "assistant":
-                raise HTTPException(
-                    status_code=404, detail="Assistant message not found."
-                )
-            message.feedback_json = None
+    deleted = await MessagesRepository(sessions).delete_feedback(
+        thread_id=thread_id, message_id=message_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Assistant message not found.")

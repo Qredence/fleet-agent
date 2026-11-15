@@ -3,12 +3,10 @@
 import contextvars
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable
 
-from fastapi import Request, Response
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.settings import Settings
 
@@ -22,67 +20,131 @@ request_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
 _PUBLIC_PATHS = {"/health", "/ready"}
 
 
-class RequestIdMiddleware(BaseHTTPMiddleware):
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
+class _BodyTooLargeError(BaseException):
+    """Internal sentinel raised by guarded ASGI receive on oversized bodies.
+
+    Inherits from ``BaseException`` rather than ``Exception`` so Starlette's
+    inner ``ServerErrorMiddleware`` does not intercept it and emit a 500
+    response before ``RequestGuardMiddleware`` sends 413.
+    """
+
+
+async def _send_json_error(
+    scope: Scope,
+    receive: Receive,
+    send: Send,
+    status_code: int,
+    detail: str,
+) -> None:
+    response = JSONResponse(status_code=status_code, content={"detail": detail})
+    await response(scope, receive, send)
+
+
+class RequestIdMiddleware:
+    """Pure ASGI middleware attaching a per-request correlation id."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         request_id = uuid.uuid4().hex[:16]
-        request.state.request_id = request_id
+        scope.setdefault("state", {})["request_id"] = request_id
         token = request_id_ctx.set(request_id)
+
+        async def send_with_request_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-Id"] = request_id
+            await send(message)
+
         try:
-            response: Response = await call_next(request)
+            await self.app(scope, receive, send_with_request_id)
         finally:
             request_id_ctx.reset(token)
-        response.headers["X-Request-Id"] = request_id
-        return response
 
 
-class RequestGuardMiddleware(BaseHTTPMiddleware):
-    """Optional API-key auth + request size limit.
+class RequestGuardMiddleware:
+    """Pure ASGI middleware enforcing optional API-key auth and body-size limits.
 
     Auth is only enforced when ``settings.api_key`` is configured — dev runs
     without a key stay open (advisory logged at startup). Every path outside
     ``_PUBLIC_PATHS`` is protected, including un-prefixed routes such as
     ``/metrics`` and the OpenAPI docs.
-
-    The name is deliberate: this middleware does NOT set security headers.
     """
 
     def __init__(self, app: ASGIApp, settings: Settings) -> None:
-        super().__init__(app)
+        self.app = app
         self._settings = settings
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        settings = self._settings
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        if request.url.path not in _PUBLIC_PATHS:
-            content_length = request.headers.get("content-length")
-            if content_length:
-                try:
-                    length = int(content_length)
-                except ValueError:
-                    return JSONResponse(
-                        status_code=400,
-                        content={"detail": "Invalid Content-Length header."},
-                    )
-                if length > settings.max_body_bytes:
-                    return JSONResponse(
-                        status_code=413,
-                        content={"detail": "Request body too large."},
-                    )
+        app_obj = scope.get("app")
+        app_state = getattr(app_obj, "state", None)
+        settings = getattr(app_state, "settings", None) or self._settings
+        path = scope.get("path", "")
+        if path in _PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
 
-            if settings.api_key is not None and request.method != "OPTIONS":
-                provided = request.headers.get("x-api-key")
-                if provided is None or not secrets.compare_digest(
-                    provided, settings.api_key.get_secret_value()
-                ):
-                    return JSONResponse(
-                        status_code=401, content={"detail": "Unauthorized."}
-                    )
-        return await call_next(request)
+        headers = Headers(scope=scope)
+        content_length = headers.get("content-length")
+        if content_length is not None:
+            try:
+                length = int(content_length)
+            except ValueError:
+                await _send_json_error(
+                    scope, receive, send, 400, "Invalid Content-Length header."
+                )
+                return
+            if length < 0:
+                await _send_json_error(
+                    scope, receive, send, 400, "Invalid Content-Length header."
+                )
+                return
+            if length > settings.max_body_bytes:
+                await _send_json_error(
+                    scope, receive, send, 413, "Request body too large."
+                )
+                return
+
+        if settings.api_key is not None and scope.get("method") != "OPTIONS":
+            provided = headers.get("x-api-key")
+            if provided is None or not secrets.compare_digest(
+                provided, settings.api_key.get_secret_value()
+            ):
+                await _send_json_error(scope, receive, send, 401, "Unauthorized.")
+                return
+
+        received_bytes = 0
+        response_started = False
+        max_bytes = settings.max_body_bytes
+
+        async def guarded_receive() -> Message:
+            nonlocal received_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > max_bytes:
+                    raise _BodyTooLargeError
+            return message
+
+        async def tracked_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, guarded_receive, tracked_send)
+        except _BodyTooLargeError:
+            if not response_started:
+                await _send_json_error(
+                    scope, receive, send, 413, "Request body too large."
+                )

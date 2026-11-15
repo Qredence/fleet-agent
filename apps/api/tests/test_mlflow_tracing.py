@@ -231,3 +231,38 @@ def test_metadata_callback_failure_and_disable_do_not_affect_execution(monkeypat
 
     assert configure_mlflow(Settings(mlflow_tracing_enabled=False)) is False
     assert get_metadata_callback() is None
+
+
+def test_configure_mlflow_redacts_tracking_uri_userinfo(caplog, monkeypatch):
+    import logging
+
+    import mlflow
+
+    from app.services.mlflow_observability import _redact_tracking_uri
+
+    assert (
+        _redact_tracking_uri("https://alice:s3cr3t-token@mlflow.example.com:8443/api")
+        == "https://[redacted]@mlflow.example.com:8443/api"
+    )
+    assert (
+        _redact_tracking_uri("http://user:pass@[::1]:5000")
+        == "http://[redacted]@[::1]:5000"
+    )
+    assert (
+        _redact_tracking_uri("https://mlflow.example.com:8443/api")
+        == "https://mlflow.example.com:8443/api"
+    )
+
+    monkeypatch.setattr(mlflow, "set_tracking_uri", lambda uri: None)
+    monkeypatch.setattr(mlflow.dspy, "autolog", lambda **kwargs: None)
+    caplog.set_level(logging.WARNING)
+    enabled = configure_mlflow(
+        Settings(
+            mlflow_tracing_enabled=True,
+            mlflow_tracking_uri="https://alice:top-secret-pass@mlflow.example.com:5000",
+        )
+    )
+    assert enabled is True
+    assert "top-secret-pass" not in caplog.text
+    assert "alice" not in caplog.text
+    assert "[redacted]@mlflow.example.com:5000" in caplog.text

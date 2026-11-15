@@ -17,13 +17,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from app.agent.engine import EngineBuilder
+from app.agent.engine import AgentRunResult, EngineBuilder
 from app.agent.provider import ProviderOverrideError, parse_provider_override
 from app.agui.run import LiveDSPyCoordinator, RunCoordinator
-from app.api.deps import get_sessions, reject_unsupported_user_input
+from app.agui.state import TraceReducer
+from app.api.deps import get_sessions, reject_unsupported_user_input, require_thread
 from app.contracts.agent_capabilities import AgentCapabilities
 from app.contracts.constants import ERROR_MESSAGES
-from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.persistence.run_persistence import (
     ReservationErrorCode,
     RunPersistence,
@@ -111,6 +111,70 @@ async def agent_capabilities(request: Request) -> AgentCapabilities:
     )
 
 
+async def _acquire_run_semaphore(semaphore: asyncio.Semaphore) -> None:
+    """Acquire a global run concurrency slot or fail fast with HTTP 429."""
+    try:
+        await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=429, detail=ERROR_MESSAGES["rate_limited"]
+        ) from None
+
+
+async def _cleanup_failed_reservation(
+    persistence: RunPersistence,
+    input_data: RunAgentInput,
+) -> None:
+    """Best-effort fail a newly queued run if pre-stream setup raises."""
+    failure = AgentRunResult(
+        status="failed",
+        answer=None,
+        process_summary="The agent run failed before streaming started.",
+        termination_reason="failed",
+        error_code="internal_error",
+    )
+    reducer = TraceReducer(thread_id=input_data.thread_id, run_id=input_data.run_id)
+    reducer.complete_run(failure)
+    try:
+        await persistence.run_failed(
+            thread_id=input_data.thread_id,
+            run_id=input_data.run_id,
+            result=failure,
+            state_json=reducer.snapshot_for_persistence(save_status="saved"),
+        )
+    except Exception:
+        logger.exception(
+            "could not clean up reserved run (thread %s, run %s)",
+            input_data.thread_id,
+            input_data.run_id,
+        )
+
+
+def _gated_sse_response(
+    *,
+    stream: AsyncIterator[str],
+    semaphore: asyncio.Semaphore,
+    metrics: MetricsRegistry,
+) -> StreamingResponse:
+    async def gated() -> AsyncIterator[str]:
+        metrics.gauge_delta("active_sse_connections", 1)
+        try:
+            async for chunk in stream:
+                yield chunk
+        finally:
+            try:
+                aclose = getattr(stream, "aclose", None)
+                if callable(aclose):
+                    await aclose()
+            finally:
+                metrics.gauge_delta("active_sse_connections", -1)
+                semaphore.release()
+
+    return StreamingResponse(
+        gated(), media_type="text/event-stream", headers=_SSE_HEADERS
+    )
+
+
 @router.post("/agent")
 async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse:
     messages = body.get("messages", [])
@@ -125,6 +189,8 @@ async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse
         raise RequestValidationError(exc.errors(), body=body) from None
     settings: Settings = request.app.state.settings
     accept = request.headers.get("accept")
+    semaphore: asyncio.Semaphore = request.app.state.run_semaphore
+    metrics: MetricsRegistry = request.app.state.metrics
 
     if settings.agent_mode == "engine":
         try:
@@ -144,14 +210,7 @@ async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse
         # Runs must belong to a persisted thread (FK integrity + no
         # cross-thread writes). Fixtures mode stays thread-agnostic on purpose.
         try:
-            thread = await ThreadsRepository(sessions).get(input_data.thread_id)
-            if thread is None:
-                raise HTTPException(status_code=404, detail="Thread not found.")
-            # Idempotency: an existing runId must not start again.
-            if await RunsRepository(sessions).get(input_data.run_id) is not None:
-                raise HTTPException(
-                    status_code=409, detail="A run with this ID already exists."
-                )
+            await require_thread(input_data.thread_id, sessions)
         except HTTPException:
             raise
         except Exception:
@@ -165,26 +224,19 @@ async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse
                 detail="Run reservation could not be created.",
             ) from None
 
-        # Global concurrency cap: graceful 429 when saturated.
-        semaphore: asyncio.Semaphore = request.app.state.run_semaphore
-        try:
-            await asyncio.wait_for(semaphore.acquire(), timeout=0.1)
-        except TimeoutError:
-            raise HTTPException(
-                status_code=429, detail=ERROR_MESSAGES["rate_limited"]
-            ) from None
+        engine_builder = get_engine_builder(request)
+        await _acquire_run_semaphore(semaphore)
 
         persistence = RunPersistence(sessions)
         try:
-            await persistence.reserve_run(input_data=input_data)
+            reserved_run = await persistence.reserve_run(input_data=input_data)
         except RunReservationError as exc:
             semaphore.release()
             raise _reservation_http_error(exc) from None
         except Exception:
-            # Reservation is the only pre-stream operation that owns the
-            # permit. Never strand capacity when a database/serialization
-            # error occurs before a StreamingResponse is returned.  Driver
-            # details stay in server logs; clients receive a fixed response.
+            # Never strand capacity when reservation fails before a
+            # StreamingResponse is returned. Driver details stay in server
+            # logs; clients receive a fixed response.
             semaphore.release()
             logger.exception(
                 "run reservation failed (thread %s, run %s)",
@@ -196,39 +248,46 @@ async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse
                 detail="Run reservation could not be created.",
             ) from None
 
-        stream = LiveDSPyCoordinator().stream(
+        try:
+            stream = LiveDSPyCoordinator().stream(
+                input_data=input_data,
+                engine_builder=engine_builder,
+                provider_override=provider_override,
+                accept=accept,
+                is_disconnected=request.is_disconnected,
+                persistence=persistence,
+                reserved_run=reserved_run,
+                run_timeout_s=settings.run_timeout_seconds,
+                metrics=metrics,
+            )
+        except Exception:
+            semaphore.release()
+            await _cleanup_failed_reservation(persistence, input_data)
+            logger.exception(
+                "live stream initialization failed (thread %s, run %s)",
+                input_data.thread_id,
+                input_data.run_id,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Run stream could not be started.",
+            ) from None
+
+        return _gated_sse_response(stream=stream, semaphore=semaphore, metrics=metrics)
+
+    await _acquire_run_semaphore(semaphore)
+    try:
+        coordinator = RunCoordinator()
+        events = load_fixture(select_fixture_name(input_data))
+        stream = coordinator.stream(
             input_data=input_data,
-            engine_builder=get_engine_builder(request),
-            provider_override=provider_override,
+            events=events,
             accept=accept,
             is_disconnected=request.is_disconnected,
-            persistence=persistence,
             run_timeout_s=settings.run_timeout_seconds,
-            metrics=request.app.state.metrics,
+            metrics=metrics,
         )
-
-        async def gated() -> AsyncIterator[str]:
-            metrics: MetricsRegistry = request.app.state.metrics
-            metrics.gauge_delta("active_sse_connections", 1)
-            try:
-                async for chunk in stream:
-                    yield chunk
-            finally:
-                metrics.gauge_delta("active_sse_connections", -1)
-                semaphore.release()
-
-        return StreamingResponse(
-            gated(), media_type="text/event-stream", headers=_SSE_HEADERS
-        )
-
-    coordinator = RunCoordinator()
-    events = load_fixture(select_fixture_name(input_data))
-    stream = coordinator.stream(
-        input_data=input_data,
-        events=events,
-        accept=accept,
-        is_disconnected=request.is_disconnected,
-    )
-    return StreamingResponse(
-        stream, media_type="text/event-stream", headers=_SSE_HEADERS
-    )
+    except Exception:
+        semaphore.release()
+        raise
+    return _gated_sse_response(stream=stream, semaphore=semaphore, metrics=metrics)

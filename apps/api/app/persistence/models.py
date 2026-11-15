@@ -143,6 +143,12 @@ class RunState(Base):
             "head_message_id",
             name="uq_run_states_thread_head_message",
         ),
+        Index(
+            "uq_run_states_thread_null_head",
+            "thread_id",
+            unique=True,
+            postgresql_where=text("head_message_id IS NULL"),
+        ),
     )
 
 
@@ -168,6 +174,12 @@ class DspyHistory(Base):
             "thread_id",
             "head_message_id",
             name="uq_dspy_histories_thread_head_message",
+        ),
+        Index(
+            "uq_dspy_histories_thread_null_head",
+            "thread_id",
+            unique=True,
+            postgresql_where=text("head_message_id IS NULL"),
         ),
     )
 

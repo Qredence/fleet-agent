@@ -104,22 +104,19 @@ def map_domain_event(
     if isinstance(event, ArtifactReady):
         # Inline artifact card in the thread (message-scoped); the full record
         # lives in the panel via the state delta above.
-        events.append(
-            CustomEvent(
-                name="artifact",
-                value=make_card(
-                    "artifact",
-                    {
-                        "id": event.artifact.id,
-                        "name": event.artifact.name,
-                        "mediaType": event.artifact.media_type,
-                        "downloadUrl": event.download_url,
-                    },
-                    run_id=reducer.run_id,
-                    message_id=assistant_message_id,
-                ),
-            )
+        card = make_card(
+            "artifact",
+            {
+                "id": event.artifact.id,
+                "name": event.artifact.name,
+                "mediaType": event.artifact.media_type,
+                "downloadUrl": event.download_url,
+            },
+            run_id=reducer.run_id,
+            message_id=assistant_message_id,
         )
+        if card:
+            events.append(CustomEvent(name="artifact", value=card))
     return events
 
 

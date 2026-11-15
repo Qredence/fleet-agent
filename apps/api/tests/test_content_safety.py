@@ -66,12 +66,20 @@ def test_known_secret_formats_are_masked(sample: str) -> None:
 
 def test_scrubbed_json_stays_valid_json() -> None:
     encoded = json.dumps(
-        {"command": "curl -H 'Authorization: Bearer AbCdEf123456789012345678' x"}
+        {
+            "command": "curl -H 'Authorization: Bearer AbCdEf123456789012345678' x",
+            "api_key": "Z9y8x7w6v5u4t3s2r1q0",
+            "secret": "AbCdEf1234567890",
+        }
     )
     scrubbed = scrub_public_text(encoded)
     parsed = json.loads(scrubbed)
     assert "AbCdEf123456789012345678" not in scrubbed
+    assert "Z9y8x7w6v5u4t3s2r1q0" not in scrubbed
+    assert "AbCdEf1234567890" not in scrubbed
     assert parsed["command"].startswith("curl")
+    assert parsed["api_key"] == "[redacted]"
+    assert parsed["secret"] == "[redacted]"
 
 
 @pytest.mark.parametrize(
@@ -318,13 +326,15 @@ def test_stream_scrubber_never_emits_secret_fragments(secret: str, chunk: int) -
     pieces = _stream_in_chunks(text, chunk)
 
     joined = "".join(pieces)
-    # 1. No fragment of the raw secret ever crosses the boundary.
+    secret_value = secret.split(" = ", 1)[-1]
+    # 1. No fragment of the raw secret value ever crosses the boundary.
     for piece in pieces:
-        assert secret[:6] not in piece
+        assert secret_value[:6] not in piece
+        assert secret_value not in piece
         assert secret not in piece
     # 2. Streamed output equals the batch scrub of the full text.
     assert joined == scrub_public_text(text)
-    assert secret not in joined
+    assert secret_value not in joined
     assert "[redacted]" in joined
 
 
@@ -346,21 +356,25 @@ def test_stream_scrubber_masks_whole_secret_arriving_in_one_delta() -> None:
 
 
 def test_stream_scrubber_holds_partial_anchor_prefixes() -> None:
-    """``...the pass`` must not stream before ``word = <secret>`` can arrive."""
+    """``...the pass`` must not stream before ``word = <secret>`` resolves."""
     scrubber = StreamingScrubber(holdback_chars=8)
     secret = "Sup3rS3cretAbCdEf123456"
 
     first = scrubber.push("The pass")
     assert first == ""  # could still continue into "password"
 
-    second = scrubber.push(f"word = {secret}")
-    assert "pass" not in second
+    second = scrubber.push("word = Sup3r")
+    # safe prefix streams; "password" + partial secret stay held
+    assert second == "The "
+
+    third = scrubber.push("S3cretAbCdEf123456")
+    assert secret not in third
+    assert "Sup3r" not in third
 
     remainder = scrubber.flush()
-    joined = first + second + remainder
+    joined = first + second + third + remainder
     assert joined == scrub_public_text(f"The password = {secret}")
-    assert "[redacted]" in joined
-    assert secret not in joined
+    assert joined == "The password = [redacted]"
 
 
 def test_stream_scrubber_holds_pem_body_until_end_line() -> None:
@@ -383,21 +397,60 @@ def test_stream_scrubber_holds_pem_body_until_end_line() -> None:
     assert body not in "".join(pieces)
 
 
-def test_stream_scrubber_benign_anchor_lags_then_flushes() -> None:
-    """A benign anchor word only lags; the flushed text is unchanged."""
+def test_stream_scrubber_benign_anchor_holds_briefly_then_expires() -> None:
+    """A benign anchor holds while ambiguous, then expires and streams past it."""
     scrubber = StreamingScrubber(holdback_chars=8)
     text = "Bearer of good news arrived today for the whole team."
 
-    pieces = []
-    for index in range(0, len(text), 5):
-        pieces.append(scrubber.push(text[index : index + 5]))
-    pieces.append(scrubber.flush())
+    first = scrubber.push("Bearer ")
+    assert first == ""  # unresolved Bearer header could still be a secret
 
-    joined = "".join(pieces)
-    assert joined == text  # benign text survives unmasked
+    mid = scrubber.push("of good news arrived today for the ")
+    assert "Bearer of good" in mid  # expired at whitespace after "of"
+
+    joined = first + mid + scrubber.push("whole team.") + scrubber.flush()
+    assert joined == text
     assert "[redacted]" not in joined
-    # The anchor held the stream back mid-field instead of streaming past it.
-    assert not any("Bearer of good" in piece for piece in pieces[:-1])
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_mid"),
+    [
+        (
+            "A task-oriented workflow breaks work into clear milestones for teams.",
+            "task-oriented",
+        ),
+        (
+            "The password policy requires regular key rotation across environments.",
+            "password policy",
+        ),
+        (
+            "We saw Bearer tokens and -----BEGIN plain text without private headers.",
+            "Bearer tokens",
+        ),
+    ],
+)
+def test_stream_scrubber_does_not_stall_on_benign_words_or_false_anchors(
+    text: str, expected_mid: str
+) -> None:
+    pieces = []
+    scrubber = StreamingScrubber(holdback_chars=8)
+    for index in range(0, len(text), 4):
+        pieces.append(scrubber.push(text[index : index + 4]))
+    before_flush = "".join(pieces)
+    assert expected_mid in before_flush
+    assert before_flush + scrubber.flush() == text
+
+
+def test_stream_scrubber_bounded_token_extending_past_match_is_not_over_redacted() -> (
+    None
+):
+    scrubber = StreamingScrubber(holdback_chars=0)
+    first = scrubber.push("AKIAIOSFODNN7EXAMPLE")
+    second = scrubber.push("EXTRA ")
+    remainder = scrubber.flush()
+    assert first + second + remainder == "AKIAIOSFODNN7EXAMPLEEXTRA "
+    assert "[redacted]" not in (first + second + remainder)
 
 
 def test_stream_scrubber_streams_clean_text_with_progress() -> None:

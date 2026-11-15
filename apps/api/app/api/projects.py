@@ -74,8 +74,11 @@ async def rename_project(
 
 
 @router.delete("/projects/{project_id}", status_code=204)
-async def delete_project(project_id: str, request: Request) -> None:
-    sessions = request.app.state.db_sessions
+async def delete_project(
+    project_id: str,
+    request: Request,
+    sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)],
+) -> None:
     await require_project(project_id, sessions)
     thread_ids = [
         thread.id

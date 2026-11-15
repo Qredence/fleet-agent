@@ -114,3 +114,61 @@ async def test_timed_events_preserve_order_with_zero_time_scale():
     types = [e["type"] for e in events]
     assert types[-1] == "RUN_FINISHED"
     assert types.index("TEXT_MESSAGE_START") < types.index("TOOL_CALL_RESULT")
+
+
+async def test_bind_run_ids_rewrites_custom_event_ids_without_mutating_source():
+    from ag_ui.core import CustomEvent, EventType
+
+    from app.agui.run import TimedEvent
+
+    source_value = {"type": "artifact", "runId": "fixture-run", "messageId": "msg-1"}
+    timed = [
+        TimedEvent(
+            at_ms=0,
+            event=CustomEvent(
+                type=EventType.CUSTOM, name="artifact", value=source_value
+            ),
+        )
+    ]
+    events = await collect(coordinator(timed))
+    custom = next(event for event in events if event["type"] == "CUSTOM")
+    assert custom["value"]["runId"] == "r-client"
+    assert custom["value"]["messageId"] == "msg-1-r-client"
+    assert source_value == {
+        "type": "artifact",
+        "runId": "fixture-run",
+        "messageId": "msg-1",
+    }
+
+
+async def test_run_coordinator_timeout_emits_agent_timeout_and_records_metrics():
+    from ag_ui.core import EventType, RunStartedEvent
+
+    from app.agui.run import TimedEvent
+    from app.services.metrics import MetricsRegistry
+
+    registry = MetricsRegistry()
+    slow_events = [
+        TimedEvent(
+            at_ms=500,
+            event=RunStartedEvent(
+                type=EventType.RUN_STARTED, thread_id="t-src", run_id="r-src"
+            ),
+        )
+    ]
+    stream = RunCoordinator(time_scale=1.0).stream(
+        input_data=make_input(),
+        events=slow_events,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        run_timeout_s=0.02,
+        metrics=registry,
+    )
+    events = await collect(stream)
+    assert len(events) == 1
+    assert events[0]["type"] == "RUN_ERROR"
+    assert events[0]["code"] == "agent_timeout"
+    snapshot = registry.snapshot()
+    assert snapshot["counters"]["agent_runs_total"] == 1
+    assert snapshot["counters"]["agent_run_errors_total"] == 1
+    assert snapshot["durations"]["agent_run_duration_ms"]["count"] == 1

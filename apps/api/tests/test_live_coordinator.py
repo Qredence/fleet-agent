@@ -557,3 +557,117 @@ async def test_run_only_engine_falls_back_to_completion_time_answer():
     assert types[-1] == "RUN_FINISHED"
     content = [e for e in events if e["type"] == "TEXT_MESSAGE_CONTENT"]
     assert "".join(e["delta"] for e in content) == "Fallback answer."
+
+
+async def test_live_coordinator_timeout_bounds_unresponsive_engine_cancel(monkeypatch):
+    from ag_ui.core import RunAgentInput
+
+    from app.agui import run as agui_run
+
+    monkeypatch.setattr(agui_run, "_CANCEL_SETTLEMENT_TIMEOUT_S", 0.05)
+    stop_gate = asyncio.Event()
+
+    class _StubbornEngine:
+        async def run(self, *, user_request, history, context):  # noqa: ANN001, ANN202
+            del user_request, history, context
+            try:
+                await stop_gate.wait()
+            except asyncio.CancelledError:
+                await stop_gate.wait()
+
+    def builder(bus, *, thread_id, provider_override=None, approved=None):
+        del bus, thread_id, provider_override, approved
+        return _StubbornEngine()
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input(run="run-timeout-stubborn")),
+        engine_builder=builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        run_timeout_s=0.02,
+    )
+    chunks = await asyncio.wait_for(_collect_stream(stream), timeout=1.0)
+    stop_gate.set()
+    events = [json.loads(chunk.removeprefix("data: ").strip()) for chunk in chunks]
+    assert events[-1]["type"] == "RUN_ERROR"
+    assert events[-1]["code"] == "agent_timeout"
+
+
+async def _collect_stream(stream):
+    return [chunk async for chunk in stream]
+
+
+async def test_live_coordinator_aclose_cancels_engine_task():
+    from ag_ui.core import RunAgentInput
+
+    from app.contracts.domain import StepStarted
+
+    engine_started = asyncio.Event()
+    engine_cancelled = asyncio.Event()
+
+    class _BlockingEngine:
+        def __init__(self, bus: RunEventBus) -> None:
+            self._bus = bus
+
+        async def run(self, *, user_request, history, context):  # noqa: ANN001, ANN202
+            del user_request, history, context
+            self._bus.publish_from_loop(
+                StepStarted(step_id="step-wait", phase="research", title="Waiting")
+            )
+            engine_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                engine_cancelled.set()
+                raise
+
+    def builder(bus, *, thread_id, provider_override=None, approved=None):
+        del thread_id, provider_override, approved
+        return _BlockingEngine(bus)
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input(run="run-aclose")),
+        engine_builder=builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    chunks = [await anext(stream) for _ in range(5)]
+    assert "RUN_STARTED" in chunks[0]
+    await asyncio.wait_for(engine_started.wait(), timeout=1.0)
+    await stream.aclose()
+    assert engine_cancelled.is_set()
+
+
+async def test_live_coordinator_post_settlement_emission_failure_still_emits_run_error(
+    monkeypatch,
+):
+    from ag_ui.core import RunAgentInput, StateDeltaEvent
+    from ag_ui.encoder import EventEncoder
+
+    original_encode = EventEncoder.encode
+
+    def fail_save_outcome(self, event):
+        if isinstance(event, StateDeltaEvent) and any(
+            (op.get("path") if isinstance(op, dict) else getattr(op, "path", None))
+            == "/run/saveStatus"
+            for op in event.delta
+        ):
+            raise RuntimeError("socket encode failure")
+        return original_encode(self, event)
+
+    monkeypatch.setattr(EventEncoder, "encode", fail_save_outcome)
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=RunAgentInput.model_validate(run_input(run="run-post-settle-err")),
+        engine_builder=scripted_builder([[submit_call(answer="Answer.")]]),
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+    types = [event["type"] for event in events]
+    assert types.count("TEXT_MESSAGE_END") == 1
+    assert types.count("RUN_ERROR") == 1
+    assert types[-1] == "RUN_ERROR"
+    assert "socket encode failure" not in json.dumps(events)

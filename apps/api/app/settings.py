@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _APP_DIR = Path(__file__).resolve().parent
@@ -29,6 +31,16 @@ class Settings(BaseSettings):
         description="Exact origins allowed to call the API. No wildcards.",
     )
     cors_allow_credentials: bool = Field(default=True)
+
+    @model_validator(mode="after")
+    def _reject_wildcard_cors_with_credentials(self) -> Settings:
+        if self.cors_allow_credentials and any(
+            origin.strip() == "*" for origin in self.cors_origins
+        ):
+            raise ValueError(
+                "cors_origins must not contain '*' when cors_allow_credentials is True."
+            )
+        return self
 
     llm_model: str = Field(
         default="openai/gpt-4o-mini",

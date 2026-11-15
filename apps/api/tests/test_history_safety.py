@@ -65,3 +65,17 @@ def test_bootstrap_state_is_strictly_safe_and_caps_source_excerpt() -> None:
     assert "next_thought" not in str(safe)
     assert "errorCode" not in safe["run"]
     assert len(safe["sources"][0]["excerpt"]) == 300
+
+
+def test_sanitizer_scrubs_secrets_and_preserves_valid_json_values() -> None:
+    value = {
+        "role": "assistant",
+        "parts": [
+            {"type": "text", "text": "Use key sk-proj-4ZqY9wF2xQ7bR1mK3nD8vT5c"},
+            {"type": "tool-call", "argsText": '{"api_key": "Z9y8x7w6v5u4t3s2r1q0"}'},
+        ],
+    }
+
+    sanitized = sanitize_message_content(value)
+    assert sanitized["parts"][0]["text"] == "Use key [redacted]"
+    assert sanitized["parts"][1]["argsText"] == '{"api_key": "[redacted]"}'

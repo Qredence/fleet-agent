@@ -27,7 +27,7 @@ class MetadataTracingCallback(BaseCallback):  # type: ignore[misc]
         except Exception:  # noqa: BLE001 — telemetry must never fail execution
             return
 
-    def _end(self, call_id: str, exception: Exception | None) -> None:
+    def _end(self, call_id: str, exception: BaseException | None) -> None:
         with self._lock:
             span = self._spans.pop(call_id, None)
         if span is None:
@@ -43,7 +43,7 @@ class MetadataTracingCallback(BaseCallback):  # type: ignore[misc]
         self._start(call_id, "dspy.module", "CHAIN")
 
     def on_module_end(
-        self, call_id: str, outputs: Any, exception: Exception | None = None
+        self, call_id: str, outputs: Any, exception: BaseException | None = None
     ) -> None:
         self._end(call_id, exception)
 
@@ -51,7 +51,7 @@ class MetadataTracingCallback(BaseCallback):  # type: ignore[misc]
         self._start(call_id, "dspy.lm", "LLM")
 
     def on_lm_end(
-        self, call_id: str, outputs: Any, exception: Exception | None = None
+        self, call_id: str, outputs: Any, exception: BaseException | None = None
     ) -> None:
         self._end(call_id, exception)
 
@@ -61,7 +61,7 @@ class MetadataTracingCallback(BaseCallback):  # type: ignore[misc]
         self._start(call_id, "dspy.tool", "TOOL")
 
     def on_tool_end(
-        self, call_id: str, outputs: Any, exception: Exception | None = None
+        self, call_id: str, outputs: Any, exception: BaseException | None = None
     ) -> None:
         self._end(call_id, exception)
 

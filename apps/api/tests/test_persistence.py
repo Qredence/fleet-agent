@@ -826,3 +826,233 @@ async def test_text_attachment_is_persisted_without_upload_storage(db_sessions):
         )
         assert response.status_code == 200, response.text
     assert len(await MessagesRepository(db_sessions).list_for_thread(thread_id)) == 1
+
+
+async def test_concurrent_null_head_upserts_enforce_single_row(db_sessions):
+    import asyncio
+
+    from sqlalchemy import func, select
+
+    from app.persistence.models import DspyHistory, RunState
+    from app.persistence.repositories import (
+        DspyHistoriesRepository,
+        RunStatesRepository,
+    )
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+
+    async def upsert_history(idx: int) -> None:
+        async with db_sessions() as session:
+            async with session.begin():
+                await DspyHistoriesRepository.upsert_in_session(
+                    session,
+                    thread_id=thread_id,
+                    head_message_id=None,
+                    schema_version=1,
+                    dspy_version="3.5.0",
+                    history_json={"messages": [{"idx": idx}]},
+                )
+
+    async def upsert_state(idx: int) -> None:
+        async with db_sessions() as session:
+            async with session.begin():
+                await RunStatesRepository.upsert_in_session(
+                    session,
+                    thread_id=thread_id,
+                    head_message_id=None,
+                    state_json={"turn": idx},
+                    run_id=None,
+                )
+
+    await asyncio.gather(
+        *(upsert_history(i) for i in range(6)),
+        *(upsert_state(i) for i in range(6)),
+    )
+
+    async with db_sessions() as session:
+        history_count = await session.scalar(
+            select(func.count())
+            .select_from(DspyHistory)
+            .where(
+                DspyHistory.thread_id == thread_id,
+                DspyHistory.head_message_id.is_(None),
+            )
+        )
+        state_count = await session.scalar(
+            select(func.count())
+            .select_from(RunState)
+            .where(
+                RunState.thread_id == thread_id,
+                RunState.head_message_id.is_(None),
+            )
+        )
+    assert history_count == 1
+    assert state_count == 1
+
+
+async def test_bootstrap_prefers_active_branch_run_over_ancestor_state(db_sessions):
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from app.persistence.models import Message, Run, RunState, Thread
+    from app.persistence.repositories import ThreadsRepository
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    base_time = datetime.now(UTC)
+
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add_all(
+                [
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread_id,
+                        message_id="u1",
+                        role="user",
+                        message_json={"role": "user", "content": "q1"},
+                        created_at=base_time,
+                    ),
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread_id,
+                        message_id="a1",
+                        role="assistant",
+                        parent_message_id="u1",
+                        message_json={"role": "assistant", "content": "a1"},
+                        created_at=base_time + timedelta(seconds=1),
+                    ),
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread_id,
+                        message_id="u2",
+                        role="user",
+                        parent_message_id="a1",
+                        message_json={"role": "user", "content": "q2"},
+                        created_at=base_time + timedelta(seconds=2),
+                    ),
+                    Message(
+                        id=str(uuid.uuid4()),
+                        thread_id=thread_id,
+                        message_id="u2b",
+                        role="user",
+                        parent_message_id="a1",
+                        message_json={"role": "user", "content": "q2b"},
+                        created_at=base_time + timedelta(seconds=3),
+                    ),
+                ]
+            )
+            session.add(
+                Run(
+                    id="run-1",
+                    thread_id=thread_id,
+                    status="completed",
+                    input_message_id="u1",
+                    output_message_id="a1",
+                    continuation_message_id=None,
+                    reserved_at=base_time,
+                    finished_at=base_time + timedelta(seconds=1),
+                )
+            )
+            session.add(
+                RunState(
+                    id=str(uuid.uuid4()),
+                    thread_id=thread_id,
+                    head_message_id="a1",
+                    run_id="run-1",
+                    state_json={
+                        "threadId": thread_id,
+                        "run": {"id": "run-1", "status": "completed"},
+                    },
+                    updated_at=base_time + timedelta(seconds=1),
+                )
+            )
+            session.add(
+                Run(
+                    id="run-2",
+                    thread_id=thread_id,
+                    status="running",
+                    input_message_id="u2",
+                    continuation_message_id="a1",
+                    reserved_at=base_time + timedelta(seconds=2),
+                )
+            )
+            thread_row = await session.get(Thread, thread_id)
+            assert thread_row is not None
+            thread_row.active_head_message_id = "u2"
+
+    boot_active = await ThreadsRepository(db_sessions).get_bootstrap_data(
+        thread_id, owner_id="local"
+    )
+    assert boot_active is not None
+    assert boot_active.state_row is not None
+    assert boot_active.state_row.run_id == "run-1"
+    assert boot_active.latest_run is not None
+    assert boot_active.latest_run.id == "run-2"
+    assert boot_active.latest_run.status == "running"
+
+    async with db_sessions() as session:
+        async with session.begin():
+            thread_row = await session.get(Thread, thread_id)
+            assert thread_row is not None
+            thread_row.active_head_message_id = "u2b"
+
+    boot_sibling = await ThreadsRepository(db_sessions).get_bootstrap_data(
+        thread_id, owner_id="local"
+    )
+    assert boot_sibling is not None
+    assert boot_sibling.state_row is not None
+    assert boot_sibling.state_row.run_id == "run-1"
+    assert boot_sibling.latest_run is not None
+    assert boot_sibling.latest_run.id == "run-1"
+
+
+async def test_messages_and_sources_scrub_secrets_on_read_and_write(db_sessions):
+    import uuid
+
+    from app.persistence.models import Message, Run
+    from app.persistence.repositories import MessagesRepository, SourcesRepository
+
+    _, thread_id = await seed_project_and_thread(db_sessions)
+    openai_secret = "sk-1234567890abcdefghijklmnop"
+    gh_secret = "ghp_1234567890abcdefghijklmnopqrstuvwx"
+
+    async with db_sessions() as session:
+        async with session.begin():
+            session.add(
+                Run(id="run-src-scrub", thread_id=thread_id, status="completed")
+            )
+            session.add(
+                Message(
+                    id=str(uuid.uuid4()),
+                    thread_id=thread_id,
+                    message_id="m-legacy",
+                    role="assistant",
+                    message_json={
+                        "id": "m-legacy",
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": f"key={openai_secret}"}],
+                    },
+                )
+            )
+
+    await SourcesRepository(db_sessions).add(
+        source_id="src-secret",
+        thread_id=thread_id,
+        run_id="run-src-scrub",
+        tool_call_id=None,
+        title=f"Doc {gh_secret}",
+        source_type="web",
+        uri=f"https://example.com/?token={gh_secret}",
+        excerpt=f"body with {gh_secret}",
+    )
+
+    messages = await MessagesRepository(db_sessions).list_for_thread(thread_id)
+    assert openai_secret not in str(messages)
+    assert "[redacted]" in str(messages)
+
+    sources = await SourcesRepository(db_sessions).list_for_thread(thread_id)
+    assert len(sources) == 1
+    assert gh_secret not in (
+        sources[0].title + (sources[0].uri or "") + (sources[0].excerpt or "")
+    )
+    assert "[redacted]" in sources[0].title
