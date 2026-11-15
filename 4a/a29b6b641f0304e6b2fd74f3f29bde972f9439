@@ -1,0 +1,82 @@
+apps/api/app/agent/callbacks.py
+  h_f276322eb5eb9f 9,16-21,81-98,104,122,167,212,227,246
+apps/api/app/agent/engine.py
+  h_f276322eb5eb9f 14,18,55,361-368
+apps/api/app/agent/gateway.py
+  h_f276322eb5eb9f 17,81-84,111-133,138,140-146,150,153,155-157,161,163,175,178
+apps/api/app/agent/instrumented.py
+  h_f276322eb5eb9f 14-15,45-87
+apps/api/app/agent/program.py
+  h_f276322eb5eb9f 15-22,214,271-280,282
+apps/api/app/agent/routing.py
+  h_f276322eb5eb9f 42-46,48-53,55-56,60-61,143-158,167-171
+apps/api/app/agent/signature.py
+  h_f276322eb5eb9f 22,25,72-73,75,147-148
+apps/api/app/agent/tool_registry.py
+  h_f276322eb5eb9f 50
+apps/api/app/agent/tools/web.py
+  h_f276322eb5eb9f 18,166,185,205,209-210,219-220,265,269-276
+apps/api/app/agent/tools/workspace.py
+  h_f276322eb5eb9f 240-243,262,297-298,538-539
+apps/api/app/contracts/cards.py
+  h_f276322eb5eb9f 4-6,10-11,15-92,102-104,114-123,125,133-135,137,140,144,147,153,172,174-188,191
+apps/api/app/contracts/thread_bootstrap.py
+  h_f276322eb5eb9f 6,10-11,87
+apps/api/evals/agent_tool_routing.py
+  h_f276322eb5eb9f 17-24,132-149,171,186,192-195,197-201,210-228,230,237
+apps/api/evals/fixtures/code/test_calc.py
+  h_f276322eb5eb9f 1
+apps/api/evals/mlflow_tracking.py
+  h_f276322eb5eb9f 19,26,161-162,177-180
+apps/api/evals/optimize.py
+  h_f276322eb5eb9f 73-79
+apps/api/evals/product_tasks.py
+  h_f276322eb5eb9f 200-202,217,261
+apps/api/evals/run.py
+  h_f276322eb5eb9f 46,61,129,144,163-168,171
+apps/api/evals/scorers.py
+  h_f276322eb5eb9f 74,79-81,86-94,96-99
+apps/api/tests/helpers/scripted_lm.py
+  h_f276322eb5eb9f 246-248,254,257-261
+apps/api/tests/test_agent_construction.py
+  h_f276322eb5eb9f 207
+apps/api/tests/test_agent_endpoint_engine_mode.py
+  h_f276322eb5eb9f 156,208
+apps/api/tests/test_agent_tool_routing.py
+  h_f276322eb5eb9f 229-247
+apps/api/tests/test_callbacks.py
+  h_f276322eb5eb9f 4,229,231,237,243-286
+apps/api/tests/test_eval_scoring.py
+  h_f276322eb5eb9f 174-256
+apps/api/tests/test_fleet_agent_routing.py
+  h_f276322eb5eb9f 119-121,144,146-147,198-200,210-212,451-544
+apps/api/tests/test_gateway.py
+  h_f276322eb5eb9f 394-467
+apps/api/tests/test_mlflow_scorers.py
+  h_f276322eb5eb9f 106-108,110-134
+apps/api/tests/test_mlflow_tracking.py
+  h_f276322eb5eb9f 226-229,242,245-246
+apps/api/tests/test_router_optimize.py
+  h_f276322eb5eb9f 444-465
+apps/api/tests/test_shared_card_contract.py
+  h_f276322eb5eb9f 1,10-12,75-147
+apps/api/tests/test_tool_registry.py
+  h_f276322eb5eb9f 2,15,24-28
+apps/api/tests/test_tools_web.py
+  h_f276322eb5eb9f 138-197
+apps/api/tests/test_workspace_tools.py
+  h_f276322eb5eb9f 257-319
+packages/contracts/README.md
+  h_f276322eb5eb9f 10,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4aa29b6b641f0304e6b2fd74f3f29bde972f9439",
+  "prompts": {},
+  "humans": {
+    "h_f276322eb5eb9f": {
+      "author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
