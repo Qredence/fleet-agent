@@ -5,6 +5,7 @@ import { ChevronRightIcon } from 'lucide-react'
 import { useAuiState } from '@assistant-ui/react'
 import { useAgUiState } from '@assistant-ui/react-ag-ui'
 
+import { RunSaveNotice } from '@/features/agent-runtime/run-save-notice'
 import { DecisionCard } from './decision-card'
 import { ProcessStepCard } from './process-step-card'
 import {
@@ -46,8 +47,7 @@ export function RunActivityPanel() {
 
   return (
     <section aria-label="Activity" className="h-full overflow-y-auto p-4">
-      {agentState?.run.saveStatus === 'saved' && <p role="status" className="text-xs text-muted-foreground">Saved</p>}
-      {agentState?.run.saveStatus === 'failed' && <UnsavedAnswer />}
+      <RunSaveNotice />
       <h3 className={cn(mono, 'mb-2 text-foreground/45 font-normal')}>
         Process timeline
       </h3>
@@ -320,22 +320,7 @@ export function RunActivityInlineContent({
   )
 }
 
-export function UnsavedAnswer() {
-  const answer = useAuiState((state) => state.thread.messages.filter((message) => message.role === 'assistant').at(-1)?.content.filter((part) => part.type === 'text').map((part) => part.type === 'text' ? part.text : '').join('\n') ?? '')
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([answer], { type: 'text/markdown;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'fleet-agent-answer.md'
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-  return <div role="alert" className="mb-3 rounded border border-amber-500/30 p-3 text-sm">
-    <p>Saving failed. Reloading may lose this answer and its process state.</p>
-    <button type="button" onClick={() => void navigator.clipboard.writeText(answer)} className="me-3 underline">Copy answer</button>
-    <button type="button" onClick={download} className="underline">Download Markdown</button>
-  </div>
-}
+export { UnsavedAnswer } from '@/features/agent-runtime/run-save-notice'
 
 function ToolExecutionSummary({
   tool,

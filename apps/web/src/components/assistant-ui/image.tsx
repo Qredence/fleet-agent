@@ -22,6 +22,11 @@ import type {
   ImageMessagePart,
   ImageMessagePartComponent,
 } from "@assistant-ui/react";
+import {
+  SAFE_IMAGE_MIME_TYPES,
+  sanitizeDataUri,
+  sanitizeImageSrc,
+} from "@/lib/url-safety";
 import { cn } from "@/lib/utils";
 
 const extensionForMimeType = (mimeType?: string): string => {
@@ -35,17 +40,21 @@ const extensionForMimeType = (mimeType?: string): string => {
       return "webp";
     case "image/gif":
       return "gif";
-    case "image/svg+xml":
-      return "svg";
+    case "image/avif":
+      return "avif";
     default:
       return "png";
   }
 };
 
 const dataUriToBlob = (dataUri: string): Blob => {
-  const commaIndex = dataUri.indexOf(",");
-  const meta = commaIndex >= 0 ? dataUri.slice(0, commaIndex) : dataUri;
-  const data = commaIndex >= 0 ? dataUri.slice(commaIndex + 1) : "";
+  const safeUri = sanitizeDataUri(dataUri, SAFE_IMAGE_MIME_TYPES);
+  if (!safeUri) {
+    throw new Error("Blocked unsafe image data URI.");
+  }
+  const commaIndex = safeUri.indexOf(",");
+  const meta = commaIndex >= 0 ? safeUri.slice(0, commaIndex) : safeUri;
+  const data = commaIndex >= 0 ? safeUri.slice(commaIndex + 1) : "";
   const mime =
     meta.match(/data:([^;]+)/i)?.[1]?.toLowerCase() ??
     "application/octet-stream";
@@ -72,13 +81,15 @@ const downloadImagePart = (
   part: Pick<ImageMessagePart, "image" | "filename">,
 ): void => {
   if (typeof document === "undefined") return;
-  const ext = extensionForMimeType(mimeFromImage(part.image));
+  const safeSrc = sanitizeImageSrc(part.image);
+  if (!safeSrc) return;
+  const ext = extensionForMimeType(mimeFromImage(safeSrc));
   const filename = part.filename ?? `image.${ext}`;
-  const isDataUri = /^data:/i.test(part.image);
+  const isDataUri = /^data:/i.test(safeSrc);
   const objectUrl = isDataUri
-    ? URL.createObjectURL(dataUriToBlob(part.image))
+    ? URL.createObjectURL(dataUriToBlob(safeSrc))
     : null;
-  const href = objectUrl ?? part.image;
+  const href = objectUrl ?? safeSrc;
   const a = document.createElement("a");
   a.href = href;
   a.download = filename;
@@ -99,10 +110,14 @@ const copyImagePart = async (
   ) {
     throw new Error("Clipboard API is not available in this environment.");
   }
-  const blob = /^data:/i.test(part.image)
-    ? dataUriToBlob(part.image)
-    : await fetch(part.image).then((r) => r.blob());
-  const mime = mimeFromImage(part.image) ?? blob.type ?? "image/png";
+  const safeSrc = sanitizeImageSrc(part.image);
+  if (!safeSrc) {
+    throw new Error("Blocked unsafe image source.");
+  }
+  const blob = /^data:/i.test(safeSrc)
+    ? dataUriToBlob(safeSrc)
+    : await fetch(safeSrc).then((r) => r.blob());
+  const mime = mimeFromImage(safeSrc) ?? blob.type ?? "image/png";
   await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
 };
 
@@ -169,18 +184,19 @@ function ImagePreview({
   const [loadedSrc, setLoadedSrc] = useState<string | undefined>(undefined);
   const [errorSrc, setErrorSrc] = useState<string | undefined>(undefined);
 
-  const loaded = loadedSrc === src;
-  const error = errorSrc === src;
+  const safeSrc = typeof src === "string" ? sanitizeImageSrc(src) : null;
+  const loaded = Boolean(safeSrc) && loadedSrc === safeSrc;
+  const error = !safeSrc || errorSrc === safeSrc;
 
   useEffect(() => {
     if (
-      typeof src === "string" &&
+      safeSrc &&
       imgRef.current?.complete &&
       imgRef.current.naturalWidth > 0
     ) {
-      setLoadedSrc(src);
+      setLoadedSrc(safeSrc);
     }
-  }, [src]);
+  }, [safeSrc]);
 
   return (
     <div
@@ -205,7 +221,7 @@ function ImagePreview({
       ) : (
         <img
           ref={imgRef}
-          src={src}
+          src={safeSrc ?? undefined}
           alt={alt}
           className={cn(
             "block h-auto w-full object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10",
@@ -213,11 +229,11 @@ function ImagePreview({
             className,
           )}
           onLoad={(e) => {
-            if (typeof src === "string") setLoadedSrc(src);
+            if (safeSrc) setLoadedSrc(safeSrc);
             onLoad?.(e);
           }}
           onError={(e) => {
-            if (typeof src === "string") setErrorSrc(src);
+            if (safeSrc) setErrorSrc(safeSrc);
             onError?.(e);
           }}
           {...props}
@@ -254,6 +270,7 @@ type ImageZoomProps = PropsWithChildren<{
 }>;
 
 function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
+  const safeSrc = sanitizeImageSrc(src);
   const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -261,7 +278,9 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
     setIsMounted(true);
   }, []);
 
-  const handleOpen = () => setIsOpen(true);
+  const handleOpen = () => {
+    if (safeSrc) setIsOpen(true);
+  };
   const handleClose = () => setIsOpen(false);
 
   useEffect(() => {
@@ -296,6 +315,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
       </div>
       {isMounted &&
         isOpen &&
+        safeSrc &&
         createPortal(
           <div
             data-slot="image-zoom-overlay"
@@ -308,7 +328,7 @@ function ImageZoom({ src, alt = "Image preview", children }: ImageZoomProps) {
           >
             <img
               data-slot="image-zoom-content"
-              src={src}
+              src={safeSrc}
               alt={alt}
               className="aui-image-zoom-content fade-in zoom-in-95 animate-in max-h-[90vh] max-w-[90vw] cursor-zoom-out object-contain outline outline-1 -outline-offset-1 outline-white/10 duration-200"
               onClick={(e) => {

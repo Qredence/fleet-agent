@@ -1,4 +1,5 @@
 import { useWorkspaceStore } from '@/state/workspace-store'
+import { useIsCompact } from '@/hooks/use-media-query'
 import { cardData } from './card-contract'
 import { useState } from 'react'
 
@@ -218,6 +219,7 @@ function InlineSources({ data }: { data: unknown }) {
   const raw = cardData(data, 'sources')
   const openPanel = useWorkspaceStore((state) => state.setProcessPanelOpen)
   const openSheet = useWorkspaceStore((state) => state.setProcessSheetOpen)
+  const isCompact = useIsCompact()
   const setTab = useWorkspaceStore((state) => state.setProcessPanelTab)
   const select = useWorkspaceStore((state) => state.setSelectedSourceId)
   const [open, setOpen] = useState(false)
@@ -228,7 +230,7 @@ function InlineSources({ data }: { data: unknown }) {
       open={open}
       onOpenChange={setOpen}
       className="py-2"
-    />{Array.isArray(raw?.sources) && raw.sources.map((source, index) => isRecord(source) && typeof source.sourceId === 'string' ? <button key={source.sourceId} type="button" className="me-2 text-xs underline" onClick={() => { openPanel(true); openSheet(true); setTab('sources'); select(String(source.sourceId)) }}>Inspect source {index + 1}</button> : null)}</div>
+    />{Array.isArray(raw?.sources) && raw.sources.map((source, index) => isRecord(source) && typeof source.sourceId === 'string' ? <button key={source.sourceId} type="button" className="me-2 text-xs underline" onClick={() => { openPanel(true); if (isCompact) openSheet(true); setTab('sources'); select(String(source.sourceId)) }}>Inspect source {index + 1}</button> : null)}</div>
   )
 }
 

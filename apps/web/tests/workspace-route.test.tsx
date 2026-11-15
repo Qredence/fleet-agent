@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeMocks = vi.hoisted(() => ({
@@ -211,5 +211,81 @@ describe('WorkspaceRoute without an active conversation', () => {
     )
     expect(routeMocks.createThread).toHaveBeenCalledWith('project_1')
     expect(routeMocks.createThread).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts a conversation when switching to a second empty project', async () => {
+    let navTo: ((path: string) => void) | undefined
+    function NavHelper() {
+      navTo = useNavigate()
+      return null
+    }
+
+    routeMocks.listThreads.mockResolvedValue([])
+    routeMocks.createThread.mockImplementation(async (id: string) => {
+      const created = {
+        ...placeholderThread,
+        id: `thread_${id}`,
+        projectId: id,
+      }
+      routeMocks.listThreads.mockResolvedValueOnce([created])
+      routeMocks.fetchBootstrap.mockResolvedValueOnce({
+        ...bootstrap,
+        thread: created,
+        threadId: undefined,
+      } as ThreadBootstrap)
+      return created
+    })
+
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/project_1']}>
+          <NavHelper />
+          <Routes>
+            <Route path="/projects/:projectId" element={<WorkspaceRoute />} />
+            <Route
+              path="/projects/:projectId/threads/:threadId"
+              element={<WorkspaceRoute />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByTestId('workspace-title')).toHaveTextContent(
+      'New conversation',
+    )
+    expect(routeMocks.createThread).toHaveBeenCalledWith('project_1')
+
+    routeMocks.listThreads.mockResolvedValue([])
+    await act(async () => {
+      navTo?.('/projects/project_2')
+    })
+
+    await waitFor(() => {
+      expect(routeMocks.createThread).toHaveBeenCalledWith('project_2')
+    })
+  })
+
+  it('renders an error with retry when threads fail to load', async () => {
+    routeMocks.listThreads.mockRejectedValueOnce(new Error('network down'))
+
+    renderRoute('/projects/project_1')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Unable to load conversations' }),
+    ).toBeInTheDocument()
+
+    routeMocks.listThreads.mockResolvedValueOnce([placeholderThread])
+    await act(async () => {
+      screen.getByRole('button', { name: 'Retry' }).click()
+    })
+
+    expect(await screen.findByTestId('workspace-title')).toHaveTextContent(
+      'New conversation',
+    )
   })
 })

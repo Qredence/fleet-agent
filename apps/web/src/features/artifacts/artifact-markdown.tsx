@@ -4,6 +4,7 @@ import { math } from '@streamdown/math'
 import { mermaid } from '@streamdown/mermaid'
 import { Streamdown, type StreamdownProps } from 'streamdown'
 
+import { sanitizeHttpUrl } from '@/lib/url-safety'
 import { cn } from '@/lib/utils'
 
 const plugins = { code, cjk, math, mermaid } satisfies NonNullable<
@@ -11,19 +12,7 @@ const plugins = { code, cjk, math, mermaid } satisfies NonNullable<
 >
 
 function safeMarkdownUrl(url: string): string | null {
-  try {
-    const parsed = new URL(url, window.location.origin)
-    if (
-      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-      parsed.username ||
-      parsed.password
-    ) {
-      return null
-    }
-    return parsed.href
-  } catch {
-    return null
-  }
+  return sanitizeHttpUrl(url, { resolveRelative: true })
 }
 
 const components: NonNullable<StreamdownProps['components']> = {

@@ -16,7 +16,7 @@ import {
   Trash,
   Wrench,
 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { Suspense, lazy, useEffect, useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 
@@ -68,9 +68,14 @@ import {
   deleteThread,
 } from '@/features/threads/threads-api'
 import { useWorkspaceStore } from '@/state/workspace-store'
-import { SettingsDialog } from '@/features/providers/settings/settings-dialog'
 import { useShape } from '@/lib/shape-context'
 import { cn } from '@/lib/utils'
+
+const SettingsDialog = lazy(() =>
+  import('@/features/providers/settings/settings-dialog').then((m) => ({
+    default: m.SettingsDialog,
+  })),
+)
 
 const THREAD_PREVIEW_COUNT = 5
 
@@ -201,7 +206,21 @@ export function ProjectSidebar() {
             </button>
           </div>
 
-          {projects.data ? (
+          {projects.isError ? (
+            <SidebarGroup className="h-full items-center justify-center gap-2 text-center p-6">
+              <p role="alert" className="text-xs text-destructive">
+                Unable to load projects.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void projects.refetch()}
+                className="h-7 text-xs"
+              >
+                Retry
+              </Button>
+            </SidebarGroup>
+          ) : projects.data ? (
             filteredProjects.length ? (
               filteredProjects.map((project) => (
                 <ProjectSection
@@ -269,7 +288,11 @@ export function ProjectSidebar() {
       </Sidebar>
 
       <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        </Suspense>
+      )}
     </SidebarProvider>
   )
 }
@@ -360,6 +383,11 @@ function NewThreadMenuItem() {
           ⇧⌘O
         </kbd>
       </SidebarMenuButton>
+      {createMutation.isError && (
+        <p role="alert" className="px-2 pt-1 text-xs text-destructive">
+          Unable to create conversation. Try again.
+        </p>
+      )}
     </SidebarMenuItem>
   )
 }
@@ -388,6 +416,11 @@ function ProjectSection({
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const isProjectActive = projectId === activeProjectId
+  useEffect(() => {
+    if (isProjectActive) {
+      setOpen(true)
+    }
+  }, [isProjectActive])
 
   const newThreadMutation = useMutation({
     mutationFn: () => createThread(projectId),
@@ -397,6 +430,9 @@ function ProjectSection({
         queryKey: ['projects', projectId, 'threads'],
       })
       navigate(`/projects/${projectId}/threads/${thread.id}`)
+    },
+    onError: () => {
+      setOpen(true)
     },
   })
 
@@ -467,7 +503,34 @@ function ProjectSection({
 
       {open && (
         <SidebarMenu className="w-full min-w-0">
-          {all.length ? (
+          {newThreadMutation.isError && (
+            <SidebarMenuItem>
+              <p role="alert" className="px-2 py-1 text-xs text-destructive">
+                Unable to start conversation. Try again.
+              </p>
+            </SidebarMenuItem>
+          )}
+          {deleteThreadMutation.isError && (
+            <SidebarMenuItem>
+              <p role="alert" className="px-2 py-1 text-xs text-destructive">
+                Unable to delete conversation. Try again.
+              </p>
+            </SidebarMenuItem>
+          )}
+          {threads.isError ? (
+            <SidebarMenuItem>
+              <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs text-destructive">
+                <span role="alert">Unable to load chats.</span>
+                <button
+                  type="button"
+                  onClick={() => void threads.refetch()}
+                  className="underline hover:text-foreground"
+                >
+                  Retry
+                </button>
+              </div>
+            </SidebarMenuItem>
+          ) : all.length ? (
             visible.map((thread) => {
               const isActive = thread.id === activeThreadId && isProjectActive
               return (
@@ -643,6 +706,13 @@ function ProjectNameDialog<TResult>({
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
+  useEffect(() => {
+    if (open) {
+      setName(initialName)
+      setError(null)
+    }
+  }, [open, initialName])
+
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setName(initialName)
@@ -727,7 +797,13 @@ function DeleteProjectDialog({
   })
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) mutation.reset()
+        onOpenChange(next)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete project?</DialogTitle>
@@ -736,6 +812,11 @@ function DeleteProjectDialog({
             deleted. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
+        {mutation.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            Unable to delete project. Please try again.
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel

@@ -12,6 +12,37 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/mermaid') ||
+            id.includes('node_modules/cytoscape') ||
+            id.includes('node_modules/elkjs')
+          ) {
+            return 'vendor-mermaid'
+          }
+          if (id.includes('node_modules/katex')) {
+            return 'vendor-katex'
+          }
+          if (
+            id.includes('node_modules/shiki') ||
+            id.includes('node_modules/@shikijs')
+          ) {
+            return 'vendor-shiki'
+          }
+          if (
+            id.includes('node_modules/streamdown') ||
+            id.includes('node_modules/@streamdown') ||
+            id.includes('node_modules/@assistant-ui')
+          ) {
+            return 'vendor-markdown-ui'
+          }
+        },
+      },
+    },
+  },
   server: {
     // Portals get a generated hostname per thread, so an orb must accept any
     // host. Amp sets AMP_ORB=1 inside every orb; everywhere else Vite keeps

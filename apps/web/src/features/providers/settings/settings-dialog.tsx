@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Check,
   CircleDot,
@@ -182,6 +182,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       profile.id !== OPENROUTER_PROFILE_ID &&
       profile.id !== OPENCODE_ZEN_PROFILE_ID,
   )
+  const activeCustomProfile =
+    customProfiles.find((profile) => profile.id === activeProviderId) ?? null
 
   const [manualKeyInput, setManualKeyInput] = useState('')
   const [showManualKeyForm, setShowManualKeyForm] = useState(false)
@@ -194,6 +196,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     openCodeZenSelectedModel,
   )
   const [openCodeZenKeyError, setOpenCodeZenKeyError] = useState<string | null>(null)
+  const [customProviderModelInput, setCustomProviderModelInput] = useState(
+    activeCustomProfile?.modelId ?? '',
+  )
 
   const [showProviderForm, setShowProviderForm] = useState(false)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
@@ -201,6 +206,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [providerFormError, setProviderFormError] = useState<string | null>(null)
   const isMobile = useIsMobile()
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('providers')
+
+  useEffect(() => {
+    if (open) setCustomModelInput(selectedModel)
+  }, [open, selectedModel])
+
+  useEffect(() => {
+    if (open) setOpenCodeZenCustomModelInput(openCodeZenSelectedModel)
+  }, [open, openCodeZenSelectedModel])
+
+  const activeCustomModel = activeCustomProfile?.modelId ?? ''
+  useEffect(() => {
+    if (open) setCustomProviderModelInput(activeCustomModel)
+  }, [open, activeProviderId, activeCustomModel])
+
+  const resolveProfileModelLabel = (profile: ProviderProfile): string => {
+    if (!getProviderReadiness(profile.id).ready) return 'Needs setup'
+    if (profile.id === OPENROUTER_PROFILE_ID) {
+      return customModelEnabled ? selectedModel : 'Provider default model'
+    }
+    if (profile.id === OPENCODE_ZEN_PROFILE_ID) {
+      return openCodeZenCustomModelEnabled
+        ? openCodeZenSelectedModel
+        : 'Provider default model'
+    }
+    return profile.modelId?.trim() || 'Provider default model'
+  }
 
   const handleManualKeySubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -421,7 +452,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                     {profile.name}
                                   </CardTitle>
                                   <CardDescription className="text-2xs text-muted-foreground truncate font-mono">
-                                    {getProviderReadiness(profile.id).ready ? profile.modelId || 'Provider default model' : 'Needs setup'}
+                                    {resolveProfileModelLabel(profile)}
                                   </CardDescription>
                                 </div>
                               </div>
@@ -689,136 +720,106 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             )}
 
             {activeCategory === 'models' && (
-              activeProviderId === OPENCODE_ZEN_PROFILE_ID ? (
-                <SettingsSection
-                  icon={Cpu}
-                  title="Active LLM Model"
-                  description={`Select which model to route through your OpenCode Zen connection (${OPENCODE_ZEN_BASE_URL}).`}
-                  action={
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {openCodeZenCustomModelEnabled ? 'Active' : 'Disabled'}
-                      </span>
-                      <Switch
-                        label="Toggle Custom OpenCode Zen Model"
-                        checked={openCodeZenCustomModelEnabled}
-                        onToggle={() =>
-                          setOpenCodeZenCustomModelEnabled(!openCodeZenCustomModelEnabled)
+              activeCustomProfile ? (
+                <ProviderModelSection
+                  description={`Select which model to route through ${activeCustomProfile.name} (${activeCustomProfile.baseUrl}).`}
+                  providerId={activeCustomProfile.id}
+                  baseUrl={activeCustomProfile.baseUrl}
+                  apiKey={activeCustomProfile.apiKey}
+                  selectedModel={activeCustomProfile.modelId ?? ''}
+                  onSelectModel={(modelId) => {
+                    upsertProfile({ ...activeCustomProfile, modelId })
+                    setCustomProviderModelInput(modelId)
+                  }}
+                  inputId="custom-provider-model-id"
+                  inputPlaceholder="gpt-4o"
+                  inputValue={customProviderModelInput}
+                  onInputChange={setCustomProviderModelInput}
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const trimmed = customProviderModelInput.trim()
+                    if (trimmed) {
+                      upsertProfile({ ...activeCustomProfile, modelId: trimmed })
+                    }
+                  }}
+                  applyDisabled={
+                    !customProviderModelInput.trim() ||
+                    customProviderModelInput.trim() === (activeCustomProfile.modelId ?? '')
+                  }
+                  routedLabel={activeCustomProfile.modelId?.trim() || 'Default Server Model'}
+                  onResetDefault={
+                    activeCustomProfile.modelId
+                      ? () => {
+                          upsertProfile({ ...activeCustomProfile, modelId: undefined })
+                          setCustomProviderModelInput('')
                         }
-                        hideLabel
-                      />
-                    </div>
+                      : undefined
                   }
-                >
-                  <div className={openCodeZenCustomModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60'}>
-                    <ModelCardsRow
-                      providerId={OPENCODE_ZEN_PROFILE_ID}
-                      baseUrl={OPENCODE_ZEN_BASE_URL}
-                      apiKey={openCodeZenApiKey}
-                      selectedModel={openCodeZenSelectedModel}
-                      onSelectModel={(modelId) => {
-                        setOpenCodeZenCustomModelEnabled(true)
-                        setOpenCodeZenSelectedModel(modelId)
-                        setOpenCodeZenCustomModelInput(modelId)
-                      }}
-                    />
-
-                    <form onSubmit={handleOpenCodeZenCustomModelSubmit} className="space-y-1.5 pt-1">
-                      <label htmlFor="custom-opencode-zen-model-id" className="text-xs font-medium text-muted-foreground">
-                        Custom Model Identifier:
-                      </label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="custom-opencode-zen-model-id"
-                          placeholder={DEFAULT_OPENCODE_ZEN_MODEL}
-                          value={openCodeZenCustomModelInput}
-                          onChange={(e) => setOpenCodeZenCustomModelInput(e.target.value)}
-                          className="text-xs font-mono"
-                        />
-                        <Button
-                          type="submit"
-                          variant="secondary"
-                          size="sm"
-                          disabled={!openCodeZenCustomModelInput.trim() || openCodeZenCustomModelInput === openCodeZenSelectedModel}
-                        >
-                          Apply
-                        </Button>
-                      </div>
-                    </form>
-
-                    <div className="flex items-center gap-2 text-meta text-muted-foreground">
-                      <Globe className="size-3" />
-                      <span>Currently routed:</span>
-                      <code className="font-mono text-foreground font-semibold">
-                        {openCodeZenCustomModelEnabled ? openCodeZenSelectedModel : 'Default Server Model'}
-                      </code>
-                    </div>
-                  </div>
-                </SettingsSection>
+                />
+              ) : activeProviderId === OPENCODE_ZEN_PROFILE_ID ? (
+                <ProviderModelSection
+                  description={`Select which model to route through your OpenCode Zen connection (${OPENCODE_ZEN_BASE_URL}).`}
+                  toggle={{
+                    label: 'Toggle Custom OpenCode Zen Model',
+                    checked: openCodeZenCustomModelEnabled,
+                    onToggle: () =>
+                      setOpenCodeZenCustomModelEnabled(!openCodeZenCustomModelEnabled),
+                  }}
+                  dimmed={!openCodeZenCustomModelEnabled}
+                  providerId={OPENCODE_ZEN_PROFILE_ID}
+                  baseUrl={OPENCODE_ZEN_BASE_URL}
+                  apiKey={openCodeZenApiKey}
+                  selectedModel={openCodeZenSelectedModel}
+                  onSelectModel={(modelId) => {
+                    setOpenCodeZenCustomModelEnabled(true)
+                    setOpenCodeZenSelectedModel(modelId)
+                    setOpenCodeZenCustomModelInput(modelId)
+                  }}
+                  inputId="custom-opencode-zen-model-id"
+                  inputPlaceholder={DEFAULT_OPENCODE_ZEN_MODEL}
+                  inputValue={openCodeZenCustomModelInput}
+                  onInputChange={setOpenCodeZenCustomModelInput}
+                  onSubmit={handleOpenCodeZenCustomModelSubmit}
+                  applyDisabled={
+                    !openCodeZenCustomModelInput.trim() ||
+                    openCodeZenCustomModelInput === openCodeZenSelectedModel
+                  }
+                  routedLabel={
+                    openCodeZenCustomModelEnabled
+                      ? openCodeZenSelectedModel
+                      : 'Default Server Model'
+                  }
+                />
               ) : (
-                <SettingsSection
-                  icon={Cpu}
-                  title="Active LLM Model"
+                <ProviderModelSection
                   description="Select which model to route through your OpenRouter connection."
-                  action={
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {customModelEnabled ? 'Active' : 'Disabled'}
-                      </span>
-                      <Switch
-                        label="Toggle Custom OpenRouter Model"
-                        checked={customModelEnabled}
-                        onToggle={() => setCustomModelEnabled(!customModelEnabled)}
-                        hideLabel
-                      />
-                    </div>
+                  toggle={{
+                    label: 'Toggle Custom OpenRouter Model',
+                    checked: customModelEnabled,
+                    onToggle: () => setCustomModelEnabled(!customModelEnabled),
+                  }}
+                  dimmed={!customModelEnabled}
+                  providerId={OPENROUTER_PROFILE_ID}
+                  baseUrl={OPENROUTER_BASE_URL}
+                  apiKey={apiKey}
+                  selectedModel={selectedModel}
+                  onSelectModel={(modelId) => {
+                    setCustomModelEnabled(true)
+                    setSelectedModel(modelId)
+                    setCustomModelInput(modelId)
+                  }}
+                  inputId="custom-model-id"
+                  inputPlaceholder={DEFAULT_OPENROUTER_MODEL}
+                  inputValue={customModelInput}
+                  onInputChange={setCustomModelInput}
+                  onSubmit={handleCustomModelSubmit}
+                  applyDisabled={
+                    !customModelInput.trim() || customModelInput === selectedModel
                   }
-                >
-                  <div className={customModelEnabled ? 'space-y-3 opacity-100' : 'space-y-3 opacity-60'}>
-                    <ModelCardsRow
-                      providerId={OPENROUTER_PROFILE_ID}
-                      baseUrl={OPENROUTER_BASE_URL}
-                      apiKey={apiKey}
-                      selectedModel={selectedModel}
-                      onSelectModel={(modelId) => {
-                        setCustomModelEnabled(true)
-                        setSelectedModel(modelId)
-                        setCustomModelInput(modelId)
-                      }}
-                    />
-
-                    <form onSubmit={handleCustomModelSubmit} className="space-y-1.5 pt-1">
-                      <label htmlFor="custom-model-id" className="text-xs font-medium text-muted-foreground">
-                        Custom Model Identifier:
-                      </label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="custom-model-id"
-                          placeholder={DEFAULT_OPENROUTER_MODEL}
-                          value={customModelInput}
-                          onChange={(e) => setCustomModelInput(e.target.value)}
-                          className="text-xs font-mono"
-                        />
-                        <Button
-                          type="submit"
-                          variant="secondary"
-                          size="sm"
-                          disabled={!customModelInput.trim() || customModelInput === selectedModel}
-                        >
-                          Apply
-                        </Button>
-                      </div>
-                    </form>
-
-                    <div className="flex items-center gap-2 text-meta text-muted-foreground">
-                      <Globe className="size-3" />
-                      <span>Currently routed:</span>
-                      <code className="font-mono text-foreground font-semibold">
-                        {customModelEnabled ? selectedModel : 'Default Server Model'}
-                      </code>
-                    </div>
-                  </div>
-                </SettingsSection>
+                  routedLabel={
+                    customModelEnabled ? selectedModel : 'Default Server Model'
+                  }
+                />
               )
             )}
 
@@ -827,5 +828,115 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ProviderModelSection({
+  description,
+  toggle,
+  dimmed = false,
+  providerId,
+  baseUrl,
+  apiKey,
+  selectedModel,
+  onSelectModel,
+  inputId,
+  inputPlaceholder,
+  inputValue,
+  onInputChange,
+  onSubmit,
+  applyDisabled,
+  routedLabel,
+  onResetDefault,
+}: {
+  description: string
+  toggle?: { label: string; checked: boolean; onToggle: () => void }
+  dimmed?: boolean
+  providerId: string
+  baseUrl?: string
+  apiKey?: string | null
+  selectedModel: string
+  onSelectModel: (modelId: string) => void
+  inputId: string
+  inputPlaceholder: string
+  inputValue: string
+  onInputChange: (value: string) => void
+  onSubmit: (e: FormEvent) => void
+  applyDisabled: boolean
+  routedLabel: string
+  onResetDefault?: () => void
+}) {
+  return (
+    <SettingsSection
+      icon={Cpu}
+      title="Active LLM Model"
+      description={description}
+      action={
+        toggle ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {toggle.checked ? 'Active' : 'Disabled'}
+            </span>
+            <Switch
+              label={toggle.label}
+              checked={toggle.checked}
+              onToggle={toggle.onToggle}
+              hideLabel
+            />
+          </div>
+        ) : onResetDefault ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onResetDefault}
+          >
+            Use default
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className={dimmed ? 'space-y-3 opacity-60' : 'space-y-3 opacity-100'}>
+        <ModelCardsRow
+          providerId={providerId}
+          baseUrl={baseUrl}
+          apiKey={apiKey}
+          selectedModel={selectedModel}
+          onSelectModel={onSelectModel}
+        />
+
+        <form onSubmit={onSubmit} className="space-y-1.5 pt-1">
+          <label htmlFor={inputId} className="text-xs font-medium text-muted-foreground">
+            Custom Model Identifier:
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id={inputId}
+              placeholder={inputPlaceholder}
+              value={inputValue}
+              onChange={(e) => onInputChange(e.target.value)}
+              className="text-xs font-mono"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              disabled={applyDisabled}
+            >
+              Apply
+            </Button>
+          </div>
+        </form>
+
+        <div className="flex items-center gap-2 text-meta text-muted-foreground">
+          <Globe className="size-3" />
+          <span>Currently routed:</span>
+          <code className="font-mono text-foreground font-semibold">
+            {routedLabel}
+          </code>
+        </div>
+      </div>
+    </SettingsSection>
   )
 }

@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
+import { sanitizeImageSrc, sanitizeNavigationUrl } from "@/lib/url-safety";
 import { fontWeights } from "@/lib/font-weight";
 import { useShape } from "@/lib/shape-context";
 import { SizeProvider, useSize, type SizeVariant } from "@/lib/size-context";
@@ -328,13 +329,17 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     const activeIndex = group?.activeIndex ?? null;
     const selectedIndex = group?.selectedIndex ?? -1;
 
+    const safeHref = href
+      ? sanitizeNavigationUrl(href, { allowRelative: true }) ?? undefined
+      : undefined;
+
     // Depend on the stable registerItem callback, not the whole group context —
     // the context object's identity changes on every hover/selection frame,
     // which would otherwise re-register every card each frame.
     // Only an enabled card that can be clicked joins the highlight: a highlight on an
     // informational or disabled card would promise a click that has nowhere to land.
     const registerItem =
-      !disabled && (href || onClick) ? group?.registerItem : undefined;
+      !disabled && (safeHref || onClick) ? group?.registerItem : undefined;
     useRegisterFluidHoverItem(registerItem, index, internalRef);
 
     // Divider geometry: draw a hairline toward the neighbour below / to the
@@ -367,7 +372,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
         (child.type as { displayName?: string })?.displayName === "CardImage");
     const hasImage = Children.toArray(children).some(isCardImage);
     const inlineImage = isInline && hasImage;
-    const clickable = !!href || !!onClick;
+    const clickable = !!safeHref || !!onClick;
     // Title weight follows the persistent selected state only — fluid hover
     // previews via the highlight fill, not by bolding the label.
     const emphasized = selected;
@@ -406,9 +411,9 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
       (!label && !effectiveAriaLabel && hasTitle ? titleId : undefined);
 
     const overlay = clickable && !disabled ? (
-      href ? (
+      safeHref ? (
         <a
-          href={href}
+          href={safeHref}
           onClick={onClick}
           target={external ? "_blank" : undefined}
           rel={external ? "noopener noreferrer" : undefined}
@@ -802,28 +807,32 @@ function CardMedia({ logo, logoAlt, icon: Icon, size = 22, className }: CardMedi
   const wrap = cn(orientation === "inline" ? "" : "mb-2", className);
 
   if (logo) {
-    const logos = Array.isArray(logo) ? logo : [logo];
-    return (
-      <span
-        data-slot="card-media"
-        className={cn("inline-flex items-center gap-1.5 shrink-0", wrap)}
-      >
-        {logos.map((src, i) => (
-          <span key={i} className="inline-flex items-center gap-1.5">
-            {i > 0 && <span aria-hidden className="w-2 h-px bg-border" />}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt={logoAlt ?? ""}
-              width={size}
-              height={size}
-              className={cn("object-contain", shape.bg)}
-              style={{ width: size, height: size }}
-            />
-          </span>
-        ))}
-      </span>
-    );
+    const logos = (Array.isArray(logo) ? logo : [logo])
+      .map((src) => sanitizeImageSrc(src))
+      .filter((src): src is string => src !== null);
+    if (logos.length > 0) {
+      return (
+        <span
+          data-slot="card-media"
+          className={cn("inline-flex items-center gap-1.5 shrink-0", wrap)}
+        >
+          {logos.map((src, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5">
+              {i > 0 && <span aria-hidden className="w-2 h-px bg-border" />}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={logoAlt ?? ""}
+                width={size}
+                height={size}
+                className={cn("object-contain", shape.bg)}
+                style={{ width: size, height: size }}
+              />
+            </span>
+          ))}
+        </span>
+      );
+    }
   }
   if (Icon) {
     // The icon sits in a 32×32 tinted tile so it reads as a media slot rather
@@ -858,10 +867,12 @@ interface CardImageProps {
 
 function CardImage({ src, alt, className }: CardImageProps) {
   const { orientation } = useContext(CardContext);
+  const safeSrc = sanitizeImageSrc(src);
+  if (!safeSrc) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src}
+      src={safeSrc}
       alt={alt ?? ""}
       data-slot="card-image"
       // The image keeps a fixed 2px corner radius in every state — stacked or
@@ -1032,10 +1043,17 @@ function CardButton({
     CARD_BUTTON_VARIANTS[variant]
   );
 
-  if (href) {
+  const safeHref = href
+    ? sanitizeNavigationUrl(href, { allowRelative: true })
+    : undefined;
+  if (href && !safeHref) {
+    return null;
+  }
+
+  if (safeHref) {
     return (
       <a
-        href={href}
+        href={safeHref}
         onClick={onClick}
         target={external ? "_blank" : undefined}
         rel={external ? "noopener noreferrer" : undefined}

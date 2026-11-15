@@ -98,23 +98,36 @@ export function WorkspaceRoute() {
   // or start one when the project is still empty (a new project, or every
   // thread deleted).
   const newestThreadId = threads.data?.[0]?.id
+  const activeProjectRef = useRef(projectId)
+  activeProjectRef.current = projectId
+  const requestedProjectRef = useRef<string | null>(null)
   const openThread = useMutation({
     mutationFn: (id: string) => createThread(id),
-    onSuccess: async (created) => {
+    onSuccess: async (created, requestedProjectId) => {
       await queryClient.invalidateQueries({
-        queryKey: ['projects', projectId, 'threads'],
+        queryKey: ['projects', requestedProjectId, 'threads'],
       })
-      navigate(`/projects/${projectId}/threads/${created.id}`, { replace: true })
+      if (activeProjectRef.current === requestedProjectId) {
+        navigate(`/projects/${requestedProjectId}/threads/${created.id}`, {
+          replace: true,
+        })
+      }
     },
   })
-  const requestedThread = useRef(false)
   const needsThread =
     !threadId && Boolean(projectId) && threads.isSuccess && !newestThreadId
   useEffect(() => {
-    if (!needsThread || requestedThread.current) return
-    requestedThread.current = true
-    openThread.mutate(projectId as string)
-  }, [needsThread, openThread, projectId])
+    if (!projectId || !threads.isSuccess) return
+    if (newestThreadId) {
+      if (requestedProjectRef.current === projectId) {
+        requestedProjectRef.current = null
+      }
+      return
+    }
+    if (!needsThread || requestedProjectRef.current === projectId) return
+    requestedProjectRef.current = projectId
+    openThread.mutate(projectId)
+  }, [needsThread, newestThreadId, openThread, projectId, threads.isSuccess])
 
   // Unknown thread id for this project → bounce to the project page.
   if (threadId && threads.isSuccess && !thread) {
@@ -124,6 +137,27 @@ export function WorkspaceRoute() {
   if (!threadId && projectId) {
     // Wait for the thread list before rendering a composer that has nothing
     // to attach to; the effect above starts a conversation when there is none.
+    if (threads.isError) {
+      return (
+        <section className="flex min-h-screen items-center justify-center p-6">
+          <div className="max-w-md space-y-3 text-center">
+            <h1 className="text-lg font-semibold">
+              Unable to load conversations
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              The project conversation list could not be loaded.
+            </p>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-2 text-sm"
+              onClick={() => void threads.refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        </section>
+      )
+    }
     if (!threads.isSuccess || !newestThreadId) {
       if (openThread.isError) {
         return (
@@ -139,7 +173,7 @@ export function WorkspaceRoute() {
                 type="button"
                 className="rounded-md border px-3 py-2 text-sm"
                 onClick={() => {
-                  requestedThread.current = false
+                  requestedProjectRef.current = null
                   openThread.reset()
                 }}
               >

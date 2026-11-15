@@ -1,7 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProjectSidebar } from '@/features/projects/project-sidebar'
@@ -400,5 +400,110 @@ describe('ProjectSidebar (live)', () => {
     expect(
       screen.getByRole('button', { name: 'Second thread' }),
     ).not.toHaveAttribute('data-active')
+  })
+
+  it('shows retryable error when projects fail to load', async () => {
+    const user = userEvent.setup()
+    let failOnce = true
+    vi.mocked(apiFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/api/projects' && !init?.method) {
+        if (failOnce) {
+          failOnce = false
+          throw new Error('503')
+        }
+        return [project]
+      }
+      if (path === '/api/projects/project_1/threads' && !init?.method) return threads
+      return undefined
+    })
+
+    setup('/projects/project_1')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load projects.')
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('button', { name: 'Project: Workspace' })).toBeInTheDocument()
+  })
+
+  it('surfaces errors for create, delete thread, and delete project mutations', async () => {
+    const user = userEvent.setup()
+    vi.mocked(apiFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/api/projects' && !init?.method) return [project]
+      if (path === '/api/projects/project_1/threads' && !init?.method) return threads
+      if (path === '/api/projects/project_1/threads' && init?.method === 'POST') {
+        throw new Error('create failed')
+      }
+      if (path.startsWith('/api/threads/') && init?.method === 'DELETE') {
+        throw new Error('delete thread failed')
+      }
+      if (path === '/api/projects/project_1' && init?.method === 'DELETE') {
+        throw new Error('delete project failed')
+      }
+      return undefined
+    })
+
+    setup('/projects/project_1/threads/thread_a')
+    await screen.findByText('First thread')
+
+    await user.click(screen.getByRole('button', { name: 'New thread' }))
+    expect(await screen.findByText('Unable to create conversation. Try again.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'New thread in: Workspace' }))
+    expect(await screen.findByText('Unable to start conversation. Try again.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Thread actions: First thread' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(await screen.findByText('Unable to delete conversation. Try again.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Project actions: Workspace' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Unable to delete project. Please try again.')).toBeInTheDocument()
+  })
+
+  it('expands active project on route changes and resets ProjectNameDialog on reopen', async () => {
+    const user = userEvent.setup()
+    const secondProject: ProjectOut = { ...project, id: 'project_2', name: 'Research' }
+    vi.mocked(apiFetch).mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/api/projects' && !init?.method) return [project, secondProject]
+      if (path === '/api/projects/project_1/threads' && !init?.method) return threads
+      if (path === '/api/projects/project_2/threads' && !init?.method) return []
+      return undefined
+    })
+
+    let navTo: ((path: string) => void) | undefined
+    function NavHarness() {
+      navTo = useNavigate()
+      return <SidebarHarness />
+    }
+    locationProbe = { current: '/projects/project_1' }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/project_1']}>
+          <Routes>
+            <Route path="/projects/:projectId" element={<NavHarness />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const p2Toggle = await screen.findByRole('button', { name: 'Project: Research' })
+    expect(p2Toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await act(async () => {
+      navTo?.('/projects/project_2')
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Project: Research' })).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    // Controlled ProjectNameDialog resets draft state when reopened via trigger button.
+    await user.click(screen.getByRole('button', { name: 'New project' }))
+    const input = await screen.findByLabelText('Project name')
+    await user.type(input, 'Abandoned draft')
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('button', { name: 'New project' }))
+    expect(await screen.findByLabelText('Project name')).toHaveValue('')
   })
 })

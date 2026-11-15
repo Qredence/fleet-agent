@@ -127,6 +127,25 @@ export async function computeS256Challenge(verifier: string): Promise<string> {
     .replace(/=+$/, '')
 }
 
+let inFlightOAuthExchange: {
+  key: string
+  promise: Promise<string>
+} | null = null
+
+function resolveSameOriginCallbackUrl(callbackUrl?: string): string {
+  const raw = callbackUrl ?? `${window.location.origin}${window.location.pathname}`
+  let parsed: URL
+  try {
+    parsed = new URL(raw, window.location.origin)
+  } catch {
+    throw new Error('Invalid OAuth callbackUrl')
+  }
+  if (parsed.origin !== window.location.origin) {
+    throw new Error('OAuth callbackUrl must be same-origin')
+  }
+  return parsed.href
+}
+
 /**
  * Initiates the OpenRouter OAuth PKCE flow by redirecting the browser to OpenRouter.
  *
@@ -135,6 +154,7 @@ export async function computeS256Challenge(verifier: string): Promise<string> {
 export async function initiateOAuth(callbackUrl?: string): Promise<void> {
   if (typeof window === 'undefined') return
 
+  const url = resolveSameOriginCallbackUrl(callbackUrl)
   const verifier = generateCodeVerifier()
   try {
     sessionStorage.setItem(VERIFIER_KEY, verifier)
@@ -143,7 +163,6 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
   }
 
   const challenge = await computeS256Challenge(verifier)
-  const url = callbackUrl ?? `${window.location.origin}${window.location.pathname}`
 
   const params = new URLSearchParams({
     callback_url: url,
@@ -154,24 +173,10 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
   window.location.href = `${OPENROUTER_OAUTH_AUTHORIZE_URL}?${params.toString()}`
 }
 
-/**
- * Handles the redirect back from OpenRouter by exchanging the code for an API key.
- *
- * @param code - The authorization code from the callback query parameter
- */
-export async function handleOAuthCallback(code: string): Promise<string> {
-  if (typeof window === 'undefined') {
-    throw new Error('OAuth callback must be handled in a browser environment')
-  }
-
-  const verifier = sessionStorage.getItem(VERIFIER_KEY)
-  if (!verifier) {
-    throw new Error('Missing code verifier in sessionStorage')
-  }
-
-  // Remove the verifier as it is a one-time secret
-  sessionStorage.removeItem(VERIFIER_KEY)
-
+async function exchangeCodeForApiKey(
+  code: string,
+  verifier: string,
+): Promise<string> {
   const response = await fetch(
     `${providerContract.openRouter.apiBaseUrl}/auth/keys`,
     {
@@ -186,16 +191,52 @@ export async function handleOAuthCallback(code: string): Promise<string> {
   )
 
   if (!response.ok) {
+    if (response.status < 500) {
+      sessionStorage.removeItem(VERIFIER_KEY)
+    }
     throw new Error(`Key exchange failed with status ${response.status}`)
   }
 
   const data = (await response.json()) as { key?: string }
   if (!data?.key) {
+    sessionStorage.removeItem(VERIFIER_KEY)
     throw new Error('Invalid response from OpenRouter: missing API key')
   }
 
+  sessionStorage.removeItem(VERIFIER_KEY)
   setApiKey(data.key)
   return data.key
+}
+
+/**
+ * Handles the redirect back from OpenRouter by exchanging the code for an API key.
+ * Deduplicates concurrent exchanges (e.g., React StrictMode double-invoke) and keeps
+ * `VERIFIER_KEY` until exchange succeeds or receives a terminal 4xx/malformed response.
+ *
+ * @param code - The authorization code from the callback query parameter
+ */
+export async function handleOAuthCallback(code: string): Promise<string> {
+  if (typeof window === 'undefined') {
+    throw new Error('OAuth callback must be handled in a browser environment')
+  }
+
+  const verifier = sessionStorage.getItem(VERIFIER_KEY)
+  if (!verifier) {
+    throw new Error('Missing code verifier in sessionStorage')
+  }
+
+  const exchangeKey = `${code}:${verifier}`
+  if (inFlightOAuthExchange?.key === exchangeKey) {
+    return inFlightOAuthExchange.promise
+  }
+
+  const promise = exchangeCodeForApiKey(code, verifier).finally(() => {
+    if (inFlightOAuthExchange?.promise === promise) {
+      inFlightOAuthExchange = null
+    }
+  })
+  inFlightOAuthExchange = { key: exchangeKey, promise }
+  return promise
 }
 
 /**

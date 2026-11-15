@@ -12,17 +12,53 @@ export class ApiError extends Error {
   }
 }
 
+function buildApiHeaders(
+  defaults: Record<string, string>,
+  extraHeaders?: HeadersInit,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  const keysByLower = new Map<string, string>();
+  const setHeader = (key: string, value: string) => {
+    const lower = key.toLowerCase();
+    const prevKey = keysByLower.get(lower);
+    if (prevKey && prevKey !== key) {
+      delete result[prevKey];
+    }
+    keysByLower.set(lower, key);
+    result[key] = value;
+  };
+
+  for (const [key, value] of Object.entries(defaults)) {
+    setHeader(key, value);
+  }
+  if (API_KEY) {
+    setHeader("X-API-Key", API_KEY);
+  }
+  if (extraHeaders) {
+    const normalized = new Headers(extraHeaders);
+    if (!(extraHeaders instanceof Headers) && !Array.isArray(extraHeaders)) {
+      for (const key of Object.keys(extraHeaders)) {
+        const value = normalized.get(key);
+        if (value !== null) {
+          setHeader(key, value);
+        }
+      }
+    } else {
+      normalized.forEach((value, key) => {
+        setHeader(key, value);
+      });
+    }
+  }
+  return result;
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      Accept: "application/json",
-      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-      ...init?.headers,
-    },
+    headers: buildApiHeaders({ Accept: "application/json" }, init?.headers),
   });
 
   if (!response.ok) {
@@ -48,11 +84,10 @@ export async function apiFetchText(
 ): Promise<string> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      Accept: "text/plain, text/markdown;q=0.9",
-      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-      ...init?.headers,
-    },
+    headers: buildApiHeaders(
+      { Accept: "text/plain, text/markdown;q=0.9" },
+      init?.headers,
+    ),
   });
 
   if (!response.ok) {
@@ -68,7 +103,7 @@ export async function apiFetchText(
 /** Binary resources use the same authentication boundary as REST and previews. */
 export async function apiFetchBlob(path: string): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { ...(API_KEY ? { "X-API-Key": API_KEY } : {}) },
+    headers: buildApiHeaders({}),
   });
   if (!response.ok) {
     throw new ApiError(
@@ -93,7 +128,10 @@ export function apiJsonFetch<T>(
   return apiFetch<T>(path, {
     ...rest,
     method,
-    headers: { "Content-Type": "application/json", ...extraHeaders },
+    headers: buildApiHeaders(
+      { Accept: "application/json", "Content-Type": "application/json" },
+      extraHeaders,
+    ),
     body: JSON.stringify(body),
   });
 }

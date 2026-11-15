@@ -2,10 +2,7 @@ import { FeedbackThreadContext } from "./message-feedback-controls";
 import { attachmentAdapter } from "./text-attachments";
 export { attachmentAdapter } from "./text-attachments";
 import { HttpAgent } from "@ag-ui/client";
-import {
-  AssistantRuntimeProvider,
-  type FeedbackAdapter,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -23,8 +20,6 @@ import { AgUiRuntimePresenceProvider } from "@/features/agent-runtime/ag-ui-pres
 import { ArtifactDataUIRegistration } from "@/features/artifacts/artifact-data-ui";
 import { InlineAgentDataUIRegistration } from "@/features/agent-runtime/inline-agent-data-ui";
 import type { ThreadBootstrap } from "@/features/threads/threads-api";
-import { apiJsonFetch } from "@/lib/api-client";
-import { queryClient } from "@/lib/query-client";
 import { ApprovalContext } from "./tool-permissions";
 import { API_BASE_URL, API_KEY } from "@/lib/env";
 import { refreshAgentCapabilities } from "@/features/agent-runtime/agent-capabilities";
@@ -51,7 +46,8 @@ function isAgentRunRequest(
 /** Add browser-owned provider headers only to the agent POST request. */
 export function createAgentFetch(
   threadId?: string,
-  takeApprovals: () => string[] = () => [],
+  getApprovals: () => string[] = () => [],
+  onApprovalsCommitted?: (approvedTools: string[]) => void,
 ): (url: string, requestInit: RequestInit) => Promise<Response> {
   return async (url, requestInit) => {
     const isAgentRequest = isAgentRunRequest(url, requestInit);
@@ -59,17 +55,8 @@ export function createAgentFetch(
       await waitForThreadHistoryWrites(threadId);
     }
     const headers = new Headers(requestInit.headers);
+    let sentApprovals: string[] = [];
     if (isAgentRequest) {
-      // Browser-owned provider profile headers (BYOK): only ever attached to
-      // the agent run POST, never to other Fleet API resources.
-      const body = JSON.parse(
-        typeof requestInit.body === "string" ? requestInit.body : "{}",
-      );
-      body.forwardedProps = {
-        ...body.forwardedProps,
-        approvedTools: takeApprovals(),
-      };
-      requestInit = { ...requestInit, body: JSON.stringify(body) };
       // A failed capabilities lookup must not escape as a raw query error: the
       // route resolver owns that message, and an unresolved route has to fail
       // closed here rather than producing a run the server cannot serve.
@@ -100,6 +87,19 @@ export function createAgentFetch(
         activeProviderId: getActiveProviderId(),
       });
       if (!target.ready) throw new ProviderNotReadyError(target.message);
+      // Snapshot approvals only after capability and readiness preflight pass so
+      // a blocked run never loses pending approvals.
+      sentApprovals = [...getApprovals()];
+      // Browser-owned provider profile headers (BYOK): only ever attached to
+      // the agent run POST, never to other Fleet API resources.
+      const body = JSON.parse(
+        typeof requestInit.body === "string" ? requestInit.body : "{}",
+      );
+      body.forwardedProps = {
+        ...body.forwardedProps,
+        approvedTools: sentApprovals,
+      };
+      requestInit = { ...requestInit, body: JSON.stringify(body) };
       const providerHeaders = runTargetSendsProviderHeaders(target)
         ? getAgentProviderHeaders()
         : {};
@@ -107,7 +107,11 @@ export function createAgentFetch(
         headers.set(k, v);
       }
     }
-    return fetch(url, { ...requestInit, headers });
+    const response = await fetch(url, { ...requestInit, headers });
+    if (isAgentRequest && response.ok && sentApprovals.length > 0) {
+      onApprovalsCommitted?.(sentApprovals);
+    }
+    return response;
   };
 }
 
@@ -140,37 +144,22 @@ export function AgentRuntimeProvider({
   const [approved, setApproved] = useState<string[]>([]);
   const approvalRef = useRef(approved);
   approvalRef.current = approved;
-  const [feedbackError, setFeedbackError] = useState(false);
-  const feedbackAdapter = useMemo<FeedbackAdapter>(
-    () => ({
-      submit: ({ message, type }) => {
-        if (!threadId) return;
-        void apiJsonFetch(
-          `/api/threads/${threadId}/messages/${message.id}/feedback`,
-          "PUT",
-          { messageId: message.id, type },
-        )
-          .then(() => {
-            setFeedbackError(false);
-            return queryClient.invalidateQueries({
-              queryKey: ["message-feedback", threadId],
-            });
-          })
-          .catch(() => setFeedbackError(true));
-      },
-    }),
-    [threadId],
-  );
   const agent = useMemo(
     () =>
       new HttpAgent({
         url: AGENT_URL,
-        fetch: createAgentFetch(threadId, () => {
-          const selected = approvalRef.current;
-          approvalRef.current = [];
-          setApproved([]);
-          return selected;
-        }),
+        fetch: createAgentFetch(
+          threadId,
+          () => approvalRef.current,
+          (committed) => {
+            const committedSet = new Set(committed);
+            const remaining = approvalRef.current.filter(
+              (tool) => !committedSet.has(tool),
+            );
+            approvalRef.current = remaining;
+            setApproved(remaining);
+          },
+        ),
         ...(API_KEY ? { headers: { "X-API-Key": API_KEY } } : {}),
       }),
     [threadId],
@@ -187,7 +176,6 @@ export function AgentRuntimeProvider({
   const adapters = useMemo(
     () => ({
       attachments: attachmentAdapter,
-      feedback: feedbackAdapter,
       ...(threadId
         ? {
             history: buildHistoryAdapter(threadId, bootstrap, {
@@ -221,11 +209,6 @@ export function AgentRuntimeProvider({
     <FeedbackThreadContext.Provider value={threadId}>
       <ApprovalContext.Provider value={{ approved, setApproved }}>
         <AssistantRuntimeProvider runtime={runtime}>
-          {feedbackError && (
-            <p role="alert">
-              Feedback could not be saved. Please submit it again.
-            </p>
-          )}
           <AgUiRuntimePresenceProvider>
             <ArtifactDataUIRegistration />
             <InlineAgentDataUIRegistration />

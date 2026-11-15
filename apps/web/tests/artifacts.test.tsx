@@ -174,6 +174,24 @@ describe("ArtifactsTab — selection + download URL", () => {
       screen.getByRole("article", { name: "artifact: state-sync-notes.md" }),
     ).not.toHaveAttribute("aria-current");
   });
+
+  it("blocks preview and download for malformed artifact URLs", () => {
+    const unsafeArtifact = {
+      id: "a-bad",
+      name: "escape.md",
+      mediaType: "text/markdown",
+      sizeBytes: 64,
+      downloadUrl: "/api/artifacts/a-bad?redirect=https://evil.com",
+      status: "ready" as const,
+    };
+    render(
+      <ArtifactsTab artifacts={[unsafeArtifact]} selectedArtifactId="a-bad" />,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "download artifact: escape.md" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("workspace store — artifact selection", () => {

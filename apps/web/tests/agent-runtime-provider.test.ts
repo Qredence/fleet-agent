@@ -188,6 +188,38 @@ describe('run route precedence', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('commits approvals only after capability preflight and a 2xx POST succeed', async () => {
+    setApiKey('sk-or-browser')
+    setActiveProviderId('openrouter')
+    let approvals = ['bash']
+    const commit = vi.fn((sent: string[]) => {
+      const sentSet = new Set(sent)
+      approvals = approvals.filter((item) => !sentSet.has(item))
+    })
+
+    // 1. Preflight capability lookup failure keeps approvals.
+    vi.mocked(refreshAgentCapabilities).mockRejectedValueOnce(new Error('offline'))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const send = createAgentFetch(undefined, () => approvals, commit)
+    await expect(
+      send('http://localhost:8000/api/agent', { method: 'POST', body: '{}' }),
+    ).rejects.toThrow(/Cannot connect/)
+    expect(commit).not.toHaveBeenCalled()
+    expect(approvals).toEqual(['bash'])
+
+    // 2. Non-2xx agent POST keeps approvals for retry.
+    fetchMock.mockResolvedValueOnce(new Response('fail', { status: 500 }))
+    await send('http://localhost:8000/api/agent', { method: 'POST', body: '{}' })
+    expect(commit).not.toHaveBeenCalled()
+    expect(approvals).toEqual(['bash'])
+
+    // 3. 2xx POST commits and clears approvals.
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    await send('http://localhost:8000/api/agent', { method: 'POST', body: '{}' })
+    expect(commit).toHaveBeenCalledWith(['bash'])
+    expect(approvals).toEqual([])
+  })
+
   it('runs on a configured server gateway with no profile and no X-LLM headers', async () => {
     // The feature this contract addition exists for: a fresh browser on a
     // deployment with its own model may send, and must not send a key.

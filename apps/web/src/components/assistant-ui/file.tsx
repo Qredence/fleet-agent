@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 import type { FileMessagePartComponent } from "@assistant-ui/react";
 import { formatByteSize } from "@/lib/byte-size";
+import {
+  buildSafeBase64DataUri,
+  SAFE_DOWNLOAD_MIME_TYPES,
+  sanitizeDataUri,
+  sanitizeDownloadUrl,
+} from "@/lib/url-safety";
 import { cn } from "@/lib/utils";
 
 const fileVariants = cva(
@@ -69,7 +75,7 @@ function getFileDataKind(
   if (sourceType === "url" && /^data:/i.test(data)) return "data-uri";
   if (sourceType) return sourceType;
   if (/^data:/i.test(data)) return "data-uri";
-  if (/^https?:\/\//i.test(data)) return "url";
+  if (/^(https?|blob):/i.test(data)) return "url";
   return "base64";
 }
 
@@ -177,8 +183,13 @@ function FileDownload({
   if (typeof data !== "string") return null;
   const kind = getFileDataKind(data, sourceType);
   if (kind === "id") return null;
-  if (kind === "url" && !/^(https?:\/\/|blob:)/i.test(data)) return null;
-  const href = kind === "base64" ? `data:${mimeType};base64,${data}` : data;
+  const href =
+    kind === "base64"
+      ? buildSafeBase64DataUri(data, mimeType, SAFE_DOWNLOAD_MIME_TYPES)
+      : kind === "data-uri"
+        ? sanitizeDataUri(data, SAFE_DOWNLOAD_MIME_TYPES)
+        : sanitizeDownloadUrl(data);
+  if (!href) return null;
 
   return (
     <a

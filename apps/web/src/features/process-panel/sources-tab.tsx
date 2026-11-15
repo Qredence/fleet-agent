@@ -4,16 +4,14 @@ import { useEffect, useRef } from 'react'
 
 import { EmptyTabState } from './empty-tab-state'
 import { Button } from '@/components/ui/button'
+import { sanitizeHttpUrl } from '@/lib/url-safety'
 import { cn } from '@/lib/utils'
 import type { AgentSource } from '@/contracts/generated'
 
 function hostname(uri: string | undefined): string | undefined {
-  if (!uri) return undefined
-  try {
-    return new URL(uri).hostname
-  } catch {
-    return uri
-  }
+  const safeUri = sanitizeHttpUrl(uri)
+  if (!safeUri) return undefined
+  return new URL(safeUri).hostname
 }
 
 /**
@@ -48,7 +46,8 @@ export function SourcesTab({
   return (
     <div className="h-full space-y-1.5 overflow-y-auto p-4" aria-label="Sources">
       {sources.map((source, index) => {
-        const link = hostname(source.uri)
+        const safeUri = sanitizeHttpUrl(source.uri)
+        const link = hostname(safeUri ?? undefined)
         return (
           <article
             key={source.id}
@@ -73,7 +72,7 @@ export function SourcesTab({
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
-                {source.uri && (
+                {safeUri && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -81,7 +80,7 @@ export function SourcesTab({
                     role="link"
                     render={
                       <a
-                        href={source.uri}
+                        href={safeUri}
                         target="_blank"
                         rel="noreferrer"
                         aria-label={`open source: ${source.title}`}
@@ -96,9 +95,11 @@ export function SourcesTab({
                   size="icon"
                   aria-label={`copy citation: ${source.title}`}
                   onClick={() => {
-                    void navigator.clipboard.writeText(
-                      source.uri ? `[${source.title}](${source.uri})` : source.title,
-                    )
+                    navigator.clipboard
+                      ?.writeText(
+                        safeUri ? `[${source.title}](${safeUri})` : source.title,
+                      )
+                      .catch(() => {})
                   }}
                 >
                   <Copy className="size-3.5" />

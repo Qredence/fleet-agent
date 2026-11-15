@@ -2,7 +2,9 @@ import { cardData } from '@/features/agent-runtime/card-contract'
 import { useAssistantDataUI } from '@assistant-ui/react'
 
 import { ArtifactCard } from '@/components/elements/artifact-card'
+import { useIsCompact } from '@/hooks/use-media-query'
 import { useShape } from '@/lib/shape-context'
+import { isSafeArtifactDownloadUrl } from '@/lib/url-safety'
 import { cn } from '@/lib/utils'
 import { useWorkspaceStore } from '@/state/workspace-store'
 
@@ -25,7 +27,7 @@ function parseArtifactData(value: unknown): ArtifactData | null {
     typeof data.mediaType === 'string' ? data.mediaType.trim().slice(0, 120) : ''
   const downloadUrl =
     typeof data.downloadUrl === 'string' ? data.downloadUrl.trim() : ''
-  if (!id || !name || !mediaType || !downloadUrl.startsWith('/api/artifacts/')) {
+  if (!id || !name || !mediaType || !isSafeArtifactDownloadUrl(downloadUrl)) {
     return null
   }
   return { id, name, mediaType, downloadUrl }
@@ -35,6 +37,7 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
   const data = parseArtifactData(rawData)
   const openPanel = useWorkspaceStore((s) => s.setProcessPanelOpen)
   const openSheet = useWorkspaceStore((s) => s.setProcessSheetOpen)
+  const isCompact = useIsCompact()
   const setTab = useWorkspaceStore((s) => s.setProcessPanelTab)
   const select = useWorkspaceStore((s) => s.setSelectedArtifactId)
   // The wrapper hugs the card edge-to-edge, so it shares the card's radius
@@ -49,7 +52,7 @@ function InlineArtifactCard({ data: rawData }: { data: unknown }) {
       aria-label={`Open artifact ${data.name}`}
       onClick={() => {
         openPanel(true)
-        openSheet(true)
+        if (isCompact) openSheet(true)
         setTab('artifacts')
         select(data.id)
       }}

@@ -37,6 +37,7 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { sanitizeImageSrc } from "@/lib/url-safety";
 
 const useFileSrc = (file: File | undefined) => {
   const [src, setSrc] = useState<string | undefined>(undefined);
@@ -70,7 +71,7 @@ const useAttachmentSrc = () => {
     }),
   );
 
-  return useFileSrc(file) ?? src;
+  return sanitizeImageSrc(useFileSrc(file) ?? src) ?? undefined;
 };
 
 type AttachmentPreviewProps = {

@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   AssistantRuntimeProvider,
@@ -11,6 +12,10 @@ import {
 } from '@assistant-ui/react'
 
 import { InlineAgentDataUIRegistration } from '@/features/agent-runtime/inline-agent-data-ui'
+import { useWorkspaceStore } from '@/state/workspace-store'
+import { mockViewport } from './setup'
+
+afterEach(cleanup)
 
 const noOpAdapter: ChatModelAdapter = {
   async *run() {},
@@ -195,5 +200,40 @@ describe('inline assistant-ui agent surfaces', () => {
     )
 
     expect(screen.queryByText('raw prompt should not render')).not.toBeInTheDocument()
+  })
+
+  it('opens the process sheet only on compact viewports when inspecting sources', async () => {
+    const user = userEvent.setup()
+    const message: ThreadMessageLike = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'data',
+          name: 'sources',
+          data: {
+            schemaVersion: 1,
+            sources: [
+              { title: 'DSPy docs', domain: 'dspy.ai', sourceId: 'src-1' },
+            ],
+          },
+        },
+      ],
+      status: { type: 'complete', reason: 'stop' },
+    }
+
+    mockViewport({ mobile: false, compact: false })
+    useWorkspaceStore.setState({ processPanelOpen: false, processSheetOpen: false })
+    render(<Runtime message={message} />)
+    await user.click(await screen.findByRole('button', { name: 'Inspect source 1' }))
+    expect(useWorkspaceStore.getState().processPanelOpen).toBe(true)
+    expect(useWorkspaceStore.getState().processSheetOpen).toBe(false)
+
+    cleanup()
+    mockViewport({ mobile: false, compact: true })
+    useWorkspaceStore.setState({ processPanelOpen: false, processSheetOpen: false })
+    render(<Runtime message={message} />)
+    await user.click(await screen.findByRole('button', { name: 'Inspect source 1' }))
+    expect(useWorkspaceStore.getState().processPanelOpen).toBe(true)
+    expect(useWorkspaceStore.getState().processSheetOpen).toBe(true)
   })
 })

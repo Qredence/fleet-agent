@@ -7,6 +7,7 @@ import { StatusChip } from "./status-chip";
 import { Button } from "@/components/ui/button";
 import { apiFetchBlob, apiFetchText } from "@/lib/api-client";
 import { formatByteSize } from "@/lib/byte-size";
+import { isSafeArtifactDownloadUrl } from "@/lib/url-safety";
 import { cn } from "@/lib/utils";
 import type { AgentArtifact } from "@/contracts/generated";
 
@@ -23,51 +24,59 @@ type ArtifactPreviewState =
   | { status: "ready"; content: string; truncated: boolean }
   | { status: "error" };
 
+type ArtifactPreviewResult =
+  | { key: string; status: "ready"; content: string; truncated: boolean }
+  | { key: string; status: "error" };
+
 function useArtifactPreview(
   artifact: AgentArtifact | undefined,
 ): ArtifactPreviewState {
-  const [state, setState] = useState<ArtifactPreviewState>({ status: "idle" });
+  const downloadUrl = artifact?.downloadUrl;
+  const previewKey =
+    artifact &&
+    artifact.status === "ready" &&
+    artifact.mediaType === "text/markdown" &&
+    isSafeArtifactDownloadUrl(downloadUrl)
+      ? `${artifact.id}:${downloadUrl}`
+      : null;
+
+  const [result, setResult] = useState<ArtifactPreviewResult | null>(null);
 
   useEffect(() => {
-    if (
-      !artifact ||
-      artifact.status !== "ready" ||
-      artifact.mediaType !== "text/markdown" ||
-      !artifact.downloadUrl?.startsWith("/api/artifacts/")
-    ) {
-      setState({ status: "idle" });
-      return;
-    }
+    if (!previewKey || !downloadUrl) return;
 
     const controller = new AbortController();
     let active = true;
-    setState({ status: "loading" });
 
-    apiFetchText(artifact.downloadUrl, { signal: controller.signal })
+    apiFetchText(downloadUrl, { signal: controller.signal })
       .then((content) => {
         if (!active) return;
-        setState({
+        setResult({
+          key: previewKey,
           status: "ready",
           content: content.slice(0, MAX_PREVIEW_CHARS),
           truncated: content.length > MAX_PREVIEW_CHARS,
         });
       })
       .catch(() => {
-        if (active && !controller.signal.aborted) setState({ status: "error" });
+        if (active && !controller.signal.aborted) {
+          setResult({ key: previewKey, status: "error" });
+        }
       });
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, [
-    artifact?.downloadUrl,
-    artifact?.id,
-    artifact?.mediaType,
-    artifact?.status,
-  ]);
+  }, [downloadUrl, previewKey]);
 
-  return state;
+  if (!previewKey) return { status: "idle" };
+  if (result?.key === previewKey) {
+    return result.status === "ready"
+      ? { status: "ready", content: result.content, truncated: result.truncated }
+      : { status: "error" };
+  }
+  return { status: "loading" };
 }
 
 export function ArtifactsTab({
@@ -78,8 +87,7 @@ export function ArtifactsTab({
     Record<string, "pending" | "error">
   >({});
   async function download(artifact: AgentArtifact) {
-    if (!artifact.downloadUrl?.match(/^\/api\/artifacts\/[A-Za-z0-9_-]+$/))
-      return;
+    if (!isSafeArtifactDownloadUrl(artifact.downloadUrl)) return;
     setDownloads((current) => ({ ...current, [artifact.id]: "pending" }));
     try {
       const blob = await apiFetchBlob(artifact.downloadUrl);
@@ -133,9 +141,7 @@ export function ArtifactsTab({
     >
       {artifacts.map((artifact, index) => {
         const isSelected = artifact.id === selectedArtifactId;
-        const canDownload = /^\/api\/artifacts\/[A-Za-z0-9_-]+$/.test(
-          artifact.downloadUrl ?? "",
-        );
+        const canDownload = isSafeArtifactDownloadUrl(artifact.downloadUrl);
         const sizeLabel = formatByteSize(artifact.sizeBytes);
         return (
           <article

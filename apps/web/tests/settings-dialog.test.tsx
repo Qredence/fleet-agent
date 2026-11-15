@@ -235,4 +235,72 @@ describe('SettingsDialog', () => {
     expect(screen.queryByRole('button', { name: /server default/i })).not.toBeInTheDocument()
     expect(getActiveProviderId()).toBeNull()
   })
+
+  it('shows resolved custom model name on ready OpenRouter provider card and syncs input on reopen', async () => {
+    const user = userEvent.setup()
+    openrouterAuth.setApiKey('sk-or-test')
+    openrouterAuth.setSelectedModel('openai/gpt-4o-mini')
+    openrouterAuth.setCustomModelEnabled(true)
+
+    const onOpenChange = vi.fn()
+    const { rerender } = renderDialog({ open: true, onOpenChange })
+
+    expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Models' }))
+    const input = screen.getByLabelText(/custom model identifier/i)
+    expect(input).toHaveValue('openai/gpt-4o-mini')
+    await user.clear(input)
+    await user.type(input, 'unsaved-draft')
+
+    openrouterAuth.setSelectedModel('anthropic/claude-3.5-sonnet')
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <SettingsDialog open={true} onOpenChange={onOpenChange} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByLabelText(/custom model identifier/i)).toHaveValue(
+      'anthropic/claude-3.5-sonnet',
+    )
+  })
+
+  it('supports editing custom provider model ID in the Models tab', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(
+      PROVIDERS_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        profiles: [
+          {
+            id: 'profile-custom',
+            name: 'Local Gateway',
+            baseUrl: 'https://custom.example/v1',
+            apiKey: 'sk-custom',
+            modelId: 'llama-3.1',
+            chatCompletionFormat: 'openai-chat-completions',
+            responseFormat: 'native_function_calling',
+            messagesFormat: 'system_role',
+          },
+        ],
+        activeProviderId: 'profile-custom',
+      }),
+    )
+    loadProviderStore()
+
+    renderDialog({ open: true, onOpenChange: vi.fn() })
+    await user.click(screen.getByRole('button', { name: 'Models' }))
+
+    const input = screen.getByLabelText(/custom model identifier/i)
+    expect(input).toHaveValue('llama-3.1')
+    await user.clear(input)
+    await user.type(input, 'qwen-2.5-coder')
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+
+    const custom = getProfiles().find((p) => p.id === 'profile-custom')
+    expect(custom?.modelId).toBe('qwen-2.5-coder')
+    expect(screen.getByText('qwen-2.5-coder')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Use default' }))
+    expect(getProfiles().find((p) => p.id === 'profile-custom')?.modelId).toBeUndefined()
+  })
 })

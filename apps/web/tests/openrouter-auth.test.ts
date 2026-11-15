@@ -236,7 +236,7 @@ describe('openrouter-auth module', () => {
       )
     })
 
-    it('throws error when key exchange API fails', async () => {
+    it('throws error when key exchange API fails and clears verifier on 4xx', async () => {
       sessionStorage.setItem(VERIFIER_KEY, 'my_test_verifier')
 
       globalThis.fetch = vi.fn().mockResolvedValue({
@@ -248,6 +248,74 @@ describe('openrouter-auth module', () => {
       await expect(handleOAuthCallback('invalid_code')).rejects.toThrow(
         'Key exchange failed with status 400',
       )
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+    })
+
+    it('rejects cross-origin callbackUrl without storing verifier', async () => {
+      await expect(initiateOAuth('https://evil.example/cb')).rejects.toThrow(
+        'OAuth callbackUrl must be same-origin',
+      )
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+    })
+
+    it('retains verifier on transient 5xx or network error so retry can succeed', async () => {
+      sessionStorage.setItem(VERIFIER_KEY, 'retry_verifier')
+      globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('network down'))
+
+      await expect(handleOAuthCallback('retry_code')).rejects.toThrow(
+        'network down',
+      )
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBe('retry_verifier')
+
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ key: 'sk-or-v1-retried-key' }),
+      })
+      await expect(handleOAuthCallback('retry_code')).resolves.toBe(
+        'sk-or-v1-retried-key',
+      )
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+    })
+
+    it('deduplicates concurrent finalizeOAuthCallback invocations (StrictMode safe)', async () => {
+      const originalLocation = window.location
+      // @ts-expect-error mocking window.location
+      delete window.location
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: {
+          ...originalLocation,
+          origin: 'http://localhost:5173',
+          pathname: '/projects/test',
+          search: '?code=strict_code',
+        },
+      })
+
+      sessionStorage.setItem(VERIFIER_KEY, 'strict_verifier')
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ key: 'sk-or-v1-strict-key' }),
+      })
+      globalThis.fetch = mockFetch
+
+      const [first, second] = await Promise.all([
+        finalizeOAuthCallback(),
+        finalizeOAuthCallback(),
+      ])
+
+      expect(first).toBe('sk-or-v1-strict-key')
+      expect(second).toBe('sk-or-v1-strict-key')
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: originalLocation,
+      })
     })
   })
 })
