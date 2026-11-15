@@ -42,14 +42,20 @@ require_grep() {
   }
   printf 'ok: %s\n' "$label"
 }
+find_ref() {
+  local haystack="$1" pattern="$2" label="$3" ref
+  ref=$(printf '%s\n' "$haystack" | grep -F "$pattern" | sed 's/.*ref=//; s/].*//' | head -n 1 || true)
+  [[ -n "$ref" ]] || die "missing UI element '$label' ($pattern)"
+  printf '%s\n' "$ref"
+}
 
 MODE=$(curl -fsS "$API_BASE/api/agent/capabilities" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent_mode"])')
 [[ "$MODE" == "fixtures" ]] || die "Expected an explicit fixtures service at API_BASE"
 
 note "setup: fresh thread via REST"
-BODY=$(curl -sS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E fixtures"}')
+BODY=$(curl -fsS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E fixtures"}')
 PROJECT_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$BODY")
-BODY=$(curl -sS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"E2E thread"}')
+BODY=$(curl -fsS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"E2E thread"}')
 THREAD_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$BODY")
 echo "project=$PROJECT_ID thread=$THREAD_ID"
 
@@ -65,32 +71,40 @@ require_grep "$SNAP" "E2E thread" "conversation header shows the thread title"
 require_grep "$SNAP" "Message input" "composer present"
 require_grep "$SNAP" "New thread" "sidebar actionable"
 
-TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//')
+SNAP=$($AB snapshot -i)
+TEXTBOX=$(find_ref "$SNAP" 'textbox "Message input"' "message input")
 
 note "phase 2: fixture run — send, process, answer"
 $AB fill "$TEXTBOX" "How does the agent state sync work?" >/dev/null
-SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+SEND=$(find_ref "$SNAP" 'button "Send message"' "send message button")
 $AB click "$SEND" >/dev/null
 sleep 4.5
 MAIN=$($AB get text "main")
 require_grep "$MAIN" "tool call" "tool call collapsible in the thread"
 require_grep "$MAIN" "JSON snapshot" "fixture answer text"
 
-$AB click $($AB snapshot -i | grep 'tab "Activity' | sed 's/.*ref=//; s/].*//' | head -1) >/dev/null 2>&1 || true
+SNAP=$($AB snapshot -i)
+ACTIVITY_TAB=$(find_ref "$SNAP" 'tab "Activity' "Activity tab")
+$AB click "$ACTIVITY_TAB" >/dev/null
 sleep 0.3
 PANEL=$($AB get text "[data-slot=\"process-panel\"]")
 require_grep "$PANEL" "Completed" "run status Completed in the Activity tab"
 require_grep "$PANEL" "search_docs" "tool execution card"
 
-$AB click $($AB snapshot -i | grep 'tab "Sources' | sed 's/.*ref=//; s/].*//' | head -1) >/dev/null
+SNAP=$($AB snapshot -i)
+SOURCES_TAB=$(find_ref "$SNAP" 'tab "Sources' "Sources tab")
+$AB click "$SOURCES_TAB" >/dev/null
 sleep 0.4
 PANEL=$($AB get text "[data-slot=\"process-panel\"]")
 require_grep "$PANEL" "docs.ag-ui.com" "sources list present"
 
 note "phase 3: cancel flow — stop during a run returns to idle"
-TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+TEXTBOX=$(find_ref "$SNAP" 'textbox "Message input"' "message input")
 $AB fill "$TEXTBOX" "cancel timing probe" >/dev/null
-SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+SEND=$(find_ref "$SNAP" 'button "Send message"' "send message button")
 $AB click "$SEND" >/dev/null
 sleep 0.2
 SNAP=$($AB snapshot -i)
@@ -110,7 +124,7 @@ PATHNAME=$($AB eval "location.pathname" 2>&1 | tr -d '"')
 printf 'ok: %s\n' "reload preserves the thread URL + shell"
 
 note "phase 5: thread switching"
-THREAD2_BODY=$(curl -sS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Second thread"}')
+THREAD2_BODY=$(curl -fsS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Second thread"}')
 THREAD2_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$THREAD2_BODY")
 $AB open "$WEB_BASE/projects/$PROJECT_ID/threads/$THREAD2_ID" >/dev/null
 sleep 1.2
@@ -118,5 +132,5 @@ PATHNAME=$($AB eval "location.pathname" 2>&1 | tr -d '"')
 [[ "$PATHNAME" == *"$THREAD2_ID" ]] || die "phase 'switch' — did not land on the second thread"
 printf 'ok: %s\n' "thread switching lands on the target thread URL"
 
-note "DSY engineering-mode matrix: run scripts/e2e-engine.sh (requires .env gateway config)"
+note "DSPy engineering-mode matrix: run scripts/e2e-engine.sh (requires .env gateway config)"
 echo "ALL FIXTURE PHASES PASSED"

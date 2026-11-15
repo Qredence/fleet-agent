@@ -13,13 +13,15 @@ past max_concurrent_runs in engine mode; fixtures mode is unlimited).
 import argparse
 import asyncio
 import json
+import os
 import statistics
 import time
+import uuid
+from typing import Any
 
 import httpx
 
-BODY_TEMPLATE = {
-    "threadId": "load-t",
+BODY_TEMPLATE: dict[str, Any] = {
     "state": None,
     "tools": [],
     "context": [],
@@ -27,12 +29,23 @@ BODY_TEMPLATE = {
 }
 
 
-async def consume_one(client: httpx.AsyncClient, index: int) -> dict[str, float | str]:
+async def consume_one(
+    client: httpx.AsyncClient,
+    index: int,
+    *,
+    thread_id: str,
+    run_batch: str,
+) -> dict[str, float | str]:
     body = {
         **BODY_TEMPLATE,
-        "runId": f"load-run-{index}",
+        "threadId": thread_id,
+        "runId": f"load-run-{run_batch}-{index}",
         "messages": [
-            {"id": f"m-{index}", "role": "user", "content": "How does state sync work?"}
+            {
+                "id": f"m-{run_batch}-{index}",
+                "role": "user",
+                "content": "How does state sync work?",
+            }
         ],
     }
     marks: dict[str, float | str] = {}
@@ -90,13 +103,34 @@ async def main_async() -> None:
     parser.add_argument("--base", default="http://localhost:8000")
     parser.add_argument("--connections", type=int, default=10)
     parser.add_argument("--requests", type=int, default=1, help="waves per connection")
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("FLEET_AGENT_API_KEY", ""),
+        help="API key sent as X-API-Key (defaults to FLEET_AGENT_API_KEY)",
+    )
+    parser.add_argument(
+        "--thread-id",
+        default="",
+        help="Optional threadId override (defaults to a unique id per run)",
+    )
     args = parser.parse_args()
 
-    async with httpx.AsyncClient(base_url=args.base, timeout=60.0) as client:
+    run_batch = uuid.uuid4().hex[:8]
+    thread_id = args.thread_id or f"load-t-{run_batch}"
+    headers = {"X-API-Key": args.api_key} if args.api_key else {}
+
+    async with httpx.AsyncClient(
+        base_url=args.base, headers=headers, timeout=60.0
+    ) as client:
         started = time.perf_counter()
         results = await asyncio.gather(
             *(
-                consume_one(client, wave * args.connections + index)
+                consume_one(
+                    client,
+                    wave * args.connections + index,
+                    thread_id=thread_id,
+                    run_batch=run_batch,
+                )
                 for wave in range(args.requests)
                 for index in range(args.connections)
             )
@@ -116,11 +150,11 @@ async def main_async() -> None:
         )
 
     for metric in ("run_started_s", "first_delta_s", "first_tool_s", "terminal_s"):
-        values = [
-            r[metric]
-            for r in results
-            if isinstance(r.get(metric), float) and r[metric] >= 0
-        ]  # type: ignore[index]
+        values: list[float] = []
+        for result in results:
+            metric_value = result.get(metric)
+            if isinstance(metric_value, float) and metric_value >= 0:
+                values.append(metric_value)
         if values:
             print(
                 f"{metric:>15}: p50={ms(pct(values, 50))} p95={ms(pct(values, 95))} "

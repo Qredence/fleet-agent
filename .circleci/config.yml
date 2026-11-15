@@ -26,7 +26,7 @@ commands:
       - run:
           name: Install uv
           command: |
-            python -m pip install --user uv
+            python -m pip install --user uv==0.12.21
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASH_ENV"
             source "$BASH_ENV"
             uv --version
@@ -95,8 +95,10 @@ jobs:
           # to. Drop the ignore once upstream publishes a fix.
           command: |
             cd apps/api
-            uv export --frozen --no-emit-project --no-hashes --format requirements-txt > /tmp/requirements-audit.txt
-            uvx pip-audit -r /tmp/requirements-audit.txt --ignore-vuln PYSEC-2026-2447
+            req_file=$(mktemp)
+            trap 'rm -f "$req_file"' EXIT
+            uv export --frozen --no-emit-project --no-hashes --format requirements-txt > "$req_file"
+            uvx pip-audit==2.10.1 -r "$req_file" --ignore-vuln PYSEC-2026-2447
       - run:
           name: Wait for and initialize test database
           command: |
@@ -186,16 +188,63 @@ jobs:
       - checkout
       - install-uv
       - run:
-          name: Validate workspace-state schema
+          name: Validate contract JSON schemas
           command: |
-            uv run --with jsonschema python -c '
+            uv run --no-project --with jsonschema==4.26.0 python -c '
             import json
+            from pathlib import Path
             import jsonschema
 
-            with open("packages/contracts/agent-workspace-state.schema.json") as schema_file:
-                schema = json.load(schema_file)
-            jsonschema.Draft202012Validator.check_schema(schema)
-            print("schema OK")
+            schemas = sorted(Path("packages/contracts").glob("*.schema.json"))
+            assert len(schemas) == 5, f"Expected 5 schemas, found {len(schemas)}"
+            for path in schemas:
+                with path.open() as schema_file:
+                    schema = json.load(schema_file)
+                jsonschema.Draft202012Validator.check_schema(schema)
+                print(f"{path.name}: OK")
+            '
+      - run:
+          name: Verify Python contract codegen freshness
+          command: |
+            uv run --no-project --with datamodel-code-generator==0.96.0 --with ruff==0.17.5 python -c '
+            import difflib
+            import subprocess
+            import sys
+            from pathlib import Path
+
+            specs = [
+                ("agent-workspace-state.schema.json", "app/contracts/agent_state.py", True, False),
+                ("thread-bootstrap.schema.json", "app/contracts/thread_bootstrap.py", True, False),
+                ("agent-capabilities.schema.json", "app/contracts/agent_capabilities.py", True, True),
+                ("inline-card.schema.json", "app/contracts/inline_card.py", False, True),
+                ("message-feedback.schema.json", "app/contracts/message_feedback.py", False, True),
+            ]
+            api_dir = Path("apps/api")
+            for schema_name, out_rel, use_title, enum_literal in specs:
+                cmd = [
+                    "datamodel-codegen",
+                    "--input", f"../../packages/contracts/{schema_name}",
+                    "--input-file-type", "jsonschema",
+                    "--output-model-type", "pydantic_v2.BaseModel",
+                    "--target-python-version", "3.13",
+                    "--use-union-operator",
+                    *(["--use-title-as-name"] if use_title else []),
+                    *(["--enum-field-as-literal", "all"] if enum_literal else []),
+                    "--disable-timestamp",
+                    "--formatters", "ruff-check", "ruff-format",
+                ]
+                proc = subprocess.run(cmd, cwd=api_dir, check=True, capture_output=True, text=True)
+                actual = (api_dir / out_rel).read_text(encoding="utf-8")
+                if proc.stdout != actual:
+                    diff = "".join(difflib.unified_diff(
+                        actual.splitlines(True),
+                        proc.stdout.splitlines(True),
+                        fromfile=f"apps/api/{out_rel}",
+                        tofile=f"{schema_name} (generated)",
+                    ))
+                    print(diff, file=sys.stderr)
+                    sys.exit(1)
+                print(f"apps/api/{out_rel}: fresh")
             '
 
   ci-success:

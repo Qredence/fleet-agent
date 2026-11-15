@@ -30,6 +30,9 @@ curl() {
   fi
 }
 
+ARTIFACT_FILE=$(mktemp "${TMPDIR:-/tmp}/e2e-artifact.XXXXXX")
+trap 'rm -f "$ARTIFACT_FILE"' EXIT
+
 note() { printf '\n=== %s ===\n' "$*"; }
 die() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 require_grep() {
@@ -40,14 +43,20 @@ require_grep() {
   }
   printf 'ok: %s\n' "$label"
 }
+find_ref() {
+  local haystack="$1" pattern="$2" label="$3" ref
+  ref=$(printf '%s\n' "$haystack" | grep -F "$pattern" | sed 's/.*ref=//; s/].*//' | head -n 1 || true)
+  [[ -n "$ref" ]] || die "missing UI element '$label' ($pattern)"
+  printf '%s\n' "$ref"
+}
 
 MODE=$(curl -fsS "$API_BASE/api/agent/capabilities" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent_mode"])')
 [[ "$MODE" == "engine" ]] || die "Expected an explicit engine service at API_BASE"
 
 note "setup: fresh thread via REST"
-BODY=$(curl -sS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E engine"}')
+BODY=$(curl -fsS -X POST "$API_BASE/api/projects" -H 'Content-Type: application/json' -d '{"name":"E2E engine"}')
 PROJECT_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$BODY")
-BODY=$(curl -sS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Engine e2e"}')
+BODY=$(curl -fsS -X POST "$API_BASE/api/projects/$PROJECT_ID/threads" -H 'Content-Type: application/json' -d '{"title":"Engine e2e"}')
 THREAD_ID=$(python3 -c "import json,sys;print(json.loads(sys.stdin.read())['id'])" <<<"$BODY")
 echo "project=$PROJECT_ID thread=$THREAD_ID"
 
@@ -58,13 +67,15 @@ sleep 1.5
 SNAP=$($AB snapshot -i -c)
 require_grep "$SNAP" "Message input" "composer present"
 
-TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+TEXTBOX=$(find_ref "$SNAP" 'textbox "Message input"' "message input")
 
 note "phase 2: search + managed report live run"
 # Evidence routing and managed output intent are selected together.
 # The application creates one Markdown report after synthesis.
 $AB fill "$TEXTBOX" "Search the docs for how AG-UI state sync works, then write a short markdown report about it as a managed report artifact." >/dev/null
-SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+SEND=$(find_ref "$SNAP" 'button "Send message"' "send message button")
 $AB click "$SEND" >/dev/null
 
 # Live LLM runs take a while; poll for the inline artifact card (CUSTOM event).
@@ -72,7 +83,7 @@ ARTICLE=""
 for _ in $(seq 1 40); do
   sleep 1.5
   SNAP_ART=$($AB snapshot -i -c 2>/dev/null || true)
-  ARTICLE=$(grep -oE 'button "[^"]*· open in Artifacts|button "Open artifact [^"]+"' <<<"$SNAP_ART" | head -1 || true)
+  ARTICLE=$(grep -oE 'button "[^"]*· open in Artifacts|button "Open artifact [^"]+"' <<<"$SNAP_ART" | head -n 1 || true)
   [[ -n "$ARTICLE" ]] && break
 done
 [[ -n "$ARTICLE" ]] || die "phase 'artifact' — inline artifact card never appeared within 60s"
@@ -94,21 +105,23 @@ require_grep "$SNAP" "Saved" "terminal persistence committed"
 require_grep "$SNAP" "download artifact:" "authenticated download control present"
 
 note "phase 3: artifact download via controlled URL"
-ARTIFACTS=$(curl -sS "$API_BASE/api/threads/$THREAD_ID/artifacts")
+ARTIFACTS=$(curl -fsS "$API_BASE/api/threads/$THREAD_ID/artifacts")
 DOWNLOAD_URL=$(python3 -c "import json,sys;d=json.load(sys.stdin);print(d[0]['downloadUrl'])" <<<"$ARTIFACTS")
-STATUS=$(curl -s -o /tmp/e2e-artifact.md -w "%{http_code}" "$API_BASE$DOWNLOAD_URL")
+STATUS=$(curl -sS -o "$ARTIFACT_FILE" -w "%{http_code}" "$API_BASE$DOWNLOAD_URL")
 [[ "$STATUS" == "200" ]] || die "phase 'download' — got $STATUS"
-SIZE=$(wc -c < /tmp/e2e-artifact.md | tr -d ' ')
+SIZE=$(wc -c < "$ARTIFACT_FILE" | tr -d ' ')
 [[ "$SIZE" -gt 0 ]] || die "phase 'download' — empty body"
 printf 'ok: %s (%sB)\n' "download served $DOWNLOAD_URL" "$SIZE"
 
 note "phase 4: continuation across turns (no new search)"
 # The managed report filename is deterministic; verify its resource metadata.
-ARTIFACTS=$(curl -sS "$API_BASE/api/threads/$THREAD_ID/artifacts")
-REPORT_NAME=$(python3 -c "import json,sys;print(json.load(sys.stdin)[0]['filename'])" <<<"$ARTIFACTS" 2>/dev/null || python3 -c "import json,sys;print(json.load(sys.stdin)[0]['name'])" <<<"$ARTIFACTS")
-TEXTBOX=$($AB snapshot -i | grep "textbox \"Message input\"" | sed 's/.*ref=//; s/].*//' | head -1)
+ARTIFACTS=$(curl -fsS "$API_BASE/api/threads/$THREAD_ID/artifacts")
+REPORT_NAME=$(python3 -c "import json,sys;d=json.load(sys.stdin)[0];print(d.get('filename') or d['name'])" <<<"$ARTIFACTS")
+SNAP=$($AB snapshot -i)
+TEXTBOX=$(find_ref "$SNAP" 'textbox "Message input"' "message input")
 $AB fill "$TEXTBOX" "Make that a report using the prior answer, without searching again." >/dev/null
-SEND=$($AB snapshot -i | grep "button \"Send message\"" | sed 's/.*ref=//; s/].*//' | head -1)
+SNAP=$($AB snapshot -i)
+SEND=$(find_ref "$SNAP" 'button "Send message"' "send message button")
 $AB click "$SEND" >/dev/null
 
 # The prior card must not satisfy the follow-up assertion. Wait for a second
@@ -132,6 +145,7 @@ for _ in $(seq 1 40); do
   grep -q "Saved" <<<"$SNAP" && break
   sleep 1.5
 done
+require_grep "$SNAP" "Saved" "continuation run settled"
 
 note "phase 5: reload restores conversation + process state"
 $AB reload >/dev/null

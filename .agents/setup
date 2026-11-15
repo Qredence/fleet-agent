@@ -166,12 +166,6 @@ step "apps/api dependencies: uv sync --locked --all-groups"
 # (cimg/python:3.13) instead of taking the newest match.
 (cd apps/api && uv sync --locked --all-groups --python 3.13)
 
-step "root package dependencies: uv sync --locked"
-# The repository root is its own uv project (the fleet-agent package and the
-# configs/ suites). CircleCI's contracts job runs uv from the root, so prepare
-# that environment as well.
-uv sync --locked --python 3.13
-
 step "environment files"
 [ -f apps/api/.env ] || cp -- apps/api/.env.example apps/api/.env
 [ -f apps/web/.env ] || cp -- apps/web/.env.example apps/web/.env

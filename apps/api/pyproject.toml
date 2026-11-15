@@ -30,6 +30,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.9",
+    "ty>=0.0.104",
     "types-PyYAML>=6.0.12.20260906",
 ]
 
@@ -69,6 +70,26 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["app.contracts.agent_state", "app.contracts.thread_bootstrap", "app.contracts.inline_card", "app.contracts.message_feedback"]
 ignore_errors = true
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+# Check authored app code, evals, and scripts; skip eval fixtures containing sample code.
+include = ["app", "evals", "scripts"]
+exclude = ["evals/fixtures"]
+
+# Generated from packages/contracts/*.schema.json — datamodel-code-generator emits conint()/constr() calls.
+[[tool.ty.overrides]]
+include = [
+    "app/contracts/agent_state.py",
+    "app/contracts/thread_bootstrap.py",
+    "app/contracts/inline_card.py",
+    "app/contracts/message_feedback.py",
+]
+
+[tool.ty.overrides.rules]
+invalid-type-form = "ignore"
 
 [tool.deptry]
 # Evaluation workspaces contain sample imports, not backend dependencies.

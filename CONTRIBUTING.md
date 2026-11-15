@@ -63,7 +63,7 @@ Edit the schema or constant list in `packages/contracts/` first. Then
 regenerate the generated models:
 
 ```bash
-# TypeScript models (agent workspace state + thread bootstrap)
+# TypeScript models (all 5 contracts)
 pnpm --filter web contracts:sync
 
 # Python models — one command per schema
@@ -87,6 +87,40 @@ uv run datamodel-codegen \
   --target-python-version 3.13 \
   --use-union-operator \
   --use-title-as-name \
+  --disable-timestamp \
+  --formatters ruff-check ruff-format
+
+uv run datamodel-codegen \
+  --input ../../packages/contracts/agent-capabilities.schema.json \
+  --input-file-type jsonschema \
+  --output app/contracts/agent_capabilities.py \
+  --output-model-type pydantic_v2.BaseModel \
+  --target-python-version 3.13 \
+  --use-union-operator \
+  --use-title-as-name \
+  --enum-field-as-literal all \
+  --disable-timestamp \
+  --formatters ruff-check ruff-format
+
+uv run datamodel-codegen \
+  --input ../../packages/contracts/inline-card.schema.json \
+  --input-file-type jsonschema \
+  --output app/contracts/inline_card.py \
+  --output-model-type pydantic_v2.BaseModel \
+  --target-python-version 3.13 \
+  --use-union-operator \
+  --enum-field-as-literal all \
+  --disable-timestamp \
+  --formatters ruff-check ruff-format
+
+uv run datamodel-codegen \
+  --input ../../packages/contracts/message-feedback.schema.json \
+  --input-file-type jsonschema \
+  --output app/contracts/message_feedback.py \
+  --output-model-type pydantic_v2.BaseModel \
+  --target-python-version 3.13 \
+  --use-union-operator \
+  --enum-field-as-literal all \
   --disable-timestamp \
   --formatters ruff-check ruff-format
 ```
