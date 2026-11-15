@@ -1,0 +1,68 @@
+apps/api/app/agui/run.py
+  h_f276322eb5eb9f 15,20,44,51,59,90-91,96-112,115-128,130,135-145,154,182-183,185,195-207,214-692,703,707,716-721,737-747,753,756-757,759,763,775,777-780,790-791,802-803,805-806,809,811,813,815,818,827-836,839-849,851,853-854,859,868,873-877,880,882-887,889
+apps/api/app/agui/state.py
+  h_f276322eb5eb9f 364-403,423-425,437
+apps/api/app/agui/wire.py
+  h_f276322eb5eb9f 107-116,118-119
+apps/api/app/api/agent.py
+  h_f276322eb5eb9f 20,23-24,114-177,192-193,213,227-228,232,237-239,251-282,284,288,290-293
+apps/api/app/api/artifacts.py
+  h_f276322eb5eb9f 8-10,12,14,24-29,32,41-43
+apps/api/app/api/health.py
+  h_f276322eb5eb9f 21,29-40
+apps/api/app/api/middleware.py
+  h_f276322eb5eb9f 8-9,23-53,55,57-63,65,70-71,80,83-150
+apps/api/app/api/projects.py
+  h_f276322eb5eb9f 77-81
+apps/api/app/api/threads.py
+  h_f276322eb5eb9f 7,21-27,30,33,171-175,178-181,209-217,219-226,257-261,282-293,326-328,332-336,344-347,353,355-360,368-371,383-394,396,409-417,427-431
+apps/api/app/kernel/content_safety.py
+  h_f276322eb5eb9f 20,48-50,52-53,61-66,75,104-230,233-234,241-246,271,273-290,292,300-313,315-324
+apps/api/app/kernel/history_safety.py
+  h_f276322eb5eb9f 9-10,173,176-179
+apps/api/app/persistence/migrations/versions/b2e4c7a91d0f_unique_null_branch_heads.py
+  h_f276322eb5eb9f 1-61
+apps/api/app/persistence/models.py
+  h_f276322eb5eb9f 146-151,178-183
+apps/api/app/persistence/repositories.py
+  h_f276322eb5eb9f 12,14,18,22-23,40,42,55-80,186-189,196,198-215,217,284-289,307-308,321-323,349-519,534,559-560,563,710-719,725,727-739,741,795-803,922,924,957,980-987,989-1009,1011-1016,1018-1027,1029-1047,1049-1077
+apps/api/app/services/metadata_tracing.py
+  h_f276322eb5eb9f 30,46,54,64
+apps/api/app/services/mlflow_observability.py
+  h_f276322eb5eb9f 33,257,259-278
+apps/api/app/settings.py
+  h_f276322eb5eb9f 1-2,8,35-44
+apps/api/tests/test_artifact_flow.py
+  h_f276322eb5eb9f 291-415
+apps/api/tests/test_content_safety.py
+  h_f276322eb5eb9f 69-73,78-79,81-82,329-330,332-333,337,359,366-372,375,377,400-401,405-406,408-412,414-453
+apps/api/tests/test_hardening.py
+  h_f276322eb5eb9f 504-762
+apps/api/tests/test_health.py
+  h_f276322eb5eb9f 113-147
+apps/api/tests/test_history_safety.py
+  h_f276322eb5eb9f 68-81
+apps/api/tests/test_live_coordinator.py
+  h_f276322eb5eb9f 560-673
+apps/api/tests/test_mlflow_tracing.py
+  h_f276322eb5eb9f 234-268
+apps/api/tests/test_persistence.py
+  h_f276322eb5eb9f 829-1058
+apps/api/tests/test_rest_projects_threads.py
+  h_f276322eb5eb9f 211-354
+apps/api/tests/test_run_coordinator.py
+  h_f276322eb5eb9f 117-174
+apps/api/tests/test_trace_and_bus.py
+  h_f276322eb5eb9f 385-426
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f5fb0e80870f083a3202635c3b2a06d0baaa366c",
+  "prompts": {},
+  "humans": {
+    "h_f276322eb5eb9f": {
+      "author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
