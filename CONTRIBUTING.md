@@ -146,6 +146,11 @@ cd apps/api
 uv run alembic upgrade head
 ```
 
+Migration `b2e4c7a91d0f_unique_null_branch_heads` adds partial unique indexes on
+null-head `run_states` / `dspy_histories` rows and, on upgrade, deletes older
+duplicate default-branch snapshots (`rn > 1`), keeping the newest row per
+thread. Expect that dedup when upgrading existing databases.
+
 ## Validation
 
 Run the relevant checks before opening a pull request. The complete CI-equivalent

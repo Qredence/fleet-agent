@@ -3,6 +3,7 @@
  *
  * Implements the OAuth PKCE flow for OpenRouter:
  * - Ephemeral code verifier stored in sessionStorage
+ * - Tab-binding `state` nonce stored alongside the verifier
  * - Code challenge computed via SHA-256 (S256 method)
  * - Exchange code for user API key without backend client secret
  * - Cross-tab synchronization via localStorage and storage events
@@ -18,6 +19,7 @@ import { createLocalStorageAuth } from '@/features/providers/local-storage-auth'
 
 export const STORAGE_KEY = 'openrouter_api_key'
 export const VERIFIER_KEY = 'openrouter_code_verifier'
+export const STATE_KEY = 'openrouter_oauth_state'
 export const MODEL_STORAGE_KEY = 'openrouter_selected_model'
 export const CUSTOM_MODEL_ENABLED_KEY = 'openrouter_custom_model_enabled'
 
@@ -85,6 +87,15 @@ export const isCustomModelEnabled = (): boolean => auth.isCustomModelEnabled()
  */
 export const setCustomModelEnabled = (enabled: boolean): void =>
   auth.setCustomModelEnabled(enabled)
+
+function clearOAuthSession(): void {
+  try {
+    sessionStorage.removeItem(VERIFIER_KEY)
+    sessionStorage.removeItem(STATE_KEY)
+  } catch {
+    // sessionStorage may be unavailable; ignore
+  }
+}
 
 /**
  * Guard: only process ?code= if we initiated an OAuth flow in this tab.
@@ -156,9 +167,12 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
 
   const url = resolveSameOriginCallbackUrl(callbackUrl)
   const verifier = generateCodeVerifier()
+  const state = generateCodeVerifier()
   try {
     sessionStorage.setItem(VERIFIER_KEY, verifier)
+    sessionStorage.setItem(STATE_KEY, state)
   } catch {
+    clearOAuthSession()
     throw new Error('Unable to store OAuth verifier in sessionStorage')
   }
 
@@ -168,6 +182,7 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
     callback_url: url,
     code_challenge: challenge,
     code_challenge_method: 'S256',
+    state,
   })
 
   window.location.href = `${OPENROUTER_OAUTH_AUTHORIZE_URL}?${params.toString()}`
@@ -192,18 +207,18 @@ async function exchangeCodeForApiKey(
 
   if (!response.ok) {
     if (response.status < 500) {
-      sessionStorage.removeItem(VERIFIER_KEY)
+      clearOAuthSession()
     }
     throw new Error(`Key exchange failed with status ${response.status}`)
   }
 
   const data = (await response.json()) as { key?: string }
   if (!data?.key) {
-    sessionStorage.removeItem(VERIFIER_KEY)
+    clearOAuthSession()
     throw new Error('Invalid response from OpenRouter: missing API key')
   }
 
-  sessionStorage.removeItem(VERIFIER_KEY)
+  clearOAuthSession()
   setApiKey(data.key)
   return data.key
 }
@@ -254,13 +269,24 @@ export async function finalizeOAuthCallback(): Promise<string | null> {
   if (typeof window === 'undefined') return null
   if (!hasOAuthCallbackPending()) return null
 
-  const code = new URLSearchParams(window.location.search).get('code')
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
   if (!code) {
     // Denied or abandoned flow: the verifier is single-use and cannot
     // complete a later exchange, so drop it now.
-    sessionStorage.removeItem(VERIFIER_KEY)
+    clearOAuthSession()
     return null
   }
+
+  const expectedState = sessionStorage.getItem(STATE_KEY)
+  if (expectedState !== null) {
+    const callbackState = params.get('state')
+    if (callbackState !== expectedState) {
+      clearOAuthSession()
+      throw new Error('OAuth state mismatch')
+    }
+  }
+
   return handleOAuthCallback(code)
 }
 

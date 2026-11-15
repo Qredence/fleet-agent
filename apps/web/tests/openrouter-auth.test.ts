@@ -17,6 +17,7 @@ import {
   onAuthChange,
   STORAGE_KEY,
   VERIFIER_KEY,
+  STATE_KEY,
   DEFAULT_OPENROUTER_MODEL,
 } from '@/features/providers/openrouter-auth'
 
@@ -119,12 +120,14 @@ describe('openrouter-auth module', () => {
 
     it('returns null and clears the stale verifier when no code is in the URL', async () => {
       sessionStorage.setItem(VERIFIER_KEY, 'stale_verifier')
+      sessionStorage.setItem(STATE_KEY, 'stale_state')
       window.history.pushState({}, '', '/projects/p/threads/t')
 
       const result = await finalizeOAuthCallback()
 
       expect(result).toBeNull()
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
     })
 
     it('returns null without touching storage when no flow is pending', async () => {
@@ -137,7 +140,12 @@ describe('openrouter-auth module', () => {
 
     it('exchanges the code from the URL and returns the key on finalizeOAuthCallback', async () => {
       sessionStorage.setItem(VERIFIER_KEY, 'my_test_verifier')
-      window.history.pushState({}, '', '/projects/p/threads/t?code=sample_auth_code')
+      sessionStorage.setItem(STATE_KEY, 'my_test_state')
+      window.history.pushState(
+        {},
+        '',
+        '/projects/p/threads/t?code=sample_auth_code&state=my_test_state',
+      )
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -150,6 +158,7 @@ describe('openrouter-auth module', () => {
       expect(key).toBe('sk-or-v1-finalize-key-999')
       expect(getApiKey()).toBe('sk-or-v1-finalize-key-999')
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
       expect(mockFetch).toHaveBeenCalledWith(
         'https://openrouter.ai/api/v1/auth/keys',
         expect.objectContaining({
@@ -160,6 +169,20 @@ describe('openrouter-auth module', () => {
           }),
         }),
       )
+    })
+
+    it('rejects finalize when callback state does not match the stored nonce', async () => {
+      sessionStorage.setItem(VERIFIER_KEY, 'my_test_verifier')
+      sessionStorage.setItem(STATE_KEY, 'expected_state')
+      window.history.pushState(
+        {},
+        '',
+        '/projects/p/threads/t?code=sample_auth_code&state=wrong_state',
+      )
+
+      await expect(finalizeOAuthCallback()).rejects.toThrow('OAuth state mismatch')
+      expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
     })
 
     it('stores verifier in sessionStorage and redirects to OpenRouter on initiateOAuth', async () => {
@@ -183,13 +206,17 @@ describe('openrouter-auth module', () => {
       await initiateOAuth()
 
       const storedVerifier = sessionStorage.getItem(VERIFIER_KEY)
+      const storedState = sessionStorage.getItem(STATE_KEY)
       expect(storedVerifier).toBeTruthy()
       expect(storedVerifier?.length).toBe(43)
+      expect(storedState).toBeTruthy()
+      expect(storedState?.length).toBe(43)
 
       expect(window.location.href).toContain('https://openrouter.ai/auth?')
       expect(window.location.href).toContain('callback_url=http%3A%2F%2Flocalhost%3A5173%2Fprojects%2Ftest')
       expect(window.location.href).toContain('code_challenge_method=S256')
       expect(window.location.href).toContain('code_challenge=')
+      expect(window.location.href).toContain(`state=${storedState}`)
 
       Object.defineProperty(window, 'location', {
         configurable: true,
@@ -238,6 +265,7 @@ describe('openrouter-auth module', () => {
 
     it('throws error when key exchange API fails and clears verifier on 4xx', async () => {
       sessionStorage.setItem(VERIFIER_KEY, 'my_test_verifier')
+      sessionStorage.setItem(STATE_KEY, 'my_test_state')
 
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -249,6 +277,7 @@ describe('openrouter-auth module', () => {
         'Key exchange failed with status 400',
       )
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
     })
 
     it('rejects cross-origin callbackUrl without storing verifier', async () => {
@@ -256,16 +285,19 @@ describe('openrouter-auth module', () => {
         'OAuth callbackUrl must be same-origin',
       )
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
     })
 
     it('retains verifier on transient 5xx or network error so retry can succeed', async () => {
       sessionStorage.setItem(VERIFIER_KEY, 'retry_verifier')
+      sessionStorage.setItem(STATE_KEY, 'retry_state')
       globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error('network down'))
 
       await expect(handleOAuthCallback('retry_code')).rejects.toThrow(
         'network down',
       )
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBe('retry_verifier')
+      expect(sessionStorage.getItem(STATE_KEY)).toBe('retry_state')
 
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
@@ -276,6 +308,7 @@ describe('openrouter-auth module', () => {
         'sk-or-v1-retried-key',
       )
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
     })
 
     it('deduplicates concurrent finalizeOAuthCallback invocations (StrictMode safe)', async () => {
@@ -289,11 +322,12 @@ describe('openrouter-auth module', () => {
           ...originalLocation,
           origin: 'http://localhost:5173',
           pathname: '/projects/test',
-          search: '?code=strict_code',
+          search: '?code=strict_code&state=strict_state',
         },
       })
 
       sessionStorage.setItem(VERIFIER_KEY, 'strict_verifier')
+      sessionStorage.setItem(STATE_KEY, 'strict_state')
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -310,6 +344,7 @@ describe('openrouter-auth module', () => {
       expect(second).toBe('sk-or-v1-strict-key')
       expect(mockFetch).toHaveBeenCalledTimes(1)
       expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+      expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
 
       Object.defineProperty(window, 'location', {
         configurable: true,

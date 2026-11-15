@@ -671,3 +671,92 @@ async def test_live_coordinator_post_settlement_emission_failure_still_emits_run
     assert types.count("RUN_ERROR") == 1
     assert types[-1] == "RUN_ERROR"
     assert "socket encode failure" not in json.dumps(events)
+
+
+async def test_persistence_skips_client_agui_history_fallback_for_partial_assistant():
+    """Durable history is authoritative; never rebuild from a client partial."""
+
+    from types import SimpleNamespace
+
+    from ag_ui.core import RunAgentInput
+
+    from app.agent.engine import AgentRunResult
+
+    captured: dict[str, object] = {}
+
+    class EmptyHistoryPersistence:
+        async def get_run(self, run_id):
+            del run_id
+            return SimpleNamespace(continuation_message_id=None)
+
+        async def get_latest_state(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def mark_running(self, *, run_id, state_json):
+            del run_id, state_json
+
+        async def get_continuation_history(self, thread_id, head_message_id):
+            del thread_id, head_message_id
+            return None
+
+        async def run_completed(self, **kwargs):
+            del kwargs
+            return True
+
+    class CapturingEngine:
+        async def run(self, *, user_request, history, context):
+            del user_request, context
+            captured["history"] = history
+            return AgentRunResult(
+                status="completed",
+                answer="Fresh answer",
+                process_summary="ok",
+                termination_reason="completed",
+            )
+
+    def capturing_builder(bus, *, thread_id, **kwargs):
+        del bus, thread_id, kwargs
+        return CapturingEngine()
+
+    input_data = RunAgentInput.model_validate(
+        {
+            "threadId": "thread-partial",
+            "runId": "run-partial",
+            "state": None,
+            "messages": [
+                {
+                    "id": "user-1",
+                    "role": "user",
+                    "content": "First question",
+                },
+                {
+                    "id": "assistant-partial",
+                    "role": "assistant",
+                    "content": "Incomplete streamed text",
+                },
+                {
+                    "id": "user-2",
+                    "role": "user",
+                    "content": "Retry please",
+                },
+            ],
+            "tools": [],
+            "context": [],
+            "forwardedProps": None,
+        }
+    )
+
+    stream = LiveDSPyCoordinator().stream(
+        input_data=input_data,
+        engine_builder=capturing_builder,
+        accept="text/event-stream",
+        is_disconnected=lambda: _false(),
+        persistence=EmptyHistoryPersistence(),  # type: ignore[arg-type]
+    )
+    events = [
+        json.loads(chunk.removeprefix("data: ").strip()) async for chunk in stream
+    ]
+
+    assert captured["history"] is None
+    assert any(event["type"] == "RUN_FINISHED" for event in events)

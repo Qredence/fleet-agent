@@ -398,6 +398,70 @@ class _LiveRunSession:
         status = "saved" if settled and self.persistence else "failed"
         return self.reducer.set_save_status(status)
 
+    def finalize_terminal(
+        self,
+        *,
+        error: bool,
+        log_message: str,
+        level: int,
+        termination_reason: str | None,
+    ) -> None:
+        """Mark the run terminal and record bounded metrics/logs once."""
+        self.terminal_settled = True
+        self.record_terminal_metrics(error=error)
+        self.log_terminal(
+            log_message,
+            level=level,
+            termination_reason=termination_reason,
+        )
+
+    async def settle_terminal_result(
+        self,
+        result: AgentRunResult,
+        *,
+        cancelled: bool = False,
+        persist: Callable[[], Awaitable[bool | None]] | None,
+        persist_with_shield: bool = False,
+        log_message: str,
+        log_level: int,
+        error: bool,
+    ) -> tuple[bool, list[dict[str, Any]]]:
+        """Complete public state, persist, then finalize terminal bookkeeping."""
+        delta = self.complete_public_state(result, cancelled=cancelled)
+        settled = True
+        if persist is not None:
+            if persist_with_shield:
+                try:
+                    settled = await _settle_terminal(persist)
+                except Exception as persist_exc:
+                    # Keep the fallback terminal event safe even if a custom
+                    # persistence implementation escapes the retry wrapper.
+                    logger.error(
+                        "could not persist unexpected failure "
+                        "(thread %s, run %s, exception_type=%s)",
+                        self.thread_id,
+                        self.run_id,
+                        type(persist_exc).__name__,
+                    )
+                    settled = False
+            else:
+                settled = await _settle_with_retry(persist)
+        delta.extend(self.save_outcome(settled))
+        if not settled and persist is not None and persist_with_shield:
+            logger.error(
+                "unexpected terminal failure could not be persisted "
+                "(thread %s, run %s)",
+                self.thread_id,
+                self.run_id,
+            )
+        self.finalize_terminal(
+            error=error,
+            log_message=log_message,
+            level=log_level,
+            termination_reason=result.termination_reason,
+        )
+        return settled, delta
+
     def record_tool_metrics(self, event: DomainEvent) -> None:
         if not self.metrics:
             return
@@ -552,30 +616,29 @@ class _LiveRunSession:
                 termination_reason="cancelled",
                 error_code="run_cancelled",
             )
-            self.complete_public_state(cancel_result, cancelled=True)
-            settled = (
-                await _settle_with_retry(
-                    lambda: self.persistence.run_cancelled(  # type: ignore[union-attr]
-                        thread_id=self.thread_id,
-                        run_id=self.run_id,
-                        state_json=self.reducer.snapshot_for_persistence(
-                            save_status="saved"
-                        ),
-                    )
-                )
-                if self.persistence
-                else True
-            )
-            self.save_outcome(settled)
             # A failed second retry is logged by _settle_with_retry, but this
             # generator must still stop rather than racing another terminal
             # event into the same run.
-            self.terminal_settled = True
-            self.record_terminal_metrics(error=True)
-            self.log_terminal(
-                "run %s cancelled (thread %s)",
-                level=logging.INFO,
-                termination_reason=cancel_result.termination_reason,
+            persistence = self.persistence
+            settled, _ = await self.settle_terminal_result(
+                cancel_result,
+                cancelled=True,
+                persist=(
+                    (
+                        lambda: persistence.run_cancelled(
+                            thread_id=self.thread_id,
+                            run_id=self.run_id,
+                            state_json=self.reducer.snapshot_for_persistence(
+                                save_status="saved"
+                            ),
+                        )
+                    )
+                    if persistence
+                    else None
+                ),
+                log_message="run %s cancelled (thread %s)",
+                log_level=logging.INFO,
+                error=True,
             )
             return settled
 
@@ -646,12 +709,11 @@ class _LiveRunSession:
             self.run_id,
             type(exc).__name__,
         )
-        delta = self.complete_public_state(failure)
-        settled = True
-        if self.persistence:
-            try:
-                persistence = self.persistence
-                settled = await _settle_terminal(
+        persistence = self.persistence
+        _, delta = await self.settle_terminal_result(
+            failure,
+            persist=(
+                (
                     lambda: persistence.run_failed(
                         thread_id=self.thread_id,
                         run_id=self.run_id,
@@ -661,31 +723,13 @@ class _LiveRunSession:
                         ),
                     )
                 )
-            except Exception as persist_exc:
-                # Keep the fallback terminal event safe even if a custom
-                # persistence implementation escapes the retry wrapper.
-                logger.error(
-                    "could not persist unexpected failure "
-                    "(thread %s, run %s, exception_type=%s)",
-                    self.thread_id,
-                    self.run_id,
-                    type(persist_exc).__name__,
-                )
-                settled = False
-        delta.extend(self.save_outcome(settled))
-        if not settled:
-            logger.error(
-                "unexpected terminal failure could not be persisted "
-                "(thread %s, run %s)",
-                self.thread_id,
-                self.run_id,
-            )
-        self.terminal_settled = True
-        self.record_terminal_metrics(error=True)
-        self.log_terminal(
-            "run %s ended with an unexpected failure (thread %s)",
-            level=logging.ERROR,
-            termination_reason=failure.termination_reason,
+                if persistence
+                else None
+            ),
+            persist_with_shield=True,
+            log_message="run %s ended with an unexpected failure (thread %s)",
+            log_level=logging.ERROR,
+            error=True,
         )
         return code, message, delta
 
@@ -768,7 +812,15 @@ class LiveDSPyCoordinator:
                 if persistence
                 else None
             )
-            if continuation_history is None and len(input_data.messages) > 1:
+            # With persistence configured, durable history is authoritative.
+            # Never reconstruct from client AG-UI messages: after a mid-stream
+            # failure the client may still hold a partial assistant turn that
+            # was never persisted.
+            if (
+                persistence is None
+                and continuation_history is None
+                and len(input_data.messages) > 1
+            ):
                 continuation_history = history_from_agui_messages(
                     input_data.messages[:-1]
                 )
@@ -826,6 +878,8 @@ class LiveDSPyCoordinator:
 
             delta = session.complete_public_state(result)
             session.start_terminal_save(result)
+            # Persist asynchronously while answer chunks flush; bookkeeping
+            # below still owns metrics/logs after the save awaits.
             session.terminal_settled = True
 
             yield session.emit(StateDeltaEvent(delta=delta))
@@ -850,9 +904,9 @@ class LiveDSPyCoordinator:
                 )
 
             if result.status == "completed":
-                session.record_terminal_metrics(error=False)
-                session.log_terminal(
-                    "run %s completed (thread %s)",
+                session.finalize_terminal(
+                    error=False,
+                    log_message="run %s completed (thread %s)",
                     level=logging.INFO,
                     termination_reason=result.termination_reason,
                 )
@@ -870,6 +924,8 @@ class LiveDSPyCoordinator:
                         "forced_submit": result.termination_reason == "forced_submit",
                     },
                 )
+                # terminal_settled was set before the async save; only metrics
+                # remain (no success-style log_terminal for engine failures).
                 session.record_terminal_metrics(error=True)
                 yield session.emit(RunErrorEvent(message=message, code=code))
 

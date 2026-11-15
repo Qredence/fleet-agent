@@ -23,6 +23,7 @@ from app.contracts.message_feedback import MessageFeedback
 from app.kernel.content_safety import scrub_public_text
 from app.kernel.history_safety import sanitize_message_content
 from app.kernel.identity import canonical_source_key, disambiguated_source_id
+from app.persistence.bootstrap_selection import select_latest_bootstrap_run
 from app.persistence.branch import nearest_anchor
 from app.persistence.models import (
     Artifact,
@@ -957,6 +958,7 @@ class ThreadsRepository:
     ) -> BootstrapData | None:
         async with self._sessions() as session:
             async with session.begin():
+                # Must remain the first statement after begin() for REPEATABLE READ.
                 await session.execute(
                     text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 )
@@ -986,66 +988,12 @@ class ThreadsRepository:
                         )
                     ).scalars()
                 )
-                state_run = next(
-                    (
-                        candidate
-                        for candidate in candidates
-                        if state_row is not None and candidate.id == state_row.run_id
-                    ),
-                    None,
+                latest = select_latest_bootstrap_run(
+                    message_rows=message_rows,
+                    candidates=candidates,
+                    state_row=state_row,
+                    active_head_message_id=thread.active_head_message_id,
                 )
-                latest: Run | None
-                if thread.active_head_message_id is None:
-                    latest = state_run or (candidates[0] if candidates else None)
-                else:
-                    parents = {
-                        row.message_id: row.parent_message_id for row in message_rows
-                    }
-                    branch_ids: set[str] = set()
-                    current_id: str | None = thread.active_head_message_id
-                    while current_id is not None and current_id not in branch_ids:
-                        branch_ids.add(current_id)
-                        current_id = parents.get(current_id)
-                    branch_latest = next(
-                        (
-                            candidate
-                            for candidate in candidates
-                            if (
-                                candidate.output_message_id in branch_ids
-                                if candidate.output_message_id is not None
-                                else candidate.input_message_id in branch_ids
-                            )
-                        ),
-                        None,
-                    )
-                    exact_state = state_row is not None and (
-                        state_row.head_message_id == thread.active_head_message_id
-                        or (
-                            state_row.run_id is not None
-                            and thread.active_head_message_id
-                            == f"msg-tools-{state_row.run_id}"
-                        )
-                    )
-                    branch_latest_is_at_head = branch_latest is not None and (
-                        branch_latest.output_message_id == thread.active_head_message_id
-                        or (
-                            branch_latest.output_message_id is None
-                            and branch_latest.input_message_id
-                            == thread.active_head_message_id
-                        )
-                    )
-                    if branch_latest_is_at_head or not exact_state:
-                        latest = (
-                            branch_latest
-                            or state_run
-                            or (candidates[0] if candidates else None)
-                        )
-                    else:
-                        latest = (
-                            state_run
-                            or branch_latest
-                            or (candidates[0] if candidates else None)
-                        )
 
                 completed_states: list[tuple[RunState, Run]] = [
                     (row[0], row[1])

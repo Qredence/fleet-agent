@@ -240,12 +240,18 @@ export function buildHistoryAdapter(
         : (storedRepository?.headId ?? null),
     });
     // assistant-ui 0.15's branchable factory drops runConfig from its input
-    // type/runtime. Reattach it to the exported items so edit/regenerate runs
-    // retain their exact persisted configuration on the next load.
-    const messages = repository.messages.map((item, index) => ({
-      ...item,
-      ...(items[index]?.runConfig ? { runConfig: items[index].runConfig } : {}),
-    }));
+    // type/runtime. Reattach by message id (not index) so a reorder cannot
+    // silently bind the wrong configuration on edit/regenerate.
+    const runConfigById = new Map(
+      items.map((item) => [item.message.id, item.runConfig] as const),
+    );
+    const messages = repository.messages.map((item) => {
+      const runConfig = runConfigById.get(item.message.id);
+      return {
+        ...item,
+        ...(runConfig ? { runConfig } : {}),
+      };
+    });
     return {
       ...repository,
       messages,

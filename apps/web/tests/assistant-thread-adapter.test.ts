@@ -177,6 +177,63 @@ describe('assistant-ui history adapter', () => {
     )
   })
 
+  it('reattaches runConfig by message id, not repository order', async () => {
+    const bootstrap = {
+      schemaVersion: 2 as const,
+      thread: {} as never,
+      messageRepository: {
+        headId: 'assistant-a',
+        messages: [
+          {
+            id: 'user-1',
+            parentId: null,
+            format: 'aui/v0' as const,
+            content: {
+              id: 'user-1',
+              role: 'user',
+              content: [{ type: 'text', text: 'Question' }],
+            },
+            runConfig: { custom: { model: 'model-user' } },
+          },
+          {
+            id: 'assistant-b',
+            parentId: 'user-1',
+            format: 'aui/v0' as const,
+            content: {
+              id: 'assistant-b',
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Branch B' }],
+            },
+            runConfig: { custom: { model: 'model-b' } },
+          },
+          {
+            id: 'assistant-a',
+            parentId: 'user-1',
+            format: 'aui/v0' as const,
+            content: {
+              id: 'assistant-a',
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Branch A' }],
+            },
+            runConfig: { custom: { model: 'model-a' } },
+          },
+        ],
+      },
+      messages: [],
+      agentState: null,
+      latestRun: null,
+    }
+
+    const repository = await buildHistoryAdapter('thread-1', bootstrap).load()
+    const byId = Object.fromEntries(
+      repository.messages.map((item) => [item.message.id, item.runConfig]),
+    )
+
+    expect(byId['user-1']).toEqual({ custom: { model: 'model-user' } })
+    expect(byId['assistant-a']).toEqual({ custom: { model: 'model-a' } })
+    expect(byId['assistant-b']).toEqual({ custom: { model: 'model-b' } })
+  })
+
   it('strips reasoning parts when decoding exact aui/v0 messages', async () => {
     const bootstrap = {
       schemaVersion: 2 as const,
