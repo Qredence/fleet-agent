@@ -135,7 +135,66 @@ def test_web_search_drops_unsafe_urls_and_resets_prior_results():
 
     assert search("second") == "No web results matched the query."
     assert search.last_sources == []
-    assert search.get_result("w1") is None
+    # Run-scoped search IDs stay monotonic and fetchable across searches.
+    assert search.get_result("w1") == {
+        "url": "http://example.com/article",
+        "title": "Valid result",
+    }
+
+
+def test_multiple_web_searches_keep_monotonic_ids_across_run():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/search":
+            q = json.loads(request.content)["query"]
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "title": f"Result {q}",
+                            "url": f"https://example.com/{q}",
+                            "content": f"snippet {q}",
+                        }
+                    ]
+                },
+            )
+        body = f"body for {json.loads(request.content)['urls'][0]}"
+        return httpx.Response(200, json={"results": [{"raw_content": body}]})
+
+    client = _search_client(handler)
+    search = WebSearchTool(client=client)
+    fetch = FetchPageTool(search=search, client=client)
+
+    first = search("one")
+    second = search("two")
+
+    assert "[w1] Result one" in first
+    assert "[w2] Result two" in second
+    assert "body for https://example.com/one" in fetch("w1")
+    assert "body for https://example.com/two" in fetch("w2")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"results": ["unexpected-string"]},
+        {"results": {"unexpected": "dict"}},
+        ["top-level-list"],
+    ],
+)
+def test_fetch_page_rejects_malformed_extract_payload(payload):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/search":
+            return httpx.Response(200, json=_SEARCH_PAYLOAD)
+        return httpx.Response(200, json=payload)
+
+    client = _search_client(handler)
+    search = WebSearchTool(client=client)
+    fetch = FetchPageTool(search=search, client=client)
+    search("dspy")
+
+    with pytest.raises(RuntimeError, match="No readable text was found"):
+        fetch("w1")
 
 
 def test_web_search_caps_max_results_at_ten():

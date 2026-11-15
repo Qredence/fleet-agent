@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.agent.tool_registry import (
     ToolMetadata,
@@ -11,9 +12,7 @@ def test_registry_preserves_dspy_schema_and_typed_validation():
         """Look up bounded values."""
         return f"{query}:{limit}"
 
-    registry = ToolRegistry(
-        [(lookup, ToolMetadata(name="lookup", max_output_chars=20))]
-    )
+    registry = ToolRegistry([(lookup, ToolMetadata(name="lookup"))])
     tool = registry.get("lookup").tool
 
     assert tool.desc == "Look up bounded values."
@@ -22,3 +21,8 @@ def test_registry_preserves_dspy_schema_and_typed_validation():
     assert tool(**{"query": "x", "limit": 3}) == "x:3"
     with pytest.raises(ValueError):
         tool(query=4)
+
+
+def test_tool_metadata_forbids_unknown_fields():
+    with pytest.raises(ValidationError):
+        ToolMetadata(name="lookup", max_output_chars=20)  # type: ignore[call-arg]

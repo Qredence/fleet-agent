@@ -47,7 +47,7 @@ ToolCapability = Literal[
 class ToolMetadata(BaseModel):
     """One tool's model-facing description and enforced execution policy."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str = Field(pattern=TOOL_NAME_PATTERN)
     # The text the model receives. Empty falls back to the source's own docstring.

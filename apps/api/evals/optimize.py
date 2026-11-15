@@ -70,8 +70,13 @@ class RouterProgram(dspy.Module):  # type: ignore[misc]  # dspy is untyped
         super().__init__()
         self.router = dspy.Predict(ToolRoutingSignature)
 
-    def forward(self, user_request: str) -> dspy.Prediction:
-        return self.router(user_request=user_request)
+    def forward(
+        self, user_request: str, conversation_context: str = "[]"
+    ) -> dspy.Prediction:
+        return self.router(
+            user_request=user_request,
+            conversation_context=conversation_context,
+        )
 
 
 def _route_of(example: dspy.Example) -> str:

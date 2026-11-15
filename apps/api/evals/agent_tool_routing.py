@@ -14,7 +14,14 @@ from typing import Any, Literal
 
 import dspy
 
-from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, ToolRoute, coerce_route
+from app.agent.routing import (
+    ROUTE_CAPABILITIES,
+    ROUTES,
+    ToolRoute,
+    coerce_route,
+    is_valid_route,
+    normalize_routing_token,
+)
 from app.agent.tool_registry import TOOL_SPECS
 
 
@@ -122,6 +129,24 @@ ROUTING_EXAMPLES: list[dspy.Example] = [
 ]
 
 
+RoutingMissKind = Literal[
+    "invalid", "intent_or_policy", "over_selected", "under_selected"
+]
+
+
+def classify_routing_miss(expected: str, actual: str) -> RoutingMissKind:
+    """Categorize a routing miss without conflating intent or invalid outputs."""
+    if not is_valid_route(actual):
+        return "invalid"
+    expected_route = coerce_route(expected)
+    actual_route = coerce_route(actual)
+    if actual_route == expected_route:
+        return "intent_or_policy"
+    if ROUTE_CAPABILITIES[expected_route] <= ROUTE_CAPABILITIES[actual_route]:
+        return "over_selected"
+    return "under_selected"
+
+
 def routing_metric(
     gold: dspy.Example,
     pred: dspy.Prediction,
@@ -143,11 +168,7 @@ def routing_metric(
     expected = coerce_route(getattr(gold, "expected_route", None))
     raw = getattr(pred, "route", None)
     actual = coerce_route(raw)
-    valid = (
-        isinstance(raw, str)
-        and raw.strip().strip("\"'`").lower().replace("-", "_").replace(" ", "_")
-        in ROUTES
-    )
+    route_valid = is_valid_route(raw)
     required = frozenset(
         getattr(gold, "required_capabilities", ROUTE_CAPABILITIES[expected])
     )
@@ -162,21 +183,22 @@ def routing_metric(
         required = required | {"artifact"}
     exposed = getattr(pred, "exposed_tools", None)
     available = (
-        frozenset(
-            metadata.capability
-            for metadata in TOOL_SPECS.values()
-            if metadata.capability in ROUTE_CAPABILITIES[actual]
-        )
+        frozenset(ROUTE_CAPABILITIES[actual])
         if exposed is None
         else frozenset(
             TOOL_SPECS[name].capability for name in exposed if name in TOOL_SPECS
         )
     )
-    if getattr(pred, "output_intent", None) == "managed_report":
+    raw_intent = getattr(pred, "output_intent", "none")
+    intent = normalize_routing_token(raw_intent)
+    intent_valid = intent in {"none", "managed_report"}
+    if intent == "managed_report":
         available = available | {"artifact"}
-    intent = getattr(pred, "output_intent", "none")
-    valid = valid and intent in {"none", "managed_report"}
-    intent_exact = expected_intent is None or intent == expected_intent
+    valid = route_valid and intent_valid
+    if expected_intent is None:
+        intent_exact = valid and (True if expected == "artifact" else intent == "none")
+    else:
+        intent_exact = valid and intent == expected_intent
     authorized = getattr(gold, "authorized_tools", None)
     observed = set(getattr(pred, "exposed_tools", []) or []) | set(
         getattr(pred, "executed_tools", []) or []
@@ -185,20 +207,34 @@ def routing_metric(
     exact = valid and actual == expected
     sufficient = valid and required <= available
     over_selection = valid and bool(available - required)
+    passed = exact and intent_exact and not authorization_failure
+    if passed:
+        feedback = "Correct minimum capabilities."
+    else:
+        reasons: list[str] = []
+        if not exact:
+            reasons.append(f"Expected route {expected}; selected {raw!r}.")
+        if not intent_exact:
+            want_intent = expected_intent or (
+                "none or managed_report" if expected == "artifact" else "none"
+            )
+            reasons.append(
+                f"Expected output_intent {want_intent}; selected {raw_intent!r}."
+            )
+        if authorization_failure:
+            unauthorized = sorted(observed - set(authorized or []))
+            reasons.append(f"Unauthorized tool exposure: {unauthorized}.")
+        reasons.append(f"Required capabilities: {sorted(required)}.")
+        feedback = " ".join(reasons)
     return dspy.Prediction(
-        score=float(exact and intent_exact and not authorization_failure),
+        score=float(passed),
         authorization_failure=float(authorization_failure),
         output_intent_accuracy=float(intent_exact),
         exact_match=float(exact),
         invalid_output_rate=float(not valid),
         capability_sufficiency=float(sufficient),
         over_selection=float(over_selection),
-        feedback="Correct minimum capabilities."
-        if exact
-        else (
-            f"Expected {expected}; selected {raw!r}. "
-            f"Required capabilities: {sorted(required)}."
-        ),
+        feedback=feedback,
     )
 
 

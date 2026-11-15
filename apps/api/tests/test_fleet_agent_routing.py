@@ -116,6 +116,9 @@ def test_selected_profile_receives_history_without_rebuilding_modules(monkeypatc
 
     def fake_evidence(**kwargs):
         captured.update(kwargs)
+        kwargs["history"].messages.append(
+            {"user_request": kwargs["user_request"], "trajectory": {}}
+        )
         return dspy.Prediction(history=history, termination_reason="evidence_submit")
 
     monkeypatch.setattr(
@@ -138,8 +141,10 @@ def test_selected_profile_receives_history_without_rebuilding_modules(monkeypatc
     assert captured["history"] is history
     assert prediction.agent_route == "workspace_read"
     # The evidence loop's history rides on the final prediction for
-    # continuation; the synthesizer never sees the raw next_thought text.
+    # continuation without overwriting prior turns.
     assert prediction.history is history
+    assert history.messages[0] == {"role": "user", "content": "prior"}
+    assert history.messages[1]["answer"] == "done"
 
 
 def test_invalid_router_output_falls_back_to_direct_without_escalation(monkeypatch):
@@ -190,7 +195,9 @@ def test_json_router_literal_value_error_falls_back_to_direct():
     lm = ScriptedLM([{"content": '{"route": "code"}'}])
 
     with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
-        assert program._select_route("inspect the code") == "direct"
+        assert program._select_decision(
+            "inspect the code", dspy.History(messages=[])
+        ) == ("direct", "none", False)
 
 
 def test_json_router_surface_noise_coerces_to_valid_route():
@@ -200,7 +207,9 @@ def test_json_router_surface_noise_coerces_to_valid_route():
     )
 
     with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
-        assert program._select_route("write new tests") == "workspace_write"
+        assert program._select_decision(
+            "write new tests", dspy.History(messages=[])
+        ) == ("workspace_write", "none", True)
 
 
 def test_direct_route_keeps_dict_history_evidence(monkeypatch):
@@ -439,3 +448,97 @@ def test_managed_output_intent_reaches_synthesis_without_claiming_export(monkeyp
     assert captured["output_intent"] == "managed_report"
     assert result.answer == "# Report"
     assert result.output_intent == "managed_report"
+
+
+def test_invalid_output_intent_fails_closed_without_running_write_tools(monkeypatch):
+    program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
+    monkeypatch.setattr(
+        program.router,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            route="workspace_write", output_intent="bogus"
+        ),
+    )
+    ran: list[str] = []
+
+    def spy(route: ToolRoute):
+        def forward(**kwargs):
+            del kwargs
+            ran.append(route)
+            return dspy.Prediction(history=None, termination_reason="submit")
+
+        return forward
+
+    for route, agent in program.evidence_agents.items():
+        monkeypatch.setattr(agent, "forward", spy(route))
+
+    monkeypatch.setattr(
+        program.synthesizer,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            answer="safe direct fallback",
+            process_summary="",
+            key_decisions=[],
+            caveats=[],
+        ),
+    )
+
+    result = program(user_request="edit files", history=None)
+
+    assert ran == []
+    assert result.agent_route == "direct"
+    assert result.routing_valid is False
+    assert result.output_intent == "none"
+    assert (
+        "Capability selection failed safely; no additional tools were authorized."
+        in result.caveats
+    )
+
+
+def test_immediate_gatherer_failure_on_second_turn_preserves_prior_turn_history(
+    monkeypatch,
+):
+    from dspy.utils.exceptions import ContextWindowExceededError
+
+    program = FleetAgent(tool_profiles=build_tool_profiles(_registry()), max_iters=3)
+    monkeypatch.setattr(
+        program.router,
+        "forward",
+        lambda **kwargs: dspy.Prediction(route="research", output_intent="none"),
+    )
+
+    def fail_immediately(**kwargs):
+        del kwargs
+        raise ContextWindowExceededError(message="too long")
+
+    monkeypatch.setattr(
+        program.evidence_agents["research"], "forward", fail_immediately
+    )
+    monkeypatch.setattr(
+        program.synthesizer,
+        "forward",
+        lambda **kwargs: dspy.Prediction(
+            answer="turn 2 fallback",
+            process_summary="turn 2 summary",
+            key_decisions=["d2"],
+            caveats=[],
+        ),
+    )
+
+    prior_turn = {
+        "user_request": "turn 1",
+        "answer": "turn 1 answer",
+        "process_summary": "turn 1 summary",
+        "key_decisions": ["d1"],
+        "caveats": ["c1"],
+    }
+    history = dspy.History(messages=[prior_turn])
+
+    result = program(user_request="turn 2 question", history=history)
+
+    assert len(result.history.messages) == 2
+    assert result.history.messages[0]["answer"] == "turn 1 answer"
+    assert result.history.messages[0]["process_summary"] == "turn 1 summary"
+    assert result.history.messages[1]["user_request"] == "turn 2 question"
+    assert result.history.messages[1]["answer"] == "turn 2 fallback"
+    assert result.evidence_status == "insufficient"

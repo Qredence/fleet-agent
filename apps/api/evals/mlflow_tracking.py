@@ -16,13 +16,14 @@ configured.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import dspy
 
-from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, coerce_route
 from app.services.mlflow_observability import connect, ensure_experiment
+from evals.agent_tool_routing import classify_routing_miss
 
 logger = logging.getLogger(__name__)
 
@@ -157,14 +158,9 @@ def log_routing_score(
             tags["fleet.dataset.version"] = str(dataset_version)
         if dataset_digest:
             tags["fleet.dataset.digest"] = dataset_digest
-        over = sum(
-            1
-            for _, expected, actual, _ in misses
-            if actual in ROUTES
-            and ROUTE_CAPABILITIES[coerce_route(expected)]
-            <= ROUTE_CAPABILITIES[coerce_route(actual)]
+        buckets = Counter(
+            classify_routing_miss(expected, actual) for _, expected, actual, _ in misses
         )
-        under = len(misses) - over
         with mlflow.start_run(run_name="routing-score") as run:
             mlflow.set_tags(tags)
             mlflow.log_params(
@@ -178,8 +174,10 @@ def log_routing_score(
                     **(dimensions or {}),
                     "mean_score": mean,
                     "misses": len(misses),
-                    "under_selected": under,
-                    "over_selected": over,
+                    "under_selected": buckets["under_selected"],
+                    "over_selected": buckets["over_selected"],
+                    "invalid_outputs": buckets["invalid"],
+                    "intent_or_policy_misses": buckets["intent_or_policy"],
                     "failures": float(failures),
                     "gate_passed": float(gate_passed),
                 }

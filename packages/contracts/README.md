@@ -7,9 +7,9 @@ the React frontend.
 
 - `agent-capabilities.schema.json` — active server run mode returned by
   authenticated `GET /api/agent/capabilities`.
-- `agent-workspace-state.schema.json` — `AgentWorkspaceState` v1, the user-safe
+- `agent-workspace-state.schema.json` — `AgentWorkspaceState` v2, the user-safe
   process state streamed via AG-UI `STATE_SNAPSHOT` / `STATE_DELTA`.
-- `thread-bootstrap.schema.json` — `ThreadBootstrap` v1, the
+- `thread-bootstrap.schema.json` — `ThreadBootstrap` v2, the
   `GET /api/threads/{id}/bootstrap` restoration envelope.
 - `error-codes.json` — stable public error codes and their safe messages.
   The backend loads it at import (`app/contracts/constants.py`); the web

@@ -11,6 +11,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from app.kernel.content_safety import scrub_public_text
+
 _SENSITIVE_KEY_PARTS = ("key", "token", "secret", "password", "auth", "credential")
 _MAX_PREVIEW_CHARS = 300
 _MAX_RESULT_CHARS = 2000
@@ -38,6 +40,49 @@ def public_tool_args_json(tool_name: str, args: Mapping[str, Any]) -> str:
         separators=(",", ":"),
         allow_nan=False,
     )
+
+
+def bounded_public_tool_args_json(
+    tool_name: str,
+    args: Mapping[str, Any],
+    *,
+    max_chars: int = _MAX_PREVIEW_CHARS,
+) -> str:
+    """Serialize scrubbed public tool arguments as valid JSON within max_chars."""
+    public = public_tool_args(tool_name, args)
+    serialized = scrub_public_text(
+        json.dumps(public, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    )
+    if len(serialized) <= max_chars:
+        return serialized
+
+    prioritized_keys = (["query"] if "query" in public else []) + [
+        key for key in public if key != "query"
+    ]
+    bounded: dict[str, object] = {}
+    omitted = False
+    for key in prioritized_keys:
+        candidate = {**bounded, key: public[key]}
+        candidate_json = scrub_public_text(
+            json.dumps(
+                {**candidate, "truncated": True},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        )
+        if len(candidate_json) <= max_chars:
+            bounded = candidate
+        else:
+            omitted = True
+    if omitted:
+        bounded["truncated"] = True
+    result = scrub_public_text(
+        json.dumps(bounded, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    )
+    if len(result) <= max_chars:
+        return result
+    return '{"truncated":true}' if max_chars >= 18 else "{}"[:max_chars]
 
 
 def _public_value(_tool_name: str, key: str, value: Any, *, depth: int) -> object:

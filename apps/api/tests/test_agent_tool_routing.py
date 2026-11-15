@@ -226,3 +226,22 @@ def test_nonseeded_judge_model_remains_supported(monkeypatch):
     assert eval_run_main(["--mlflow-eval", "--judge-model", "test-judge"]) == 0
     assert runner.call_args.kwargs["mlflow_eval"] is True
     assert runner.call_args.kwargs["judge_model"] == "test-judge"
+
+
+def test_routing_report_separates_intent_or_policy_misses_from_over_selection(capsys):
+    _print_routing_report(
+        RoutingScore(
+            mean=0.5,
+            misses=[
+                ("req 1", "direct", "direct", 0.0),
+                ("req 2", "direct", "not-a-route", 0.0),
+            ],
+            mean_latency_s=0.1,
+            failures=0,
+        )
+    )
+
+    out = capsys.readouterr().out
+    assert "direct (intent-or-policy): 1" in out
+    assert "direct (invalid-output): 1" in out
+    assert "over-selected" not in out

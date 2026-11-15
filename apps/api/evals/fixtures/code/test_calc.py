@@ -1,4 +1,4 @@
-from calc import add
+from calc import add  # ty: ignore[unresolved-import]
 
 
 def test_add():

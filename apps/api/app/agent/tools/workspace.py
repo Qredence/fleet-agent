@@ -237,6 +237,10 @@ class WorkspaceTools:
         )
         if timed_out:
             raise TimeoutError(f"grep exceeded {_GREP_TIMEOUT_SECONDS} seconds")
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"workspace grep failed with exit code {process.returncode}"
+            )
         matches = stdout.decode("utf-8", errors="replace")
         return self._bound_output(matches.strip("\n") or "No matching lines found.")
 
@@ -255,7 +259,7 @@ class WorkspaceTools:
             raise ValueError("start_line must be at least 1")
         if end_line < start_line:
             raise ValueError("end_line must be >= start_line")
-        if end_line - start_line > _MAX_LINE_RANGE:
+        if end_line - start_line + 1 > _MAX_LINE_RANGE:
             raise ValueError("requested line range is too large")
         if target.stat().st_size > self._policy.max_read_bytes:
             raise ValueError("file exceeds the workspace read-size limit")
@@ -290,6 +294,8 @@ class WorkspaceTools:
         """Create or atomically overwrite a workspace text file."""
         self._require_write()
         target = self._resolve_path(path, must_exist=False)
+        if target == self._root or target.is_dir():
+            raise ValueError("path must be a file inside the workspace root")
         self._atomic_write(target, content)
         return (
             f"Wrote {len(content.encode('utf-8'))} bytes "
@@ -529,6 +535,8 @@ class WorkspaceTools:
                     yield resolved
 
     def _atomic_write(self, target: Path, content: str) -> None:
+        if target == self._root or target.is_dir():
+            raise ValueError("path must be a file inside the workspace root")
         encoded = content.encode("utf-8")
         if len(encoded) > self._policy.max_write_bytes:
             raise ValueError("content exceeds write-size limit")

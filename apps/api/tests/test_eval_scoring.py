@@ -171,3 +171,86 @@ def test_sufficiency_uses_exposed_tool_metadata_when_available():
         ).capability_sufficiency
         == 1
     )
+
+
+def test_routing_metric_penalizes_unrequested_managed_report_and_invalid_intent():
+    from evals.agent_tool_routing import routing_metric
+
+    direct_example = dspy.Example(
+        user_request="Explain what pytest does", expected_route="direct"
+    )
+    unrequested = routing_metric(
+        direct_example, dspy.Prediction(route="direct", output_intent="managed_report")
+    )
+    assert unrequested.score == 0.0
+    assert unrequested.output_intent_accuracy == 0.0
+    assert unrequested.over_selection == 1.0
+    assert "Correct minimum capabilities." not in unrequested.feedback
+    assert "output_intent" in unrequested.feedback
+
+    bogus_intent = routing_metric(
+        direct_example, dspy.Prediction(route="direct", output_intent="bogus")
+    )
+    assert bogus_intent.score == 0.0
+    assert bogus_intent.invalid_output_rate == 1.0
+
+
+def test_routing_metric_feedback_reports_authorization_failure():
+    from evals.agent_tool_routing import routing_metric
+
+    gold = dspy.Example(
+        user_request="Read a file",
+        expected_route="workspace_read",
+        authorized_tools=["read"],
+    )
+    verdict = routing_metric(
+        gold,
+        dspy.Prediction(route="workspace_read", exposed_tools=["read", "bash"]),
+    )
+    assert verdict.score == 0.0
+    assert "Correct minimum capabilities." not in verdict.feedback
+    assert "Unauthorized tool exposure" in verdict.feedback
+
+
+def test_routing_metric_handles_artifact_and_explicit_managed_report():
+    from evals.agent_tool_routing import routing_metric
+
+    read_report_gold = dspy.Example(
+        user_request="Read README.md and export report",
+        expected_route="workspace_read",
+        expected_output_intent="managed_report",
+    )
+    passed = routing_metric(
+        read_report_gold,
+        dspy.Prediction(route="workspace_read", output_intent="managed_report"),
+    )
+    assert passed.score == 1.0
+    assert passed.over_selection == 0.0
+    assert passed.capability_sufficiency == 1.0
+
+    missing_intent = routing_metric(
+        read_report_gold,
+        dspy.Prediction(route="workspace_read", output_intent="none"),
+    )
+    assert missing_intent.score == 0.0
+    assert missing_intent.capability_sufficiency == 0.0
+
+    artifact_gold = dspy.Example(
+        user_request="Research docs and create report",
+        expected_route="artifact",
+        expected_output_intent="managed_report",
+    )
+    assert (
+        routing_metric(
+            artifact_gold,
+            dspy.Prediction(route="artifact", output_intent="none"),
+        ).score
+        == 0.0
+    )
+    assert (
+        routing_metric(
+            artifact_gold,
+            dspy.Prediction(route="artifact", output_intent="managed_report"),
+        ).score
+        == 1.0
+    )

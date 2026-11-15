@@ -197,7 +197,9 @@ def main() -> int:
         return 2
     router = dspy.Predict(ToolRoutingSignature)
     rows = []
-    with dspy.context(lm=lm, adapter=dspy.JSONAdapter()):
+    with dspy.context(
+        lm=lm, adapter=dspy.JSONAdapter(use_native_function_calling=True)
+    ):
         for example in [*PRODUCT_ROUTING_EXAMPLES, *PRODUCT_HOLDOUT_EXAMPLES]:
             try:
                 prediction = router(**example.inputs())
@@ -212,8 +214,7 @@ def main() -> int:
                         "expected_route": example.expected_route,
                         "actual_route": prediction.route,
                         "route_exact": verdict.exact_match,
-                        "intent_exact": prediction.output_intent
-                        == example.expected_output_intent,
+                        "intent_exact": bool(verdict.output_intent_accuracy),
                         "capability_sufficiency": verdict.capability_sufficiency,
                         "invalid_output": verdict.invalid_output_rate,
                     }
@@ -257,7 +258,7 @@ def main() -> int:
         },
         "cases": rows,
     }
-    path = Path("../../.artifacts/evals/product-routing.json")
+    path = Path(__file__).resolve().parents[3] / ".artifacts/evals/product-routing.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

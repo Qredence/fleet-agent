@@ -391,3 +391,77 @@ def test_parallel_multi_iteration_reasoning_replay_and_cleanup(gateway, streamin
     finally:
         close_lm(lm)
     assert lm.engine._tool_thinking == {}
+
+
+def test_reused_tool_call_ids_across_turns_do_not_collide_in_thinking_replay(gateway):
+    from dspy.lm15 import ToolCallPart, tool_result
+
+    base, requests, replies = gateway
+    reused_call = {
+        "id": "call_0",
+        "type": "function",
+        "function": {"name": "lookup", "arguments": '{"query":"same"}'},
+    }
+    replies["sequence"] = [
+        {
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "turn zero thinking",
+                "tool_calls": [reused_call],
+            }
+        },
+        {
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "turn one thinking",
+                "tool_calls": [reused_call],
+            }
+        },
+        {"message": {"role": "assistant", "content": "done"}},
+    ]
+    lm = _build_lm(
+        Settings(
+            llm_model="deepseek/deepseek-v4.1-flash",
+            llm_base_url=base,
+            llm_api_key=SecretStr("fixture-key"),
+        )
+    )
+    messages = [Message.user("start")]
+    try:
+        for _turn in range(3):
+            request = Request(
+                model=lm.model,
+                messages=tuple(messages),
+                tools=(
+                    FunctionTool(
+                        name="lookup",
+                        parameters={
+                            "type": "object",
+                            "properties": {"query": {"type": "string"}},
+                        },
+                    ),
+                ),
+            )
+            result = lm.engine.complete(request)
+            tool_calls = result.message.parts_of(ToolCallPart)
+            if tool_calls:
+                messages.append(Message.assistant(tool_calls))
+                messages.append(
+                    Message.tool(
+                        tuple(
+                            tool_result(call.id, "ok", name=call.name)
+                            for call in tool_calls
+                        )
+                    )
+                )
+        final_wire = requests[-1][2]["messages"]
+        assistants = [m for m in final_wire if m["role"] == "assistant"]
+        assert [m["reasoning_content"] for m in assistants] == [
+            "turn zero thinking",
+            "turn one thinking",
+        ]
+        assert len(lm.engine._tool_thinking) == 2
+    finally:
+        close_lm(lm)

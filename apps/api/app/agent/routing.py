@@ -39,18 +39,25 @@ ROUTES: tuple[ToolRoute, ...] = (
     "workspace_shell",
 )
 
+
+def _capabilities(*items: ToolCapability) -> frozenset[ToolCapability]:
+    return frozenset[ToolCapability](items)
+
+
 ROUTE_CAPABILITIES: dict[ToolRoute, frozenset[ToolCapability]] = {
-    "direct": frozenset(),
-    "research": frozenset({"retrieval", "utility"}),
-    "artifact": frozenset({"retrieval", "utility", "artifact"}),
-    "workspace_read": frozenset({"retrieval", "utility", "workspace_read"}),
-    "workspace_write": frozenset(
-        {"retrieval", "utility", "workspace_read", "workspace_write"}
+    "direct": _capabilities(),
+    "research": _capabilities("retrieval", "utility"),
+    "artifact": _capabilities("retrieval", "utility", "artifact"),
+    "workspace_read": _capabilities("retrieval", "utility", "workspace_read"),
+    "workspace_write": _capabilities(
+        "retrieval", "utility", "workspace_read", "workspace_write"
     ),
-    "workspace_shell": frozenset(
-        {"retrieval", "utility", "workspace_read", "workspace_write", "shell"}
+    "workspace_shell": _capabilities(
+        "retrieval", "utility", "workspace_read", "workspace_write", "shell"
     ),
 }
+
+_ROUTE_BY_NAME: dict[str, ToolRoute] = {route: route for route in ROUTES}
 
 _ROUTE_WRAP_CHARS = "\"'`"
 """Quotes LMs sometimes wrap around a route token."""
@@ -133,6 +140,22 @@ class ToolRoutingSignature(dspy.Signature):  # type: ignore[misc]
     )
 
 
+def normalize_routing_token(value: object) -> str | None:
+    """Normalize surface noise on an LM routing/output-intent token."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().strip(_ROUTE_WRAP_CHARS).strip().lower()
+    normalized = normalized.replace("-", "_").replace(" ", "_")
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    return normalized or None
+
+
+def is_valid_route(value: object) -> bool:
+    """Return True when ``value`` normalizes to one of the known ``ROUTES``."""
+    return normalize_routing_token(value) in _ROUTE_BY_NAME
+
+
 def coerce_route(value: object) -> ToolRoute:
     """Convert an untrusted router output to a least-privileged route.
 
@@ -141,15 +164,11 @@ def coerce_route(value: object) -> ToolRoute:
     quotes) before membership is checked. Invented names and non-strings
     fail-closed to ``direct`` — coerce never elevates privilege via aliases.
     """
-    if value in ROUTES:
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().strip(_ROUTE_WRAP_CHARS).strip().lower()
-        normalized = normalized.replace("-", "_").replace(" ", "_")
-        while "__" in normalized:
-            normalized = normalized.replace("__", "_")
-        if normalized in ROUTES:
-            return normalized
+    if isinstance(value, str) and value in _ROUTE_BY_NAME:
+        return _ROUTE_BY_NAME[value]
+    normalized = normalize_routing_token(value)
+    if normalized is not None and normalized in _ROUTE_BY_NAME:
+        return _ROUTE_BY_NAME[normalized]
     return "direct"
 
 

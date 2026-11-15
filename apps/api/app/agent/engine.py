@@ -11,11 +11,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 import anyio
 import dspy
@@ -52,7 +52,7 @@ class SynthesisStreamListener(StreamListener):  # type: ignore[misc]
             return super().receive(chunk)
 
 
-def synthesis_stream_listeners(fields: Sequence[str]) -> list[SynthesisStreamListener]:
+def synthesis_stream_listeners(fields: Sequence[str]) -> list[StreamListener]:
     """Build one pinned listener per synthesis output field."""
     return [SynthesisStreamListener(signature_field_name=field) for field in fields]
 
@@ -358,11 +358,14 @@ class DspyAgentEngine:
                     callbacks=callbacks,
                     track_usage=True,
                 ):
-                    streamer = dspy.streamify(
-                        _ThreadedProgram(program),
-                        is_async_program=True,
-                        stream_listeners=synthesis_stream_listeners(stream_fields),
-                        include_final_prediction_in_output_stream=True,
+                    streamer = cast(
+                        "Callable[..., AsyncGenerator[Any]]",
+                        dspy.streamify(
+                            _ThreadedProgram(program),
+                            is_async_program=True,
+                            stream_listeners=synthesis_stream_listeners(stream_fields),
+                            include_final_prediction_in_output_stream=True,
+                        ),
                     )
                     async with aclosing(
                         streamer(user_request=user_request, history=captured)

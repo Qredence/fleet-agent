@@ -441,3 +441,25 @@ def test_grouped_splits_never_share_a_task_between_sets():
     assert not identities[0] & identities[1]
     assert not identities[0] & identities[2]
     assert not identities[1] & identities[2]
+
+
+def test_router_program_accepts_and_forwards_conversation_context(monkeypatch):
+    program = RouterProgram()
+    captured: dict[str, object] = {}
+
+    def fake_forward(**kwargs):
+        captured.update(kwargs)
+        return dspy.Prediction(route="direct", output_intent="managed_report")
+
+    monkeypatch.setattr(program.router, "forward", fake_forward)
+
+    result = program(
+        user_request="Turn that into a report",
+        conversation_context='[{"user_request":"Inspect README.md"}]',
+    )
+
+    assert result.route == "direct"
+    assert captured == {
+        "user_request": "Turn that into a report",
+        "conversation_context": '[{"user_request":"Inspect README.md"}]',
+    }

@@ -204,7 +204,7 @@ def test_fleet_agent_rejects_async_tools_under_sync_react() -> None:
 
 
 def test_tool_registry_creates_real_dspy_tools() -> None:
-    metadata = ToolMetadata(name="lookup_docs", timeout_seconds=5)
+    metadata = ToolMetadata(name="lookup_docs")
     registry = ToolRegistry([(lookup_docs, metadata)])
 
     registered = registry.get("lookup_docs")

@@ -11,7 +11,6 @@ from app.settings import Settings
 from tests.conftest import requires_db
 from tests.helpers.scripted_lm import (
     ScriptedLM,
-    evidence_end,
     fixed_route_agent,
     submit_call,
     synthesis_call,
@@ -154,7 +153,7 @@ async def test_run_approval_travels_with_the_request(db_sessions):
 
         return DspyAgentEngine(
             program_factory=program_factory,
-            lm=ScriptedLM([evidence_end(), synthesis_call(answer="ok")]),  # type: ignore[arg-type]
+            lm=ScriptedLM([synthesis_call(answer="ok")]),  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(),
         )
 
@@ -206,7 +205,7 @@ async def test_wildcard_approval_is_accepted(db_sessions):
 
         return DspyAgentEngine(
             program_factory=program_factory,
-            lm=ScriptedLM([evidence_end(), synthesis_call(answer="ok")]),  # type: ignore[arg-type]
+            lm=ScriptedLM([synthesis_call(answer="ok")]),  # type: ignore[arg-type]
             adapter=dspy.JSONAdapter(),
         )
 

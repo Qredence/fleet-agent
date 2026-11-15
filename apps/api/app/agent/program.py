@@ -12,7 +12,14 @@ from dspy.utils.exceptions import AdapterParseError, ContextWindowExceededError
 
 from app.agent.engine import _reason_from_react_exc
 from app.agent.evidence import DEFAULT_MAX_CHARS, bounded_json
-from app.agent.routing import ROUTES, ToolRoute, coerce_route, routing_signature
+from app.agent.routing import (
+    ROUTES,
+    ToolRoute,
+    coerce_route,
+    is_valid_route,
+    normalize_routing_token,
+    routing_signature,
+)
 from app.agent.signature import (
     SYNTHESIS_STREAM_FIELDS,
     build_gatherer,
@@ -204,7 +211,7 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         if (
             gatherer is not None
             and isinstance(history_msgs, list)
-            and len(history_msgs) > 0
+            and len(history_msgs) > prior_count
         ):
             # Evidence loop produced tool messages; attach synthesized answer
             history_msgs[-1]["answer"] = ans
@@ -249,9 +256,6 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
         )
         return result
 
-    def _select_route(self, user_request: str) -> ToolRoute:
-        return self._select_decision(user_request, dspy.History(messages=[]))[0]
-
     def _select_decision(
         self, user_request: str, history: dspy.History
     ) -> tuple[ToolRoute, str, bool]:
@@ -264,20 +268,18 @@ class FleetAgent(dspy.Module):  # type: ignore[misc]  # DSPy is untyped
             return "direct", "none", False
         raw = getattr(decision, "route", None)
         route = coerce_route(raw)
-        valid = (
-            isinstance(raw, str)
-            and raw.strip().strip("\"'`").lower().replace("-", "_").replace(" ", "_")
-            in ROUTES
+        route_valid = is_valid_route(raw)
+        raw_output = getattr(decision, "output_intent", "none")
+        output = normalize_routing_token(raw_output)
+        intent_valid = output in {"none", "managed_report"}
+        if not (route_valid and intent_valid):
+            return "direct", "none", False
+        resolved_output = (
+            "managed_report"
+            if route == "artifact" or output == "managed_report"
+            else "none"
         )
-        output = getattr(decision, "output_intent", "none")
-        valid = valid and output in {"none", "managed_report"}
-        if route == "artifact":
-            output = "managed_report"
-        return (
-            route,
-            "managed_report" if valid and output == "managed_report" else "none",
-            valid,
-        )
+        return route, resolved_output, True
 
     def _synthesize(
         self,

@@ -1,6 +1,7 @@
 """Tests for native DSPy callback bridging (AgUiRunCallback)."""
 
 import asyncio
+import json
 from typing import Any
 
 import dspy
@@ -225,15 +226,61 @@ async def test_callback_emits_bounded_web_search_and_source_projections():
     ]
     assert len(web_events) == 2
     assert len(source_events) == 1
+    assert web_events[0].value["schemaVersion"] == 2
     assert web_events[0].value["searching"] is True
+    assert web_events[1].value["schemaVersion"] == 2
     assert web_events[1].value["searching"] is False
     assert web_events[1].value["results"] == [
         {"sourceId": "w1", "title": "Official docs", "domain": "example.com"}
     ]
     assert source_events[0].value == {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "sources": [
             {"sourceId": "w1", "title": "Official docs", "domain": "example.com"}
         ],
     }
     assert "secret" not in str(web_events[0].value)
+
+
+async def test_callback_scrubs_secrets_before_truncating_output_and_keeps_valid_json():
+    loop = asyncio.get_running_loop()
+    bus = RunEventBus(loop)
+    callback = AgUiRunCallback(bus)
+
+    class WebSearch:
+        __name__ = "web_search"
+
+        def __init__(self) -> None:
+            self.__name__ = "web_search"
+            self.last_sources = [
+                SourceResult(
+                    id="src-" + ("x" * 200),
+                    title="Long source",
+                    source_type="web",
+                    uri="https://example.com/long",
+                    excerpt="ignored",
+                )
+            ]
+
+    many_args: dict[str, Any] = {f"param_{idx}": "v" * 20 for idx in range(15)}
+    many_args["query"] = "secret query"
+    callback.on_tool_start("call-long", WebSearch(), {"kwargs": many_args})
+    # Place a secret right across the 300-char preview boundary.
+    secret_tail = "sk-proj-secretvalue9876543210abcdefgh"
+    callback.on_tool_end("call-long", ("a" * 284) + " " + secret_tail)
+    await asyncio.sleep(0)
+
+    events = await _drain_bus(bus)
+    started = next(e for e in events if isinstance(e, ToolStarted))
+    completed = next(e for e in events if isinstance(e, ToolCompleted))
+    source_event = next(
+        e for e in events if isinstance(e, InlineDataEvent) and e.name == "sources"
+    )
+
+    assert len(started.input_preview) <= 300
+    parsed_preview = json.loads(started.input_preview)
+    assert parsed_preview["query"] == {"type": "string", "chars": 12}
+    assert parsed_preview["truncated"] is True
+    assert "sk-proj" not in completed.output_preview
+    assert "secretvalue" not in completed.output_preview
+    assert len(source_event.value["sources"][0]["sourceId"]) == 128

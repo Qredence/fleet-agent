@@ -243,18 +243,21 @@ def fixed_route_agent(route: str, **kwargs: Any) -> Any:
     """A ``FleetAgent`` whose route is pinned, so tests spend no LM step on routing.
 
     Tests that pin gated-tool, persistence, or streaming behavior are not about
-    routing. The route is pinned by subclassing ``_select_route`` rather than by
-    keeping a router-injection hole on ``FleetAgent`` — the production class stays
-    free of test-only knobs.
+    routing. The route is pinned by subclassing ``_select_decision`` rather than
+    by keeping a router-injection hole on ``FleetAgent`` — the production class
+    stays free of test-only knobs.
     """
     from app.agent.program import FleetAgent
     from app.agent.routing import ToolRoute
 
     pinned = cast("ToolRoute", route)
+    intent = "managed_report" if pinned == "artifact" else "none"
 
     class _FixedRouteAgent(FleetAgent):
-        def _select_route(self, user_request: str) -> ToolRoute:
-            del user_request
-            return pinned
+        def _select_decision(
+            self, user_request: str, history: Any
+        ) -> tuple[ToolRoute, str, bool]:
+            del user_request, history
+            return pinned, intent, True
 
     return _FixedRouteAgent(**kwargs)

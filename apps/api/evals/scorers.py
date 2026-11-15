@@ -24,7 +24,6 @@ from typing import Any
 import dspy
 from mlflow.genai.scorers import Scorer, scorer
 
-from app.agent.routing import coerce_route
 from evals.agent_tool_routing import routing_metric
 
 DEFAULT_TOOL_CALL_BUDGET = 8
@@ -72,20 +71,32 @@ def _trace_seconds(trace: Any) -> float | None:
 def route_least_privilege(
     inputs: Any = None, outputs: Any = None, expectations: Any = None
 ) -> float:
-    """Exact route scores 1.0, over-selection 0.35, under-selection 0.0.
+    """Score 1.0 when route, output_intent, and authorization hold; 0.0 otherwise.
 
     Delegates to ``routing_metric`` so the MLflow scorer, the eval runner, and
     the GEPA optimizer cannot drift apart on what least privilege means.
     """
-    gold = dspy.Example(
-        expected_route=(
+    del inputs
+    gold_kwargs: dict[str, Any] = {
+        "expected_route": (
             expectations.get("expected_route")
             if isinstance(expectations, Mapping)
             else None
         )
-    )
+    }
+    if isinstance(expectations, Mapping):
+        if "expected_output_intent" in expectations:
+            gold_kwargs["expected_output_intent"] = expectations[
+                "expected_output_intent"
+            ]
+        if "authorized_tools" in expectations:
+            gold_kwargs["authorized_tools"] = expectations["authorized_tools"]
+    gold = dspy.Example(**gold_kwargs)
     route_raw = outputs.get("route") if isinstance(outputs, Mapping) else outputs
-    predicted = dspy.Prediction(route=coerce_route(route_raw))
+    pred_kwargs: dict[str, Any] = {"route": route_raw}
+    if isinstance(outputs, Mapping) and "output_intent" in outputs:
+        pred_kwargs["output_intent"] = outputs["output_intent"]
+    predicted = dspy.Prediction(**pred_kwargs)
     return float(routing_metric(gold, predicted).score)
 
 

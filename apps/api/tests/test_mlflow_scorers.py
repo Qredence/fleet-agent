@@ -103,8 +103,35 @@ class TestLeastPrivilegeScorer:
             routing_metric(gold, dspy.Prediction(route="research")).score
         )
 
-    def test_an_invented_route_is_coerced_to_the_least_capability(self) -> None:
+    def test_an_invented_route_scores_zero_even_when_direct_is_expected(
+        self,
+    ) -> None:
         assert route_least_privilege(**_row("web_search", "workspace_shell")) == 0.0
+        assert route_least_privilege(**_row("web_search", "direct")) == 0.0
+
+    def test_forwards_output_intent_when_present(self) -> None:
+        assert (
+            route_least_privilege(
+                inputs={"user_request": "Explain pytest"},
+                outputs={"route": "direct", "output_intent": "managed_report"},
+                expectations={"expected_route": "direct"},
+            )
+            == 0.0
+        )
+        assert (
+            route_least_privilege(
+                inputs={"user_request": "Export README report"},
+                outputs={
+                    "route": "workspace_read",
+                    "output_intent": "managed_report",
+                },
+                expectations={
+                    "expected_route": "workspace_read",
+                    "expected_output_intent": "managed_report",
+                },
+            )
+            == 1.0
+        )
 
 
 class TestToolCallBudget:

@@ -39,11 +39,11 @@ from typing import Any
 
 import dspy
 
-from app.agent.routing import ROUTE_CAPABILITIES, ROUTES, coerce_route
 from evals.agent_tool_routing import (
     CANONICAL_ROUTING_EXAMPLES,
     COERCE_EDGE_CASES,
     ROUTING_EXAMPLES,
+    classify_routing_miss,
     score_seeded_router,
     validate_coerce_edge_cases,
     validate_routing_dataset,
@@ -58,7 +58,7 @@ from evals.scoring import RoutingScore, score_router
 logger = logging.getLogger(__name__)
 
 
-def _resolve_lm() -> dspy.BaseLM | None:
+def _resolve_lm() -> dspy.LM | None:
     """Build the production LM from server settings, or None if unconfigured."""
     from app.agent.factory import _build_lm
     from app.settings import get_settings
@@ -126,6 +126,7 @@ def _mlflow_predict_fn(lm: dspy.BaseLM) -> Callable[..., dict[str, Any]]:
             prediction = router(**inputs)
         return {
             "route": str(getattr(prediction, "route", "")),
+            "output_intent": str(getattr(prediction, "output_intent", "none")),
             "latency_s": time.perf_counter() - started,
         }
 
@@ -140,7 +141,7 @@ def _run_mlflow_eval(lm: dspy.BaseLM, judge_model: str | None) -> None:
     experiment first keeps the run and its traces beside the dataset instead of
     in the store's Default experiment.
     """
-    import mlflow
+    import mlflow.genai
 
     from evals.datasets import build_dataset
     from evals.scorers import answer_quality_judge, deterministic_scorers
@@ -159,16 +160,15 @@ def _run_mlflow_eval(lm: dspy.BaseLM, judge_model: str | None) -> None:
 
 
 def _print_routing_report(scored: RoutingScore) -> None:
+    bucket_labels = {
+        "invalid": "invalid-output",
+        "intent_or_policy": "intent-or-policy",
+        "over_selected": "over-selected",
+        "under_selected": "under-selected",
+    }
     per_route: Counter[str] = Counter()
     for _request, expected, actual, _score in scored.misses:
-        bucket = (
-            "invalid-output"
-            if actual not in ROUTES
-            else "over-selected"
-            if ROUTE_CAPABILITIES[coerce_route(expected)]
-            <= ROUTE_CAPABILITIES[coerce_route(actual)]
-            else "under-selected"
-        )
+        bucket = bucket_labels[classify_routing_miss(expected, actual)]
         per_route[f"{expected} ({bucket})"] += 1
 
     total = len(ROUTING_EXAMPLES)

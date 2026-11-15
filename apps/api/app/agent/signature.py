@@ -19,10 +19,10 @@ reason named:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import cast
+from typing import Any
 
 import dspy
 from pydantic.fields import FieldInfo
@@ -69,12 +69,10 @@ def build_signature(
         instructions = f"{instructions}\n\n{_policy_text()}"
     if not instructions.strip():
         raise ValueError(f"signature {signature_name!r} has no instruction text")
-    return cast(
-        "type[dspy.Signature]",
-        dspy.make_signature(
-            dict(fields), instructions=instructions, signature_name=signature_name
-        ),
+    signature: type[dspy.Signature] = dspy.make_signature(
+        dict(fields), instructions=instructions, signature_name=signature_name
     )
+    return signature
 
 
 @lru_cache(maxsize=1)
@@ -146,4 +144,5 @@ def build_gatherer(tools: Sequence[dspy.Tool], max_iters: int) -> dspy.Module:
     event bus, a thread id); the signature class itself is shared, which is
     safe now that no optimizer writes back into it.
     """
-    return dspy.ReAct(_evidence_signature(), tools=list(tools), max_iters=max_iters)
+    tool_list: list[Callable[..., Any] | dspy.Tool] = [*tools]
+    return dspy.ReAct(_evidence_signature(), tools=tool_list, max_iters=max_iters)

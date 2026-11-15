@@ -15,7 +15,7 @@ import socket
 import struct
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import httpcore
@@ -163,7 +163,7 @@ def _build_client(api_key: str, *, dns_fallback: bool) -> httpx.Client:
         transport = httpx.HTTPTransport()
         # HTTPX 0.28 does not expose httpcore's network backend publicly.
         # Replacing it keeps TLS SNI/certificate validation on api.tavily.com.
-        transport._pool._network_backend = _DnsFallbackBackend()
+        cast("Any", transport._pool)._network_backend = _DnsFallbackBackend()
     return httpx.Client(
         base_url=_TAVILY_BASE_URL,
         timeout=_REQUEST_TIMEOUT_S,
@@ -182,6 +182,7 @@ class WebSearchTool:
         self._client = client
         self.last_sources: list[SourceResult] = []
         self._results_by_id: dict[str, dict[str, str]] = {}
+        self._next_result_index = 1
 
     def get_result(self, result_id: str) -> dict[str, str] | None:
         """Registry lookup for FetchPageTool; ids are only valid within a run."""
@@ -193,7 +194,6 @@ class WebSearchTool:
         Returns numbered results, each as an id line, URL line, and short
         excerpt. Use fetch_page with one id to read a result in full.
         """
-        self._results_by_id.clear()
         self.last_sources = []
         limit = max(1, min(int(max_results), _MAX_RESULTS_CAP))
         try:
@@ -202,11 +202,12 @@ class WebSearchTool:
                 json={"query": query, "max_results": limit},
             )
             response.raise_for_status()
-            payload: dict[str, Any] = response.json()
+            payload: Any = response.json()
         except Exception as exc:
             raise RuntimeError("The web search request failed.") from exc
 
-        items = list(payload.get("results") or [])[:limit]
+        raw_results = payload.get("results") if isinstance(payload, dict) else None
+        items = list(raw_results)[:limit] if isinstance(raw_results, list) else []
         lines: list[str] = []
         sources: list[SourceResult] = []
         for item in items:
@@ -215,7 +216,8 @@ class WebSearchTool:
             url = _safe_http_url(item.get("url"))
             if url is None:
                 continue
-            result_id = f"w{len(lines) + 1}"
+            result_id = f"w{self._next_result_index}"
+            self._next_result_index += 1
             title = str(item.get("title") or "(untitled)")
             snippet = str(item.get("content") or "").strip()
             self._results_by_id[result_id] = {"url": url, "title": title}
@@ -260,12 +262,18 @@ class FetchPageTool:
         try:
             response = self._client.post("/extract", json={"urls": [entry["url"]]})
             response.raise_for_status()
-            payload: dict[str, Any] = response.json()
+            payload: Any = response.json()
         except Exception as exc:
             raise RuntimeError("The page could not be fetched.") from exc
 
-        extracted = payload.get("results") or []
-        raw_content = str(extracted[0].get("raw_content") or "") if extracted else ""
+        extracted = payload.get("results") if isinstance(payload, dict) else None
+        if (
+            not isinstance(extracted, list)
+            or not extracted
+            or not isinstance(extracted[0], dict)
+        ):
+            raise RuntimeError("No readable text was found at that page.")
+        raw_content = str(extracted[0].get("raw_content") or "")
         if not raw_content.strip():
             raise RuntimeError("No readable text was found at that page.")
         header = f"# {entry['title']}\n{entry['url']}\n\n"

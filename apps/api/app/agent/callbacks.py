@@ -6,14 +6,19 @@ Replaces custom function wrappers with DSPy's built-in BaseCallback lifecycle.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import urlsplit
 
 from dspy.utils.callback import BaseCallback
 
 from app.agent.event_bus import RunCancelToken, RunEventBus
-from app.agent.instrumented import preview, public_tool_args, public_tool_args_json
+from app.agent.instrumented import (
+    bounded_public_tool_args_json,
+    preview,
+    public_tool_args,
+    public_tool_args_json,
+)
 from app.contracts.domain import (
     InlineDataEvent,
     SourceDiscovered,
@@ -73,18 +78,30 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
         kwargs = inputs.get("kwargs", inputs) if isinstance(inputs, dict) else {}
         if name == "web_search":
             self._web_search_cycle += 1
-            query = public_tool_args(name, {"query": kwargs.get("query")}).get(
-                "query", {"type": "string", "chars": 0}
-            )
-            query_metadata = (
-                query if isinstance(query, dict) else {"type": type(query).__name__}
-            )
+            raw_query = kwargs.get("query")
+            query = public_tool_args(name, {"query": raw_query}).get("query")
+            if isinstance(query, Mapping):
+                query_items = {str(k): v for k, v in query.items()}
+                raw_type = query_items.get("type")
+                chars = query_items.get("chars")
+                if isinstance(raw_type, str) and set(query_items) <= {"type", "chars"}:
+                    query_metadata: dict[str, object] = {"type": raw_type[:32]}
+                    if (
+                        isinstance(chars, int)
+                        and not isinstance(chars, bool)
+                        and chars >= 0
+                    ):
+                        query_metadata["chars"] = chars
+                else:
+                    query_metadata = {"type": type(raw_query).__name__[:32]}
+            else:
+                query_metadata = {"type": type(raw_query).__name__[:32]}
             self._web_search_queries[event_call_id] = query_metadata
             self._bus.publish_from_worker(
                 InlineDataEvent(
                     name="web-search",
                     value={
-                        "schemaVersion": 1,
+                        "schemaVersion": 2,
                         "query": query_metadata,
                         "results": [],
                         "visibleResults": 0,
@@ -102,7 +119,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 tool_call_id=event_call_id,
                 name=name,
                 arguments_json=arguments_json,
-                input_preview=scrub_public_text(preview(arguments_json)),
+                input_preview=bounded_public_tool_args_json(name, kwargs),
                 step_id=self._step_id,
             )
         )
@@ -147,7 +164,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 ToolCompleted(
                     tool_call_id=event_call_id,
                     name=name,
-                    output_preview=scrub_public_text(preview(str(outputs))),
+                    output_preview=preview(scrub_public_text(str(outputs))),
                     duration_ms=duration_ms,
                 )
             )
@@ -192,7 +209,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
             InlineDataEvent(
                 name="web-search",
                 value={
-                    "schemaVersion": 1,
+                    "schemaVersion": 2,
                     "query": query or {"type": "string", "chars": 0},
                     "results": [_inline_source(source) for source in sources[:8]],
                     "visibleResults": min(len(sources), 8),
@@ -207,7 +224,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
             InlineDataEvent(
                 name="sources",
                 value={
-                    "schemaVersion": 1,
+                    "schemaVersion": 2,
                     "sources": _inline_sources(self.sources),
                 },
             )
@@ -226,7 +243,7 @@ def _inline_source(source: SourceResult) -> dict[str, str]:
         except ValueError:
             hostname = ""
     return {
-        "sourceId": source.id,
+        "sourceId": _safe_inline_text(source.id, limit=128),
         "title": _safe_inline_text(source.title, limit=240) or "Untitled source",
         "domain": _safe_inline_text(hostname or source.source_type, limit=120)
         or "source",

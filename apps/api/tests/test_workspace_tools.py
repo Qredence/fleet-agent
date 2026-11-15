@@ -254,3 +254,66 @@ def test_workspace_read_sources_are_bounded_scrubbed_and_cleared(tmp_path):
     with pytest.raises(ValueError):
         tools.read("../outside.md")
     assert tools.last_sources == []
+
+
+def test_write_rejects_workspace_root_and_directories(tmp_path: Path):
+    (tmp_path / "subdir").mkdir()
+    tools = make_tools(tmp_path, allow_write=True)
+
+    for candidate in (".", "", "subdir"):
+        with pytest.raises(ValueError, match="file inside the workspace root"):
+            tools.write(candidate, "overwrite attempt")
+
+    with pytest.raises(ValueError, match="file inside the workspace root"):
+        tools._atomic_write(tmp_path, "direct atomic write attempt")
+
+
+def test_read_line_range_limit_is_inclusive(tmp_path: Path):
+    from app.agent.tools.workspace import (
+        _MAX_LINE_RANGE,
+        WorkspacePolicy,
+        WorkspaceTools,
+    )
+
+    lines = [f"L{i}" for i in range(1, _MAX_LINE_RANGE + 5)]
+    (tmp_path / "many.txt").write_text("\n".join(lines), encoding="utf-8")
+    tools = WorkspaceTools(WorkspacePolicy(root=tmp_path, max_output_chars=50_000))
+
+    exact = tools.read("many.txt", start_line=1, end_line=_MAX_LINE_RANGE)
+    assert f"{_MAX_LINE_RANGE} | L{_MAX_LINE_RANGE}" in exact
+
+    with pytest.raises(ValueError, match="line range is too large"):
+        tools.read("many.txt", start_line=1, end_line=_MAX_LINE_RANGE + 1)
+
+
+def test_grep_surfaces_nonzero_subprocess_exit(tmp_path: Path, monkeypatch):
+    import subprocess
+
+    (tmp_path / "sample.py").write_text("hello = 1\n", encoding="utf-8")
+    tools = make_tools(tmp_path)
+
+    class FailingProcess:
+        stdin = None
+        stdout = None
+        stderr = None
+        returncode = 2
+        pid = 12345
+
+    def fake_popen(*args, **kwargs):
+        del args, kwargs
+        proc = FailingProcess()
+        import io
+
+        proc.stdin = io.BytesIO()
+        proc.stdout = io.BytesIO()
+        proc.stderr = io.BytesIO(b"boom")
+        return proc
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        "app.agent.tools.workspace.read_bounded_process_output",
+        lambda process, max_bytes, timeout: (b"", b"boom", False, False),
+    )
+
+    with pytest.raises(RuntimeError, match="exit code 2"):
+        tools.grep("hello")

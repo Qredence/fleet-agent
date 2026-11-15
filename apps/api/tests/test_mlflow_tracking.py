@@ -223,8 +223,10 @@ class TestLogRoutingScore:
         _local_store(monkeypatch, tmp_path)
         misses = [
             ("a-request", "workspace_write", "direct", 0.0),
-            ("b-request", "workspace_read", "workspace_shell", 0.35),
-            ("c-request", "workspace_read", "workspace_shell", 0.35),
+            ("b-request", "workspace_read", "workspace_shell", 0.0),
+            ("c-request", "workspace_read", "workspace_shell", 0.0),
+            ("d-request", "direct", "direct", 0.0),
+            ("e-request", "direct", "bogus", 0.0),
         ]
 
         run_id = log_routing_score(
@@ -237,9 +239,11 @@ class TestLogRoutingScore:
         (run,) = client.search_runs([experiment.experiment_id])
         assert run.info.run_id == run_id
         assert run.data.metrics["mean_score"] == pytest.approx(0.8)
-        assert run.data.metrics["misses"] == pytest.approx(3)
+        assert run.data.metrics["misses"] == pytest.approx(5)
         assert run.data.metrics["under_selected"] == pytest.approx(1)
         assert run.data.metrics["over_selected"] == pytest.approx(2)
+        assert run.data.metrics["intent_or_policy_misses"] == pytest.approx(1)
+        assert run.data.metrics["invalid_outputs"] == pytest.approx(1)
         # Raised examples are scored 0 by dspy.Evaluate, so the count is what
         # separates a provider error from a routing miss in the history.
         assert run.data.metrics["failures"] == pytest.approx(2)

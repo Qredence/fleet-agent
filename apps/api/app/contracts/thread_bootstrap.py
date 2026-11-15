@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+type CardsAdditionalProperty = Annotated[list[dict[str, Any]], Field(max_length=32)]
 
 
 class ThreadOut(BaseModel):
@@ -82,4 +84,4 @@ class ThreadBootstrap(BaseModel):
         description="Latest AgentWorkspaceState snapshot for the process panel, or null.",
     )
     latestRun: LatestRun | None
-    cards: dict[str, list[dict[str, Any]]] | None = None
+    cards: dict[str, CardsAdditionalProperty] | None = None

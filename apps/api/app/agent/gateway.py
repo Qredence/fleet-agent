@@ -14,6 +14,7 @@ overrides are per-request values — so the router stays run-owned.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 
@@ -77,7 +78,10 @@ class GatewayEngine(LM15Engine):  # type: ignore[misc]
         # DSPy's ReAct history retains tool calls but not provider thinking.
         # Keep that opaque continuation data only in this run-owned engine;
         # never publish it as answer text or persist it in browser history.
-        self._tool_thinking: dict[tuple[str, ...], tuple[ThinkingPart, ...]] = {}
+        self._tool_thinking: dict[
+            tuple[int, tuple[tuple[str, str, str], ...]],
+            tuple[ThinkingPart, ...],
+        ] = {}
         access = AccessPolicy(
             provider="fleet-gateway",
             base_url=config.base_url,
@@ -104,34 +108,59 @@ class GatewayEngine(LM15Engine):  # type: ignore[misc]
             )
         )
 
+    @staticmethod
+    def _tool_call_signature(
+        tool_calls: tuple[ToolCallPart, ...],
+    ) -> tuple[tuple[str, str, str], ...]:
+        return tuple(
+            (
+                part.id,
+                part.name,
+                json.dumps(
+                    part.input, sort_keys=True, separators=(",", ":"), default=str
+                ),
+            )
+            for part in tool_calls
+        )
+
+    @staticmethod
+    def _count_tool_call_turns(request: Request) -> int:
+        return sum(
+            1
+            for message in request.messages
+            if message.role == "assistant" and tuple(message.parts_of(ToolCallPart))
+        )
+
     def _restore_thinking(self, request: Request) -> Request:
         if not self._replay_thinking:
             return request
         messages = []
+        turn_index = 0
         for message in request.messages:
-            ids = tuple(part.id for part in message.parts_of(ToolCallPart))
-            thinking = self._tool_thinking.get(ids)
-            if (
-                message.role == "assistant"
-                and thinking
-                and not message.parts_of(ThinkingPart)
-            ):
-                message = replace(message, parts=(*thinking, *message.parts))
+            tool_calls = tuple(message.parts_of(ToolCallPart))
+            if message.role == "assistant" and tool_calls:
+                key = (turn_index, self._tool_call_signature(tool_calls))
+                thinking = self._tool_thinking.get(key)
+                if thinking and not message.parts_of(ThinkingPart):
+                    message = replace(message, parts=(*thinking, *message.parts))
+                turn_index += 1
             messages.append(message)
         return replace(request, messages=tuple(messages))
 
-    def _remember_thinking(self, response: Response) -> None:
+    def _remember_thinking(self, response: Response, *, turn_index: int) -> None:
         if not self._replay_thinking:
             return
-        ids = tuple(part.id for part in response.message.parts_of(ToolCallPart))
+        tool_calls = tuple(response.message.parts_of(ToolCallPart))
         thinking = tuple(response.message.parts_of(ThinkingPart))
-        if ids and thinking:
-            self._tool_thinking[ids] = thinking
+        if tool_calls and thinking:
+            key = (turn_index, self._tool_call_signature(tool_calls))
+            self._tool_thinking[key] = thinking
 
     def complete(self, request: Request) -> Response:
         restored = self._restore_thinking(request)
+        turn_index = self._count_tool_call_turns(request)
         response = super().complete(restored)
-        self._remember_thinking(response)
+        self._remember_thinking(response, turn_index=turn_index)
         return response
 
     def stream(
@@ -143,9 +172,10 @@ class GatewayEngine(LM15Engine):  # type: ignore[misc]
             yield from super().stream(request)
             return
         restored = self._restore_thinking(request)
+        turn_index = self._count_tool_call_turns(request)
         with ResponseStream(super().stream(restored), restored) as stream:
             yield from stream.events()
-            self._remember_thinking(stream.response)
+            self._remember_thinking(stream.response, turn_index=turn_index)
 
     def close(self) -> None:
         if self._resources_closed:
