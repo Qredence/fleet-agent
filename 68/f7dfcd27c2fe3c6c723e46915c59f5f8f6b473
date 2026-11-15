@@ -1,0 +1,36 @@
+apps/api/app/agent/engine.py
+  h_f276322eb5eb9f 275
+apps/api/app/agent/event_bus.py
+  h_f276322eb5eb9f 15-16,18,54-58,69-71,74,78,82,92,94
+apps/api/app/agent/routing.py
+  h_f276322eb5eb9f 13,186-190
+apps/api/app/agent/signature.py
+  h_f276322eb5eb9f 53
+apps/api/app/agui/run.py
+  h_f276322eb5eb9f 48,401,412,556-559,567-568,806,808
+apps/api/app/agui/state.py
+  h_f276322eb5eb9f 19-21
+apps/api/app/contracts/domain.py
+  h_f276322eb5eb9f 161-177
+apps/api/app/main.py
+  h_f276322eb5eb9f 3,32
+apps/api/app/persistence/branch.py
+  h_f276322eb5eb9f 17,20,33
+apps/api/app/persistence/repositories.py
+  h_f276322eb5eb9f 227
+apps/api/evals/agent_tool_routing.py
+  h_f276322eb5eb9f 16,158,230
+apps/api/evals/product_tasks.py
+  h_f276322eb5eb9f 251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68f7dfcd27c2fe3c6c723e46915c59f5f8f6b473",
+  "prompts": {},
+  "humans": {
+    "h_f276322eb5eb9f": {
+      "author": "Zachary BENSALEM <zachary@qredence.ai>"
+    }
+  }
+}
