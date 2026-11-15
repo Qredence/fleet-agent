@@ -196,7 +196,7 @@ TOOL_SPECS: Mapping[str, ToolMetadata] = {
 def workspace_root(settings: Settings) -> Path:
     """Resolve the one server-configured workspace root, fail-closed in prod."""
     if settings.workspace_root:
-        return Path(settings.workspace_root)
+        return Path(settings.workspace_root).expanduser()
     if settings.environment == "development":
         # tool_registry -> agent -> app -> api -> apps -> repository root
         return Path(__file__).resolve().parents[4]
@@ -209,11 +209,9 @@ def workspace_root_available(settings: Settings) -> bool:
     """Return whether the configured workspace can actually be opened."""
     if not settings.workspace_read_tools_enabled:
         return False
-    if settings.workspace_root:
-        root = Path(settings.workspace_root).expanduser()
-    elif settings.environment == "development":
-        root = Path(__file__).resolve().parents[4]
-    else:
+    try:
+        root = workspace_root(settings)
+    except RuntimeError:
         return False
     return root.resolve().is_dir()
 
@@ -320,10 +318,7 @@ class ToolRegistry:
         return {name: registered.metadata for name, registered in self._tools.items()}
 
     def dspy_tools(
-        self,
-        *,
-        read_only_only: bool = False,
-        allowed_names: Iterable[str] | None = None,
+        self, *, allowed_names: Iterable[str] | None = None
     ) -> list[dspy.Tool]:
         """Return the exact tools available to one DSPy program.
 
@@ -340,13 +335,7 @@ class ToolRegistry:
         return [
             registered.tool
             for name, registered in self._tools.items()
-            if (allowed is None or name in allowed)
-            and not (
-                read_only_only
-                and not (
-                    registered.metadata.read_only and registered.metadata.parallelizable
-                )
-            )
+            if allowed is None or name in allowed
         ]
 
     def dspy_tools_for_capabilities(

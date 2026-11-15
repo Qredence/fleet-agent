@@ -513,24 +513,6 @@ class RunPersistence:
             return
         history = _normalize_history_tool_call_ids(result.history)
         history_json = history.model_dump(mode="json")
-        for turn_idx, msg in enumerate(history_json.get("messages", [])):
-            tc_dict = msg.get("tool_calls")
-            if isinstance(tc_dict, dict) and "tool_calls" in tc_dict:
-                tcr_dict = tc_dict.get("tool_call_results")
-                tcr_list = (
-                    tcr_dict.get("tool_call_results", [])
-                    if isinstance(tcr_dict, dict)
-                    else []
-                )
-                for idx, call_dict in enumerate(tc_dict["tool_calls"]):
-                    if isinstance(call_dict, dict) and not call_dict.get("id"):
-                        if idx < len(tcr_list) and isinstance(tcr_list[idx], dict):
-                            call_dict["id"] = (
-                                tcr_list[idx].get("call_id") or f"call_{turn_idx}_{idx}"
-                            )
-                        else:
-                            call_dict["id"] = f"call_{turn_idx}_{idx}"
-
         await DspyHistoriesRepository.upsert_in_session(
             session,
             thread_id=thread_id,

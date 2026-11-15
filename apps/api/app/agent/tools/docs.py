@@ -1,6 +1,6 @@
 """Typed tools exposed to ReAct.
 
-Rules (plan 6.4): synchronous, simple domain returns, bounded strings,
+Rules: synchronous, simple domain returns, bounded strings,
 controlled failures (raise -> ReAct converts to an error observation).
 """
 

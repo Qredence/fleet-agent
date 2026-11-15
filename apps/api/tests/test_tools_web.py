@@ -47,7 +47,7 @@ def test_web_search_formats_results_and_records_sources():
         seen["body"] = json.loads(request.content)
         return httpx.Response(200, json=_SEARCH_PAYLOAD)
 
-    search = WebSearchTool(api_key=_TEST_KEY, client=_search_client(handler))
+    search = WebSearchTool(client=_search_client(handler))
     output = search("dspy framework")
 
     assert seen["path"] == "/search"
@@ -67,7 +67,6 @@ def test_web_search_formats_results_and_records_sources():
 
 def test_web_search_no_results_returns_safe_message():
     search = WebSearchTool(
-        api_key=_TEST_KEY,
         client=_search_client(
             lambda request: httpx.Response(200, json={"results": []})
         ),
@@ -120,7 +119,7 @@ def test_web_search_drops_unsafe_urls_and_resets_prior_results():
         return httpx.Response(200, json=payloads.pop(0))
 
     client = _search_client(handler)
-    search = WebSearchTool(api_key=_TEST_KEY, client=client)
+    search = WebSearchTool(client=client)
 
     output = search("first", max_results=10)
     assert "[w1] Valid result" in output
@@ -132,7 +131,7 @@ def test_web_search_drops_unsafe_urls_and_resets_prior_results():
         "title": "Valid result",
     }
     with pytest.raises(RuntimeError, match="run web_search first"):
-        FetchPageTool(api_key=_TEST_KEY, search=search, client=client)("w2")
+        FetchPageTool(search=search, client=client)("w2")
 
     assert search("second") == "No web results matched the query."
     assert search.last_sources == []
@@ -146,7 +145,7 @@ def test_web_search_caps_max_results_at_ten():
         bodies.append(json.loads(request.content))
         return httpx.Response(200, json={"results": []})
 
-    search = WebSearchTool(api_key=_TEST_KEY, client=_search_client(handler))
+    search = WebSearchTool(client=_search_client(handler))
     search("anything", max_results=99)
     search("anything", max_results=0)
     assert bodies[0]["max_results"] == 10
@@ -158,7 +157,7 @@ def test_web_search_http_failure_raises_safe_error_without_key():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")
 
-    search = WebSearchTool(api_key=_TEST_KEY, client=_search_client(handler))
+    search = WebSearchTool(client=_search_client(handler))
     with pytest.raises(RuntimeError, match="web search request failed"):
         search("query")
     # The raised chain must not carry the key into user-visible text paths.
@@ -183,8 +182,8 @@ def test_fetch_page_returns_bounded_extract_after_search():
         )
 
     client = _search_client(handler)
-    search = WebSearchTool(api_key=_TEST_KEY, client=client)
-    fetch = FetchPageTool(api_key=_TEST_KEY, search=search, client=client)
+    search = WebSearchTool(client=client)
+    fetch = FetchPageTool(search=search, client=client)
     assert search("dspy")  # register ids first
 
     page = fetch("w1", max_chars=1000)
@@ -198,10 +197,12 @@ def test_fetch_page_returns_bounded_extract_after_search():
 
 def test_fetch_page_unknown_id_raises_controlled_error():
     search = WebSearchTool(
-        api_key=_TEST_KEY,
         client=_search_client(lambda r: httpx.Response(200, json=_SEARCH_PAYLOAD)),
     )
-    fetch = FetchPageTool(api_key=_TEST_KEY, search=search)
+    fetch = FetchPageTool(
+        search=search,
+        client=_search_client(lambda r: httpx.Response(403)),
+    )
     with pytest.raises(RuntimeError, match="run web_search first"):
         fetch("w9")
 
@@ -213,8 +214,8 @@ def test_fetch_page_http_failure_raises_safe_error():
         return httpx.Response(403)
 
     client = _search_client(handler)
-    search = WebSearchTool(api_key=_TEST_KEY, client=client)
-    fetch = FetchPageTool(api_key=_TEST_KEY, search=search, client=client)
+    search = WebSearchTool(client=client)
+    fetch = FetchPageTool(search=search, client=client)
     search("dspy")
     with pytest.raises(RuntimeError, match="page could not be fetched"):
         fetch("w1")

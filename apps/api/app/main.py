@@ -90,10 +90,6 @@ def create_app() -> FastAPI:
     app.state.artifact_storage = LocalArtifactStorage(Path(settings.artifacts_dir))
     app.state.db_engine = build_engine(settings)
     app.state.db_sessions = build_sessionmaker(app.state.db_engine)
-    app.state.engine_builder = make_engine_builder(
-        settings,
-        storage=app.state.artifact_storage,
-    )
     app.state.run_semaphore = asyncio.Semaphore(settings.max_concurrent_runs)
     app.state.metrics = MetricsRegistry()
 

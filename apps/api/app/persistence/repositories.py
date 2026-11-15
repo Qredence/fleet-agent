@@ -41,6 +41,7 @@ __all__ = [
     "RunsRepository",
     "SourcesRepository",
     "ThreadsRepository",
+    "cap_source_excerpt",
     "new_id",
 ]
 
@@ -440,16 +441,16 @@ class RunsRepository:
         live is stale by definition: one statement settles them all.
         """
         async with self._sessions() as session:
-            orphaned = list(
+            orphaned_ids = list(
                 (
                     await session.execute(
-                        select(Run).where(
+                        select(Run.id).where(
                             Run.status.in_(["running", "queued", "interrupted"]),
                         )
                     )
                 ).scalars()
             )
-            if not orphaned:
+            if not orphaned_ids:
                 return 0
             result = await session.execute(
                 update(Run)
@@ -463,7 +464,6 @@ class RunsRepository:
                     error_code="internal_error",
                 )
             )
-            orphaned_ids = [run.id for run in orphaned]
             states = list(
                 (
                     await session.execute(
@@ -554,7 +554,8 @@ class RunStatesRepository:
 _MAX_SOURCE_EXCERPT_CHARS = 300
 
 
-def _cap_source_excerpt(excerpt: str | None) -> str | None:
+def cap_source_excerpt(excerpt: str | None) -> str | None:
+    """Cap one source excerpt at the public 300-character bound."""
     if excerpt is None:
         return None
     excerpt = excerpt.strip()
@@ -579,7 +580,7 @@ class SourcesRepository:
     ) -> Source:
         # Sources are persisted and later served by several endpoints, so cap
         # excerpts here rather than relying only on the live reducer preview.
-        excerpt = _cap_source_excerpt(excerpt)
+        excerpt = cap_source_excerpt(excerpt)
         identity_key = canonical_source_key({"id": source_id, "uri": uri})
         collision = await session.scalar(
             select(Source.row_id).where(
@@ -779,17 +780,11 @@ class ThreadsRepository:
                         ).scalars()
                     )
                     if thread.active_head_message_id is not None:
-                        parent_rows = list(
-                            (
-                                await session.execute(
-                                    select(
-                                        Message.message_id, Message.parent_message_id
-                                    ).where(Message.thread_id == thread_id)
-                                )
-                            ).all()
-                        )
+                        # message_rows was already loaded above in this same
+                        # transaction; reuse it instead of re-querying.
                         parents = {
-                            message_id: parent for message_id, parent in parent_rows
+                            row.message_id: row.parent_message_id
+                            for row in message_rows
                         }
                         branch_ids: set[str] = set()
                         current_id: str | None = thread.active_head_message_id

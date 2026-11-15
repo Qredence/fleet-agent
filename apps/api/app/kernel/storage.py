@@ -36,7 +36,7 @@ class PathTraversalError(ValueError):
 
 
 def sanitize_artifact_name(name: str) -> str:
-    """Browser-supplied artifact names are untrusted input (PHASE 10).
+    """Browser-supplied artifact names are untrusted input.
 
     Any character outside [A-Za-z0-9._-] becomes '-', runs collapse, and
     leading dots are dropped — traversal can never survive this function.

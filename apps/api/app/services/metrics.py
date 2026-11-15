@@ -1,4 +1,4 @@
-"""Minimal in-process metrics registry (plan.md Phase 9 list, JSON /metrics).
+"""Minimal in-process metrics registry (JSON /metrics).
 
 Thread-safe counters/gauges/durations — no external metrics daemon required
 in dev; Prometheus/OpenTelemetry can replace the read-side later.

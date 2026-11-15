@@ -20,10 +20,9 @@ from pydantic import ValidationError
 from app.agent.engine import EngineBuilder
 from app.agent.provider import ProviderOverrideError, parse_provider_override
 from app.agui.run import LiveDSPyCoordinator, RunCoordinator
-from app.api.deps import get_sessions
+from app.api.deps import get_sessions, reject_unsupported_user_input
 from app.contracts.agent_capabilities import AgentCapabilities
 from app.contracts.constants import ERROR_MESSAGES
-from app.kernel.run_input import validate_user_attachments, validate_user_content
 from app.persistence.repositories import RunsRepository, ThreadsRepository
 from app.persistence.run_persistence import (
     ReservationErrorCode,
@@ -117,17 +116,9 @@ async def run_agent(body: dict[str, Any], request: Request) -> StreamingResponse
     messages = body.get("messages", [])
     for message in messages if isinstance(messages, list) else []:
         if isinstance(message, dict) and message.get("role") == "user":
-            try:
-                validate_user_content(message.get("content"))
-                validate_user_attachments(message.get("attachments"))
-            except ValueError:
-                raise HTTPException(
-                    status_code=422,
-                    detail={
-                        "code": "unsupported_input_type",
-                        "message": ERROR_MESSAGES["unsupported_input_type"],
-                    },
-                ) from None
+            reject_unsupported_user_input(
+                message.get("content"), message.get("attachments")
+            )
     try:
         input_data = RunAgentInput.model_validate(body)
     except ValidationError as exc:

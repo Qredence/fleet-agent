@@ -84,5 +84,5 @@ def preview(text: str, limit: int = _MAX_PREVIEW_CHARS) -> str:
 
 
 def truncate_result(text: str, limit: int = _MAX_RESULT_CHARS) -> str:
-    text = text.strip()
-    return text if len(text) <= limit else text[:limit] + "…"
+    """Preview with the larger bound used for tool result content."""
+    return preview(text, limit=limit)

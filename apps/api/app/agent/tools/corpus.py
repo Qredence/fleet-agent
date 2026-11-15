@@ -1,8 +1,7 @@
 """Small bundled documentation corpus searched by the search_docs tool.
 
 Keeping the corpus in-repo makes the mock and the engine deterministic — no
-network in normal CI. Real retrieval swaps in behind the same tool boundary
-in PR 8 (sources).
+network in normal CI. Real retrieval swaps in behind the same tool boundary.
 """
 
 CORPUS: list[dict[str, str | None]] = [

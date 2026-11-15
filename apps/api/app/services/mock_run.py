@@ -41,13 +41,12 @@ def load_fixture(name: str) -> list[TimedEvent]:
                 ) from exc
             timed.append(TimedEvent(at_ms=int(raw["at"]), event=event))
 
-    _validate_snapshots(name, timed)
+    _validate_snapshots(timed)
     return timed
 
 
-def _validate_snapshots(name: str, timed: list[TimedEvent]) -> None:
+def _validate_snapshots(timed: list[TimedEvent]) -> None:
     """STATE_SNAPSHOT payloads must parse as AgentWorkspaceState."""
-    del name  # fixture name only used by caller for error context
     for entry in timed:
         if isinstance(entry.event, StateSnapshotEvent):
             AgentWorkspaceState.model_validate(entry.event.snapshot, strict=False)

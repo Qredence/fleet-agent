@@ -194,15 +194,7 @@ class AgUiRunCallback(BaseCallback):  # type: ignore[misc]
                 value={
                     "schemaVersion": 1,
                     "query": query or {"type": "string", "chars": 0},
-                    "results": [
-                        {
-                            "sourceId": source.id,
-                            "title": _safe_inline_text(source.title, limit=240)
-                            or "Untitled source",
-                            "domain": _inline_source(source)["domain"],
-                        }
-                        for source in sources[:8]
-                    ],
+                    "results": [_inline_source(source) for source in sources[:8]],
                     "visibleResults": min(len(sources), 8),
                     "searching": False,
                     "cycle": self._web_search_cycle,

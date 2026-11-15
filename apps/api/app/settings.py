@@ -145,7 +145,6 @@ class Settings(BaseSettings):
     )
     artifact_max_bytes: int = Field(default=64 * 1024, gt=0)
 
-    # PR 9 — hardening
     run_timeout_seconds: float = Field(
         default=300.0, gt=0, description="Hard bound on one agent run."
     )

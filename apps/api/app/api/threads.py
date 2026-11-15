@@ -9,7 +9,13 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.deps import LOCAL_OWNER, get_sessions, require_project, require_thread
+from app.api.deps import (
+    LOCAL_OWNER,
+    get_sessions,
+    reject_unsupported_user_input,
+    require_project,
+    require_thread,
+)
 from app.contracts.agent_state import AgentWorkspaceState
 from app.contracts.cards import settled_cards
 from app.contracts.constants import ERROR_MESSAGES, TERMINATION_REASONS
@@ -17,19 +23,18 @@ from app.contracts.message_feedback import MessageFeedback
 from app.contracts.thread_bootstrap import ThreadBootstrap, ThreadOut
 from app.kernel.content_safety import scrub_json_strings, scrub_public_text
 from app.kernel.history_safety import MessageWrite, sanitize_message_content
-from app.kernel.run_input import validate_user_attachments, validate_user_content
 from app.persistence.models import Artifact, Message, Run, RunState, Thread
 from app.persistence.repositories import (
     ArtifactsRepository,
     MessagesRepository,
     SourcesRepository,
     ThreadsRepository,
+    cap_source_excerpt,
 )
 from app.persistence.serializers import artifact_to_out, thread_to_out
 
 router = APIRouter(prefix="/api", tags=["threads"])
 logger = logging.getLogger(__name__)
-_MAX_SOURCE_EXCERPT_CHARS = 300
 # `interrupted` is accepted defensively, not because anything produces it: the
 # startup sweep rewrites any surviving interrupted run and its persisted snapshot
 # to `failed`/`server_restart`. The value only matters in the window before that
@@ -40,15 +45,6 @@ _SAFE_RUN_STATUSES = frozenset(
 # The canonical public reasons live in packages/contracts/termination-reasons.json;
 # anything else persisted in the database is stripped before it reaches a client.
 _SAFE_TERMINATION_REASONS = frozenset(TERMINATION_REASONS)
-
-
-def _cap_excerpt(value: str | None) -> str | None:
-    if value is None:
-        return None
-    value = value.strip()
-    if len(value) <= _MAX_SOURCE_EXCERPT_CHARS:
-        return value
-    return value[: _MAX_SOURCE_EXCERPT_CHARS - 1] + "…"
 
 
 def _safe_bootstrap_agent_state(
@@ -102,7 +98,7 @@ def _safe_bootstrap_agent_state(
     ):
         run.pop("terminationReason", None)
     for source in safe["sources"]:
-        source["excerpt"] = _cap_excerpt(source.get("excerpt"))
+        source["excerpt"] = cap_source_excerpt(source.get("excerpt"))
     # Legacy rows persisted before emission-time scrubbing get the same
     # treatment on read; new rows are already scrubbed at the source.
     scrubbed = scrub_json_strings(safe)
@@ -215,9 +211,10 @@ async def thread_bootstrap(
             )
         ).all()
         artifact_owners = {artifact.id: artifact.run_id for artifact in artifact_rows}
+        message_ids = {row.message_id for row in message_rows}
         for snapshot, run in states:
             if (
-                run.output_message_id in {row.message_id for row in message_rows}
+                run.output_message_id in message_ids
                 and run.output_message_id == snapshot.head_message_id
             ):
                 safe_state = _safe_bootstrap_agent_state(
@@ -279,17 +276,9 @@ async def persist_thread_message(
         raise HTTPException(status_code=422, detail="Message ID does not match path.")
     role = body.content.get("role")
     if role == "user":
-        try:
-            validate_user_content(body.content.get("content"))
-            validate_user_attachments(body.content.get("attachments"))
-        except ValueError:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code": "unsupported_input_type",
-                    "message": ERROR_MESSAGES["unsupported_input_type"],
-                },
-            ) from None
+        reject_unsupported_user_input(
+            body.content.get("content"), body.content.get("attachments")
+        )
     parent_id = body.parentId
     if parent_id == message_id:
         raise HTTPException(status_code=409, detail="A message cannot parent itself.")
@@ -440,7 +429,7 @@ async def list_sources(thread_id: str, request: Request) -> list[dict[str, Any]]
             "title": s.title,
             "sourceType": s.source_type,
             "uri": s.uri,
-            "excerpt": _cap_excerpt(s.excerpt),
+            "excerpt": cap_source_excerpt(s.excerpt),
             "toolCallId": s.tool_call_id,
         }
         for s in sources

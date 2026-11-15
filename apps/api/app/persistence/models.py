@@ -1,4 +1,4 @@
-"""SQLAlchemy models per plan.md Phase 9.
+"""SQLAlchemy models for the Fleet Agent schema.
 
 * `messages.message_json` holds the AG-UI wire message — restored as-is.
 * `run_states.state_json` is an AgentWorkspaceState snapshot per run/head.

@@ -10,11 +10,10 @@ run durably.
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from ag_ui.core import (
@@ -42,7 +41,7 @@ from app.agent.engine import (
 )
 from app.agent.event_bus import DONE, RunEventBus
 from app.agent.provider import ProviderOverride
-from app.agui.state import TraceReducer
+from app.agui.state import TraceReducer, _utc_now
 from app.agui.wire import chunk_text, map_domain_event
 from app.contracts.constants import public_error
 from app.contracts.domain import (
@@ -372,80 +371,56 @@ class LiveDSPyCoordinator:
                 )
                 return False
 
-        def pump_stream(
+        async def pump_stream(
             stream_factory: Callable[..., Any],
             *,
             user_request: str,
             history: Any | None,
             context: AgentRunContext,
-        ) -> Coroutine[Any, Any, AgentRunResult]:
+        ) -> AgentRunResult:
             """Consume streaming engine updates and publish final answer fields.
-
-            Parameters:
-                stream_factory: Factory that produces agent stream updates.
-                user_request: The user's request.
-                history: Prior conversation history, if available.
-                context: Context for the agent run.
-
-            Returns:
-                The completed agent run result.
 
             Raises:
                 RuntimeError: If the stream ends without a final result.
             """
-
-            async def run_pump() -> AgentRunResult:
-                """Consume streaming updates and return completed result.
-
-                Raises:
-                    RuntimeError: If the stream ends without a final result.
-
-                Returns:
-                    AgentRunResult: The completed agent run result.
-                """
-                result: AgentRunResult | None = None
-                summary_parts: list[str] = []
-                stream_kwargs: dict[str, Any] = {
-                    "user_request": user_request,
-                    "history": history,
-                    "context": context,
-                }
-                async for update in stream_factory(**stream_kwargs):
-                    assert isinstance(update, AgentStreamUpdate)
-                    if update.kind == "final_fields":
+            result: AgentRunResult | None = None
+            summary_parts: list[str] = []
+            async for update in stream_factory(
+                user_request=user_request, history=history, context=context
+            ):
+                assert isinstance(update, AgentStreamUpdate)
+                if update.kind == "final_fields":
+                    bus.publish_from_loop(
+                        FinalFieldsReady(
+                            answer=update.answer,
+                            process_summary=update.process_summary,
+                        )
+                    )
+                elif update.kind == "token":
+                    # Streamed synthesis fields (already scrubbed by the
+                    # engine) become incremental message/state updates.
+                    if update.delta and update.stream_field == "answer":
                         bus.publish_from_loop(
-                            FinalFieldsReady(
-                                answer=update.answer,
-                                process_summary=update.process_summary,
+                            SynthesisTokenDelta(
+                                field="answer",
+                                delta=update.delta,
+                                summary_so_far="".join(summary_parts),
                             )
                         )
-                    elif update.kind == "token":
-                        # Streamed synthesis fields (already scrubbed by the
-                        # engine) become incremental message/state updates.
-                        if update.delta and update.stream_field == "answer":
-                            bus.publish_from_loop(
-                                SynthesisTokenDelta(
-                                    field="answer",
-                                    delta=update.delta,
-                                    summary_so_far="".join(summary_parts),
-                                )
+                    elif update.delta and update.stream_field == "process_summary":
+                        summary_parts.append(update.delta)
+                        bus.publish_from_loop(
+                            SynthesisTokenDelta(
+                                field="process_summary",
+                                delta=update.delta,
+                                summary_so_far="".join(summary_parts),
                             )
-                        elif update.delta and update.stream_field == "process_summary":
-                            summary_parts.append(update.delta)
-                            bus.publish_from_loop(
-                                SynthesisTokenDelta(
-                                    field="process_summary",
-                                    delta=update.delta,
-                                    summary_so_far="".join(summary_parts),
-                                )
-                            )
-                    else:
-                        result = update.result
-                if result is None:
-                    raise RuntimeError("streaming engine ended without a final result")
-                return result
-
-            return run_pump()
+                        )
+                else:
+                    result = update.result
+            if result is None:
+                raise RuntimeError("streaming engine ended without a final result")
+            return result
 
         answer_streamed = False
         answer_tokens_streamed = False
@@ -654,7 +629,6 @@ class LiveDSPyCoordinator:
                         thread_id,
                         run_id,
                     )
-                terminal_settled = True
                 record_terminal_metrics(error=False)
                 terminal_emitted = True
                 yield emit(RunFinishedEvent(thread_id=thread_id, run_id=run_id))
@@ -678,7 +652,6 @@ class LiveDSPyCoordinator:
                         thread_id,
                         run_id,
                     )
-                terminal_settled = True
                 code, message = public_error(result.error_code, "agent_no_output")
                 logger.warning(
                     "run %s failed [%s] (thread %s)",
@@ -860,7 +833,3 @@ def _code_for_exception(exc: Exception) -> tuple[str, str]:
     if any(isinstance(item, LMInvalidRequestError) for item in leaves):
         return public_error("provider_request_rejected")
     return public_error("internal_error")
-
-
-def _utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")

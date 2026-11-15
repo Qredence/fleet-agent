@@ -75,23 +75,6 @@ def create_dspy_tool(
     return tool
 
 
-def clone_dspy_tool(
-    tool: dspy.Tool,
-    function: Callable[..., Any],
-) -> dspy.Tool:
-    """Clone a Tool around another callable without losing explicit schema."""
-    cloned = dspy.Tool(
-        function,
-        name=tool.name,
-        desc=tool.desc,
-        args=copy.deepcopy(tool.args or {}),
-        arg_types=dict(tool.arg_types or {}),
-        arg_desc=dict(tool.arg_desc or {}),
-    )
-    _validate_dspy_tool(cloned)
-    return cloned
-
-
 def is_async_tool(tool: dspy.Tool) -> bool:
     """Return whether a Tool wraps an async callable."""
     return inspect.iscoroutinefunction(_callable_target(tool.func))

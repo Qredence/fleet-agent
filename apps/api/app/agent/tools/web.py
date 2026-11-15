@@ -176,20 +176,10 @@ class WebSearchTool:
     """web_search as a callable object: per-run instance owning its search
     registry (result ids -> url/title) and the sources it discovered."""
 
-    def __init__(
-        self,
-        *,
-        api_key: str,
-        dns_fallback: bool = False,
-        client: httpx.Client | None = None,
-    ) -> None:
+    def __init__(self, *, client: httpx.Client) -> None:
         self.__name__ = "web_search"
         self.__doc__ = WebSearchTool.__call__.__doc__
-        self._client = (
-            client
-            if client is not None
-            else _build_client(api_key, dns_fallback=dns_fallback)
-        )
+        self._client = client
         self.last_sources: list[SourceResult] = []
         self._results_by_id: dict[str, dict[str, str]] = {}
 
@@ -250,21 +240,10 @@ class FetchPageTool:
     """fetch_page as a callable object: reads full text for ids produced by
     the WebSearchTool instance it is paired with."""
 
-    def __init__(
-        self,
-        *,
-        api_key: str,
-        search: WebSearchTool,
-        dns_fallback: bool = False,
-        client: httpx.Client | None = None,
-    ) -> None:
+    def __init__(self, *, search: WebSearchTool, client: httpx.Client) -> None:
         self.__name__ = "fetch_page"
         self.__doc__ = FetchPageTool.__call__.__doc__
-        self._client = (
-            client
-            if client is not None
-            else _build_client(api_key, dns_fallback=dns_fallback)
-        )
+        self._client = client
         self._search = search
 
     def __call__(self, result_id: str, max_chars: int = _DEFAULT_EXTRACT_CHARS) -> str:
@@ -324,15 +303,11 @@ def build_web_tool_bundle(*, api_key: str, dns_fallback: bool) -> WebToolBundle:
     try:
         search_client = _build_client(api_key, dns_fallback=dns_fallback)
         clients.append(search_client)
-        search = WebSearchTool(api_key=api_key, client=search_client)
+        search = WebSearchTool(client=search_client)
 
         fetch_client = _build_client(api_key, dns_fallback=dns_fallback)
         clients.append(fetch_client)
-        fetch = FetchPageTool(
-            api_key=api_key,
-            search=search,
-            client=fetch_client,
-        )
+        fetch = FetchPageTool(search=search, client=fetch_client)
     except Exception:
         for client in clients:
             client.close()

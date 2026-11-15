@@ -61,7 +61,7 @@ class ToolFailed(DomainEvent):
 
 
 class SourceResult(BaseModel):
-    """Standard contract for retrieval-tool sources (plan.md Phase 10)."""
+    """Standard contract for retrieval-tool sources."""
 
     id: str
     title: str
@@ -130,7 +130,7 @@ class SynthesisTokenDelta(DomainEvent):
 
 
 class ArtifactResult(BaseModel):
-    """Standard contract for generated artifacts (plan.md Phase 10)."""
+    """Standard contract for generated artifacts."""
 
     id: str
     name: str
